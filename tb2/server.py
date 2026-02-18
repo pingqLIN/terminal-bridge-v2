@@ -78,34 +78,31 @@ class Bridge:
             else:
                 self._current_poll = min(self._current_poll * 1.5, self._max_poll)
 
-            for ln in new_a:
-                if ln.strip():
-                    text = strip_ansi(ln) if profile.strip_ansi else ln
-                    self.room.post(author="A", text=text, kind="terminal",
-                                   meta={"pane": self.pane_a})
-                    # Auto-forward
-                    if self.auto_forward:
-                        parsed = profile.parse_message(ln)
-                        if parsed:
-                            msg = self.intervention_layer.submit(self.pane_a, self.pane_b, parsed)
-                            if msg.action == Action.AUTO:
-                                self.backend.send(self.pane_b, parsed, enter=True)
-                                self.room.post(author="bridge", text=f"[forwarded A->B] {parsed}",
-                                               kind="system")
+            self._process_new_lines("A", self.pane_a, self.pane_b, new_a, profile)
+            self._process_new_lines("B", self.pane_b, self.pane_a, new_b, profile)
 
-            for ln in new_b:
-                if ln.strip():
-                    text = strip_ansi(ln) if profile.strip_ansi else ln
-                    self.room.post(author="B", text=text, kind="terminal",
-                                   meta={"pane": self.pane_b})
-                    if self.auto_forward:
-                        parsed = profile.parse_message(ln)
-                        if parsed:
-                            msg = self.intervention_layer.submit(self.pane_b, self.pane_a, parsed)
-                            if msg.action == Action.AUTO:
-                                self.backend.send(self.pane_a, parsed, enter=True)
-                                self.room.post(author="bridge", text=f"[forwarded B->A] {parsed}",
-                                               kind="system")
+    def _process_new_lines(self, tag: str, from_pane: str, to_pane: str,
+                           new_lines: list, profile: Any) -> None:
+        for ln in new_lines:
+            if not ln.strip():
+                continue
+            text = strip_ansi(ln) if profile.strip_ansi else ln
+            self.room.post(author=tag, text=text, kind="terminal",
+                           meta={"pane": from_pane})
+            if self.auto_forward:
+                parsed = profile.parse_message(ln)
+                if parsed:
+                    msg = self.intervention_layer.submit(from_pane, to_pane, parsed)
+                    if msg.action == Action.AUTO:
+                        try:
+                            self.backend.send(to_pane, parsed, enter=True)
+                            self.room.post(author="bridge",
+                                           text=f"[forwarded {tag}->{to_pane}] {parsed}",
+                                           kind="system")
+                        except TmuxError as exc:
+                            self.room.post(author="bridge",
+                                           text=f"[forward failed {tag}->{to_pane}] {exc}",
+                                           kind="system")
 
             time.sleep(max(0.05, self._current_poll / 1000.0))
 
@@ -183,8 +180,11 @@ def handle_room_poll(args: Dict[str, Any]) -> Dict[str, Any]:
     room = get_room(str(args["room_id"]))
     if not room:
         return {"error": "room not found"}
-    after_id = int(args.get("after_id", 0))
-    limit = int(args.get("limit", 50))
+    try:
+        after_id = int(args.get("after_id", 0))
+        limit = int(args.get("limit", 50))
+    except (ValueError, TypeError):
+        return {"error": "after_id and limit must be integers"}
     msgs = room.poll(after_id=after_id, limit=limit)
     return {
         "messages": [
@@ -207,18 +207,27 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
     # Optionally deliver to a bridge pane
     deliver = args.get("deliver")
     bridge_id = args.get("bridge_id")
+    deliver_error = None
     if deliver and bridge_id:
         with _bridges_lock:
             bridge = _bridges.get(bridge_id)
         if bridge:
-            if deliver in ("a", "A"):
-                bridge.backend.send(bridge.pane_a, msg.text, enter=True)
-            elif deliver in ("b", "B"):
-                bridge.backend.send(bridge.pane_b, msg.text, enter=True)
-            elif deliver == "both":
-                bridge.backend.send(bridge.pane_a, msg.text, enter=True)
-                bridge.backend.send(bridge.pane_b, msg.text, enter=True)
-    return {"id": msg.id}
+            try:
+                if deliver in ("a", "A"):
+                    bridge.backend.send(bridge.pane_a, msg.text, enter=True)
+                elif deliver in ("b", "B"):
+                    bridge.backend.send(bridge.pane_b, msg.text, enter=True)
+                elif deliver == "both":
+                    bridge.backend.send(bridge.pane_a, msg.text, enter=True)
+                    bridge.backend.send(bridge.pane_b, msg.text, enter=True)
+            except TmuxError as exc:
+                deliver_error = str(exc)
+        else:
+            deliver_error = f"bridge {bridge_id} not found"
+    result: Dict[str, Any] = {"id": msg.id}
+    if deliver_error:
+        result["deliver_error"] = deliver_error
+    return result
 
 
 def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:

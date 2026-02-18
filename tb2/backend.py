@@ -70,16 +70,25 @@ def _is_wsl() -> bool:
         return False
 
 
+def _is_native_windows() -> bool:
+    """Detect native Windows (not WSL)."""
+    import platform
+    return platform.system() == "Windows"
+
+
 _INSIDE_WSL = _is_wsl()
+_NATIVE_WINDOWS = _is_native_windows()
 
 
 class TmuxBackend(TerminalBackend):
-    """tmux backend — works both inside WSL (direct) and from Windows (via wsl.exe)."""
+    """tmux backend — works inside WSL (direct), native Linux/macOS (direct),
+    and from native Windows (via wsl.exe)."""
 
     def __init__(self, *, use_wsl: Optional[bool] = None, distro: str = DEFAULT_DISTRO):
         if use_wsl is None:
-            # Auto-detect: if we're already inside WSL, call tmux directly.
-            self.use_wsl = not _INSIDE_WSL
+            # Only use wsl.exe when running on native Windows (not inside WSL).
+            # Linux and macOS call tmux directly.
+            self.use_wsl = _NATIVE_WINDOWS and not _INSIDE_WSL
         else:
             self.use_wsl = use_wsl
         self.distro = distro

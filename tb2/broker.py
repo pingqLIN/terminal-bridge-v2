@@ -136,11 +136,6 @@ def broker_loop(backend: TerminalBackend, cfg: BrokerConfig) -> int:
             else:
                 print(f"[pending] #{msg.id} {from_tag}->{to_target}: {parsed}  (use /approve {msg.id})")
 
-    def _process_pending() -> None:
-        """Auto-deliver approved/edited messages."""
-        # This is called each loop iteration to flush anything the user approved.
-        pass  # Delivery happens inline in command handlers below.
-
     while True:
         # 1) Poll panes (single subprocess call).
         try:
