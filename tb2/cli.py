@@ -76,8 +76,10 @@ def cmd_server(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tb2", description="TerminalBridge v2 — universal CLI LLM bridge")
-    p.add_argument("--distro", default=None, help="WSL distro (auto-detected if omitted)")
-    p.add_argument("--use-wsl", action="store_true", default=None, help="force WSL mode")
+    p.add_argument("--backend", choices=["tmux", "process"], default="tmux",
+                   help="terminal backend: tmux (default) or process (no multiplexer)")
+    p.add_argument("--distro", default=None, help="WSL distro (tmux backend only)")
+    p.add_argument("--use-wsl", action="store_true", default=None, help="force WSL mode (tmux backend only)")
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -128,17 +130,26 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    p = build_parser()
-    args = p.parse_args(list(argv) if argv is not None else None)
+def _create_backend(args: argparse.Namespace):
+    """Factory: create the right backend based on --backend flag."""
+    if args.backend == "process":
+        from .process_backend import ProcessBackend
+        return ProcessBackend()
 
+    # Default: tmux
     kwargs = {}
     if args.distro:
         kwargs["distro"] = args.distro
     if args.use_wsl is not None:
         kwargs["use_wsl"] = args.use_wsl
+    return TmuxBackend(**kwargs)
 
-    backend = TmuxBackend(**kwargs)
+
+def main(argv: Sequence[str] | None = None) -> int:
+    p = build_parser()
+    args = p.parse_args(list(argv) if argv is not None else None)
+
+    backend = _create_backend(args)
 
     try:
         return int(args.fn(backend, args))
