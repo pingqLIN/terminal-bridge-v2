@@ -1,5 +1,7 @@
 # terminal-bridge-v2
 
+[中文版](README.zh-TW.md)
+
 > Universal CLI LLM remote control + real-time monitoring + human intervention
 
 ## Features
