@@ -51,3 +51,18 @@ python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto --interven
 - `claude-code` — Claude Code CLI
 - `aider` — Aider CLI
 - `llama` — llama.cpp chat
+
+## License
+
+[MIT License](https://opensource.org/licenses/MIT)
+
+## 🤖 AI-Assisted Development
+
+This project was developed with AI assistance.
+
+**AI Models/Services Used:**
+
+- Claude Opus 4 (primary architect & implementation)
+- OpenAI Codex CLI (code review & sub-agent contributions)
+
+> ⚠️ **Disclaimer:** While the author has made every effort to review and validate the AI-generated code, no guarantee can be made regarding its correctness, security, or fitness for any particular purpose. Use at your own risk.
