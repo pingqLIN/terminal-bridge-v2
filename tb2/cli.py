@@ -75,9 +75,12 @@ def cmd_server(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    import platform
+    _default_backend = "process" if platform.system() == "Windows" else "tmux"
+
     p = argparse.ArgumentParser(prog="tb2", description="TerminalBridge v2 — universal CLI LLM bridge")
-    p.add_argument("--backend", choices=["tmux", "process"], default="tmux",
-                   help="terminal backend: tmux (default) or process (no multiplexer)")
+    p.add_argument("--backend", choices=["tmux", "process", "pipe"], default=_default_backend,
+                   help=f"terminal backend (default: {_default_backend})")
     p.add_argument("--distro", default=None, help="WSL distro (tmux backend only)")
     p.add_argument("--use-wsl", action="store_true", default=None, help="force WSL mode (tmux backend only)")
 
@@ -135,6 +138,10 @@ def _create_backend(args: argparse.Namespace):
     if args.backend == "process":
         from .process_backend import ProcessBackend
         return ProcessBackend()
+
+    if args.backend == "pipe":
+        from .pipe_backend import PipeBackend
+        return PipeBackend()
 
     # Default: tmux
     kwargs = {}

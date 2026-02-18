@@ -10,9 +10,9 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from .backend import TmuxBackend, TmuxError
+from .backend import TerminalBackend, TmuxBackend, TmuxError
 from .diff import diff_new_lines, strip_prompt_tail
 from .intervention import Action, InterventionLayer
 from .profile import get_profile, list_profiles, strip_ansi
@@ -139,11 +139,61 @@ _cleanup_thread.start()
 # Tool handlers
 # ---------------------------------------------------------------------------
 
-def _make_backend(args: Dict[str, Any]) -> TmuxBackend:
-    kwargs = {}
-    if "distro" in args:
-        kwargs["distro"] = args["distro"]
-    return TmuxBackend(**kwargs)
+_backend_cache: Dict[str, TerminalBackend] = {}
+_backend_cache_lock = threading.Lock()
+
+
+def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
+    """Get or create a backend instance. Cached by (kind, backend_id)."""
+    kind = str(args.get("backend", "tmux"))
+    backend_id = str(args.get("backend_id", "default"))
+    key = f"{kind}:{backend_id}"
+
+    with _backend_cache_lock:
+        if key in _backend_cache:
+            return _backend_cache[key]
+
+        if kind == "process":
+            from .process_backend import ProcessBackend
+            b: TerminalBackend = ProcessBackend(shell=str(args.get("shell", "")))
+        elif kind == "pipe":
+            from .pipe_backend import PipeBackend
+            b = PipeBackend(shell=str(args.get("shell", "")))
+        else:
+            kwargs = {}
+            if "distro" in args:
+                kwargs["distro"] = args["distro"]
+            b = TmuxBackend(**kwargs)
+
+        _backend_cache[key] = b
+        return b
+
+
+def _get_bridge(bridge_id: str) -> Optional[Bridge]:
+    with _bridges_lock:
+        return _bridges.get(bridge_id)
+
+
+def _pending_to_dict(msg: Any) -> Dict[str, Any]:
+    return {
+        "id": msg.id,
+        "from_pane": msg.from_pane,
+        "to_pane": msg.to_pane,
+        "text": msg.text,
+        "action": msg.action.value,
+        "edited_text": msg.edited_text,
+        "created_at": msg.created_at,
+    }
+
+
+def _deliver_pending(bridge: Bridge, msg: Any) -> None:
+    text = msg.edited_text if msg.edited_text else msg.text
+    bridge.backend.send(msg.to_pane, text, enter=True)
+    bridge.room.post(
+        author="bridge",
+        text=f"[approved #{msg.id} -> {msg.to_pane}] {text}",
+        kind="system",
+    )
 
 
 def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -270,6 +320,112 @@ def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"error": "bridge not found"}
 
 
+def handle_intervention_list(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id = str(args["bridge_id"])
+    bridge = _get_bridge(bridge_id)
+    if not bridge:
+        return {"error": "bridge not found"}
+    pending = bridge.intervention_layer.list_pending()
+    return {
+        "bridge_id": bridge_id,
+        "pending": [_pending_to_dict(msg) for msg in pending],
+        "count": len(pending),
+    }
+
+
+def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id = str(args["bridge_id"])
+    bridge = _get_bridge(bridge_id)
+    if not bridge:
+        return {"error": "bridge not found"}
+
+    mid = args.get("id", "all")
+    if mid == "all" or mid is None:
+        approved = bridge.intervention_layer.approve_all()
+    else:
+        try:
+            msg_id = int(mid)
+        except (TypeError, ValueError):
+            return {"error": "id must be an integer or 'all'"}
+        msg = bridge.intervention_layer.approve(msg_id)
+        if not msg:
+            return {"error": f"pending message {msg_id} not found"}
+        approved = [msg]
+
+    delivered: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    for msg in approved:
+        try:
+            _deliver_pending(bridge, msg)
+            delivered.append({"id": msg.id, "to_pane": msg.to_pane})
+        except Exception as exc:
+            errors.append({"id": msg.id, "error": str(exc)})
+
+    return {
+        "bridge_id": bridge_id,
+        "approved": len(approved),
+        "delivered": delivered,
+        "errors": errors,
+        "remaining": len(bridge.intervention_layer.list_pending()),
+    }
+
+
+def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id = str(args["bridge_id"])
+    bridge = _get_bridge(bridge_id)
+    if not bridge:
+        return {"error": "bridge not found"}
+
+    mid = args.get("id", "all")
+    if mid == "all" or mid is None:
+        rejected = bridge.intervention_layer.reject_all()
+    else:
+        try:
+            msg_id = int(mid)
+        except (TypeError, ValueError):
+            return {"error": "id must be an integer or 'all'"}
+        msg = bridge.intervention_layer.reject(msg_id)
+        if not msg:
+            return {"error": f"pending message {msg_id} not found"}
+        rejected = 1
+
+    return {
+        "bridge_id": bridge_id,
+        "rejected": rejected,
+        "remaining": len(bridge.intervention_layer.list_pending()),
+    }
+
+
+def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id = str(args["bridge_id"])
+    bridge = _get_bridge(bridge_id)
+    if not bridge:
+        return {"error": "bridge not found"}
+
+    target = args.get("target", "both")
+    panes: List[str]
+    if target in ("a", "A"):
+        panes = [bridge.pane_a]
+    elif target in ("b", "B"):
+        panes = [bridge.pane_b]
+    elif target in ("both", "all", None):
+        panes = [bridge.pane_a, bridge.pane_b]
+    else:
+        panes = [str(target)]
+
+    sent: List[str] = []
+    errors: List[Dict[str, str]] = []
+    for pane in panes:
+        try:
+            bridge.backend.send(pane, "\x03", enter=False)
+            bridge.room.post(author="bridge", text=f"[interrupt -> {pane}] ^C", kind="system")
+            sent.append(pane)
+        except Exception as exc:
+            errors.append({"pane": pane, "error": str(exc)})
+
+    return {"bridge_id": bridge_id, "sent": sent, "errors": errors, "ok": len(errors) == 0}
+
+
 def handle_list_profiles(_args: Dict[str, Any]) -> Dict[str, Any]:
     return {"profiles": list_profiles()}
 
@@ -289,11 +445,15 @@ HANDLERS = {
     "terminal_init": handle_terminal_init,
     "terminal_capture": handle_terminal_capture,
     "terminal_send": handle_terminal_send,
+    "terminal_interrupt": handle_terminal_interrupt,
     "room_create": handle_room_create,
     "room_poll": handle_room_poll,
     "room_post": handle_room_post,
     "bridge_start": handle_bridge_start,
     "bridge_stop": handle_bridge_stop,
+    "intervention_list": handle_intervention_list,
+    "intervention_approve": handle_intervention_approve,
+    "intervention_reject": handle_intervention_reject,
     "list_profiles": handle_list_profiles,
     "status": handle_status,
 }

@@ -73,6 +73,16 @@ class ManagedProcess:
     alive: bool = True
 
 
+@dataclass
+class SpawnSpec:
+    """Spawn settings for one agent process."""
+
+    argv: List[str]
+    cwd: Optional[str] = None
+    env: Optional[Dict[str, str]] = None
+    profile: str = "generic"
+
+
 class ProcessBackend(TerminalBackend):
     """Spawn and manage child processes directly.
 
@@ -93,8 +103,8 @@ class ProcessBackend(TerminalBackend):
     def init_session(self, session: str) -> Tuple[str, str]:
         target_a = f"{session}:a"
         target_b = f"{session}:b"
-        self._spawn(target_a)
-        self._spawn(target_b)
+        self._spawn(target_a, self._default_spawn_spec())
+        self._spawn(target_b, self._default_spawn_spec())
         return target_a, target_b
 
     def has_session(self, session: str) -> bool:
@@ -130,6 +140,16 @@ class ProcessBackend(TerminalBackend):
         for key in keys:
             self._kill(key)
 
+    def spawn_agent(self, target: str, spec: SpawnSpec) -> str:
+        """Spawn one pane/process with a custom command."""
+        if not spec.argv:
+            raise ValueError("spawn spec argv must not be empty")
+        with self._lock:
+            if target in self._procs:
+                raise RuntimeError(f"target already exists: {target}")
+        self._spawn(target, spec)
+        return target
+
     # -- internal ----------------------------------------------------------
 
     def _get(self, target: str) -> ManagedProcess:
@@ -139,30 +159,48 @@ class ProcessBackend(TerminalBackend):
             raise RuntimeError(f"process not found: {target}")
         return mp
 
-    def _spawn(self, target: str) -> ManagedProcess:
+    def _default_spawn_spec(self) -> SpawnSpec:
+        return SpawnSpec(argv=[self.shell])
+
+    @staticmethod
+    def _merge_env(spec: SpawnSpec) -> Optional[Dict[str, str]]:
+        if spec.env is None:
+            return None
+        merged = os.environ.copy()
+        for key, value in spec.env.items():
+            merged[str(key)] = str(value)
+        return merged
+
+    def _spawn(self, target: str, spec: Optional[SpawnSpec] = None) -> ManagedProcess:
+        spec = spec or self._default_spawn_spec()
+        if not spec.argv:
+            raise ValueError("spawn spec argv must not be empty")
         buf = PaneBuffer()
 
         if _IS_WINDOWS:
-            mp = self._spawn_winpty(target, buf)
+            mp = self._spawn_winpty(target, buf, spec)
         else:
-            mp = self._spawn_pty(target, buf)
+            mp = self._spawn_pty(target, buf, spec)
 
         with self._lock:
             self._procs[target] = mp
         return mp
 
-    def _spawn_pty(self, target: str, buf: PaneBuffer) -> ManagedProcess:
+    def _spawn_pty(self, target: str, buf: PaneBuffer, spec: SpawnSpec) -> ManagedProcess:
         """Unix: use stdlib pty for pseudo-terminal."""
         import pty
 
+        env = self._merge_env(spec)
         master_fd, slave_fd = pty.openpty()
         proc = subprocess.Popen(
-            [self.shell],
+            spec.argv,
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
             preexec_fn=os.setsid,
             close_fds=True,
+            cwd=spec.cwd,
+            env=env,
         )
         os.close(slave_fd)
 
@@ -192,7 +230,7 @@ class ProcessBackend(TerminalBackend):
         mp.reader_thread = t
         return mp
 
-    def _spawn_winpty(self, target: str, buf: PaneBuffer) -> ManagedProcess:
+    def _spawn_winpty(self, target: str, buf: PaneBuffer, spec: SpawnSpec) -> ManagedProcess:
         """Windows: use pywinpty ConPTY."""
         try:
             from winpty import PtyProcess
@@ -201,7 +239,17 @@ class ProcessBackend(TerminalBackend):
                 "pywinpty is required on Windows. Install with: pip install pywinpty"
             )
 
-        proc = PtyProcess.spawn(self.shell)
+        env = self._merge_env(spec)
+        cmdline = subprocess.list2cmdline(spec.argv)
+        spawn_kwargs: Dict[str, object] = {}
+        if spec.cwd:
+            spawn_kwargs["cwd"] = spec.cwd
+        if env is not None:
+            spawn_kwargs["env"] = env
+        try:
+            proc = PtyProcess.spawn(cmdline, **spawn_kwargs)
+        except TypeError:
+            proc = PtyProcess.spawn(cmdline)
 
         def write_fn(text: str) -> None:
             proc.write(text)
