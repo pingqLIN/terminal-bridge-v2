@@ -68,6 +68,12 @@ def cmd_profiles(_backend: TmuxBackend, _args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_server(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    from .server import run_server
+    run_server(host=args.host, port=args.port)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tb2", description="TerminalBridge v2 — universal CLI LLM bridge")
     p.add_argument("--distro", default=None, help="WSL distro (auto-detected if omitted)")
@@ -112,6 +118,12 @@ def build_parser() -> argparse.ArgumentParser:
     # profiles
     s = sub.add_parser("profiles", help="list available tool profiles")
     s.set_defaults(fn=cmd_profiles)
+
+    # server
+    s = sub.add_parser("server", help="start MCP HTTP server")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=3189)
+    s.set_defaults(fn=cmd_server)
 
     return p
 
