@@ -1,0 +1,52 @@
+terminal-bridge-v2
+
+文件狀態
+- Draft
+- 由 tb2 + Gemini 3 Pro 工作流產生版型
+
+專案定位
+- 通用 CLI LLM 遙控橋接
+- 即時監控
+- 人工介入審批
+
+核心價值
+- 多後端相容 tmux process pipe
+- 工具 profile 可擴充
+- 可插入人工審批避免誤轉發
+
+快速開始
+- 建立 session
+  - `python3 -m tb2 init --session demo`
+- 啟動 broker
+  - `python3 -m tb2 broker --a demo:0.0 --b demo:0.1 --profile gemini --auto`
+- 啟動人工審批
+  - `python3 -m tb2 broker --a demo:0.0 --b demo:0.1 --profile gemini --auto --intervention`
+
+Gemini 3 Pro README 編排流程
+- 啟動 server
+  - `python3 -m tb2 --backend process server --host 127.0.0.1 --port 3189`
+- 初始化 pane
+  - 使用 `terminal_init` 建立 `readme:a` `readme:b`
+- 呼叫模型
+  - 在 `readme:a` 執行
+  - `gemini -m gemini-3-pro-preview -p "請輸出 README 章節重排提案，格式為 Markdown"`
+- 擷取輸出
+  - 使用 `terminal_capture` 取回模型結果
+
+執行畫面截圖
+- 產生截圖
+  - `pwsh -File .\scripts\capture_tb2_screenshot.ps1 -OutputDir .\docs\images -Prefix tb2-gemini -Count 3`
+- 插入配圖
+  - `![tb2 + Gemini 畫面 1](docs/images/tb2-gemini-01-YYYYMMDD-HHMMSS.png)`
+  - `![tb2 + Gemini 畫面 2](docs/images/tb2-gemini-02-YYYYMMDD-HHMMSS.png)`
+  - `![tb2 + Gemini 畫面 3](docs/images/tb2-gemini-03-YYYYMMDD-HHMMSS.png)`
+
+常見問題
+- 無輸出
+  - 先確認 `gemini` 已登入
+  - 再用 `gemini -m gemini-3-pro-preview -p "reply OK only"` 檢查
+- 送出失敗
+  - 確認 target 名稱與 backend_id 一致
+- 截圖空白
+  - 延長 `-DelaySec`
+  - 確認目標視窗在前景

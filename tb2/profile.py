@@ -83,6 +83,12 @@ BUILTIN_PROFILES: Dict[str, ToolProfile] = {
         prompt_patterns=[r">\s*$", r"llama>\s*$"],
         msg_prefix="MSG:",
     ),
+    "gemini": ToolProfile(
+        name="gemini",
+        prompt_patterns=[r">\s*$", r"gemini>\s*$", r"✦\s*$"],
+        msg_prefix="MSG:",
+        strip_ansi=True,
+    ),
 }
 
 

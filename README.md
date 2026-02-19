@@ -53,6 +53,41 @@ python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto --interven
 - `claude-code` — Claude Code CLI
 - `aider` — Aider CLI
 - `llama` — llama.cpp chat
+- `gemini` — Gemini CLI
+
+## Use Gemini 3 Pro To Redesign README
+
+Use `tb2` process backend to call `gemini-3-pro-preview` and generate README layout drafts
+
+```bash
+# 1) Start MCP server
+python3 -m tb2 --backend process server --host 127.0.0.1 --port 3189
+
+# 2) Init readme session
+curl -sS http://127.0.0.1:3189/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"terminal_init","arguments":{"backend":"process","backend_id":"gemini-readme","session":"readme"}}}'
+
+# 3) Send Gemini 3 Pro task to readme:a
+curl -sS http://127.0.0.1:3189/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"terminal_send","arguments":{"backend":"process","backend_id":"gemini-readme","target":"readme:a","enter":true,"text":"gemini -m gemini-3-pro-preview -p \"Propose a full README structure for terminal-bridge-v2 and output Markdown.\""}}}'
+```
+
+Full workflow reference  
+`docs/gemini-readme-workflow.zh-TW.md`
+
+## Runtime Screenshots
+
+Capture screenshots on Windows PowerShell
+
+```powershell
+pwsh -File .\scripts\capture_tb2_screenshot.ps1 -OutputDir .\docs\images -Prefix tb2-gemini -Count 3
+```
+
+![tb2 + Gemini screen 1](docs/images/tb2-gemini-01-20260218-215825.png)
+![tb2 + Gemini screen 2](docs/images/tb2-gemini-02-20260218-215827.png)
+![tb2 + Gemini screen 3](docs/images/tb2-gemini-03-20260218-215830.png)
 
 ## License
 

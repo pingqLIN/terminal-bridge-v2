@@ -53,6 +53,40 @@ python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto --interven
 - `claude-code` — Claude Code CLI
 - `aider` — Aider CLI
 - `llama` — llama.cpp chat
+- `gemini` — Gemini CLI
+
+## 使用 Gemini 3 Pro 編排 README
+
+以 `tb2` process backend 呼叫 `gemini-3-pro-preview` 產生 README 編排草稿
+
+```bash
+# 1) 啟動 MCP server
+python3 -m tb2 --backend process server --host 127.0.0.1 --port 3189
+
+# 2) 初始化 readme session
+curl -sS http://127.0.0.1:3189/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"terminal_init","arguments":{"backend":"process","backend_id":"gemini-readme","session":"readme"}}}'
+
+# 3) 對 readme:a 發送 Gemini 3 Pro 任務
+curl -sS http://127.0.0.1:3189/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"terminal_send","arguments":{"backend":"process","backend_id":"gemini-readme","target":"readme:a","enter":true,"text":"gemini -m gemini-3-pro-preview -p \"請用繁體中文提出 README 重排提案，輸出 Markdown。\""}}}'
+```
+
+完整流程請見 `docs/gemini-readme-workflow.zh-TW.md`
+
+## 執行畫面配圖
+
+先用 PowerShell 產生截圖
+
+```powershell
+pwsh -File .\scripts\capture_tb2_screenshot.ps1 -OutputDir .\docs\images -Prefix tb2-gemini -Count 3
+```
+
+![tb2 + Gemini 畫面 1](docs/images/tb2-gemini-01-20260218-215825.png)
+![tb2 + Gemini 畫面 2](docs/images/tb2-gemini-02-20260218-215827.png)
+![tb2 + Gemini 畫面 3](docs/images/tb2-gemini-03-20260218-215830.png)
 
 ## 授權
 
