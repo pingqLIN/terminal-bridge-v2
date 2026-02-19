@@ -20,6 +20,14 @@ __pycache__/
 *.key
 *.pem
 
+# Testing / Coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Type checking
+.mypy_cache/
+
 # Build / Distribution
 *.egg-info/
 dist/
