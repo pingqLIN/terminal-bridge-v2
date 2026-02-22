@@ -152,7 +152,7 @@ Any text without a `/` prefix is sent directly to pane A.
 
 | Profile        | Prompt Patterns              | Strip ANSI | Description          |
 | -------------- | ---------------------------- | ---------- | -------------------- |
-| `generic`      | `$ #  >`                     | No         | Default shell        |
+| `generic`      | `$ # >`                      | No         | Default shell        |
 | `codex`        | `› > $`                      | No         | OpenAI Codex CLI     |
 | `claude-code`  | `> claude> $`                | No         | Claude Code CLI      |
 | `aider`        | `aider> >`                   | Yes        | Aider CLI            |
