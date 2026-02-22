@@ -165,7 +165,7 @@ python3 -m tb2 --backend pipe broker --a demo:a --b demo:b --profile generic --a
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: 偵測到 MSG:
+    [*] --> PENDING: "偵測到 MSG:"
     PENDING --> APPROVED: /approve
     PENDING --> EDITED: /edit
     PENDING --> REJECTED: /reject
