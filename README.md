@@ -165,7 +165,7 @@ When `--intervention` is enabled, all `MSG:` auto-forwards are queued for human 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: MSG: detected
+    [*] --> PENDING: "MSG: detected"
     PENDING --> APPROVED: /approve
     PENDING --> EDITED: /edit
     PENDING --> REJECTED: /reject
