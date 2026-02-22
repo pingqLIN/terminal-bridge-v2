@@ -395,34 +395,6 @@ Server status snapshot. No parameters.
 
 **Returns:** `{ "rooms": [{id, messages, age}], "bridges": [...] }`
 
-## Data Flow
-
-```mermaid
-sequenceDiagram
-    participant A as Pane A (LLM Tool)
-    participant B as Broker / Bridge
-    participant I as InterventionLayer
-    participant T as Pane B (Target)
-
-    loop Adaptive Polling (100ms–3s)
-        B->>A: capture()
-        A-->>B: terminal output
-        B->>B: diff_new_lines() — hash-based O(n)
-        B->>B: strip_prompt_tail()
-    end
-
-    alt MSG: line detected + auto_forward
-        B->>I: submit(from_a, to_b, text)
-        alt Intervention active
-            I-->>B: PENDING
-            Note over I: Waits for human decision
-            I->>T: deliver on approve/edit
-        else Intervention inactive
-            I-->>B: AUTO
-            B->>T: send(text, enter=True)
-        end
-    end
-```
 
 ## CLI Reference
 
@@ -459,14 +431,6 @@ pytest -m e2e
 # Skip E2E tests
 pytest -m "not e2e"
 ```
-
-**Test coverage:** 162 tests covering all modules — backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, and E2E integration.
-
-## Runtime Screenshots
-
-![tb2 + Gemini screen 1](docs/images/tb2-gemini-01-20260218-215825.png)
-![tb2 + Gemini screen 2](docs/images/tb2-gemini-02-20260218-215827.png)
-![tb2 + Gemini screen 3](docs/images/tb2-gemini-03-20260218-215830.png)
 
 ## License
 
