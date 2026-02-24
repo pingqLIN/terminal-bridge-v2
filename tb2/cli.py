@@ -6,6 +6,7 @@ Usage:
     python -m tb2 capture --target TARGET [--lines N]
     python -m tb2 send --target TARGET --text TEXT [--enter]
     python -m tb2 broker --a TARGET --b TARGET [--profile NAME] [--auto] [--intervention]
+    python -m tb2 gui [--host ADDR] [--port PORT] [--no-browser]
     python -m tb2 profiles
 """
 
@@ -74,6 +75,22 @@ def cmd_server(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gui(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    import threading
+    import webbrowser
+    from .server import run_server
+
+    url = f"http://{args.host}:{args.port}/"
+    print(f"GUI: {url}")
+    if not args.no_browser:
+        timer = threading.Timer(0.6, lambda: webbrowser.open(url))
+        timer.daemon = True
+        timer.start()
+
+    run_server(host=args.host, port=args.port)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     import platform
     _default_backend = "process" if platform.system() == "Windows" else "tmux"
@@ -129,6 +146,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=3189)
     s.set_defaults(fn=cmd_server)
+
+    # gui
+    s = sub.add_parser("gui", help="start web GUI server")
+    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--port", type=int, default=3189)
+    s.add_argument("--no-browser", action="store_true", help="do not open browser automatically")
+    s.set_defaults(fn=cmd_gui)
 
     return p
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tb2.cli import build_parser, _create_backend, main
+from tb2.cli import build_parser, _create_backend, cmd_gui, main
 
 
 class TestBuildParser:
@@ -46,6 +46,13 @@ class TestBuildParser:
         args = p.parse_args(["server"])
         assert args.host == "127.0.0.1"
         assert args.port == 3189
+
+    def test_gui_defaults(self):
+        p = build_parser()
+        args = p.parse_args(["gui"])
+        assert args.host == "127.0.0.1"
+        assert args.port == 3189
+        assert args.no_browser is False
 
     def test_backend_choices(self):
         p = build_parser()
@@ -101,3 +108,15 @@ class TestMain:
             with patch.object(p, "parse_args", return_value=args):
                 result = main(["init"])
         assert result == 130
+
+
+class TestGuiCommand:
+    @patch("tb2.server.run_server")
+    @patch("webbrowser.open")
+    def test_cmd_gui_no_browser(self, mock_open, mock_run_server):
+        p = build_parser()
+        args = p.parse_args(["gui", "--host", "127.0.0.1", "--port", "3199", "--no-browser"])
+        result = cmd_gui(MagicMock(), args)
+        assert result == 0
+        mock_run_server.assert_called_once_with(host="127.0.0.1", port=3199)
+        mock_open.assert_not_called()

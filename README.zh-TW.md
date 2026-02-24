@@ -117,6 +117,24 @@ curl -sS http://127.0.0.1:3189/mcp \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge_start","arguments":{"pane_a":"demo:0.0","pane_b":"demo:0.1","profile":"codex","auto_forward":true}}}'
 ```
 
+若要查看 Codex Claude Gemini 的 MCP 註冊、健康檢查與相容性說明，請參考：
+
+- [`docs/mcp-client-setup.zh-TW.md`](docs/mcp-client-setup.zh-TW.md)
+
+### Web GUI（給不熟終端機的使用者）
+
+```bash
+# 啟動 GUI 伺服器，並自動開啟瀏覽器
+python -m tb2 gui --host 127.0.0.1 --port 3189
+
+# 若不想自動開啟瀏覽器
+python -m tb2 gui --host 127.0.0.1 --port 3189 --no-browser
+```
+
+開啟網址：
+
+- `http://127.0.0.1:3189/`
+
 ### Pipe 後端（非互動式工具）
 
 ```bash
@@ -428,7 +446,7 @@ sequenceDiagram
 
 ```
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
-                      {init,list,capture,send,broker,profiles,server} ...
+                      {init,list,capture,send,broker,profiles,server,gui} ...
 ```
 
 | 子指令      | 說明                        | 主要參數                                              |
@@ -440,6 +458,7 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `broker`    | 啟動互動式 broker REPL      | `--a PANE --b PANE` `--profile NAME` `--auto` `--intervention` |
 | `profiles`  | 列出可用 profile            | —                                                     |
 | `server`    | 啟動 MCP HTTP 伺服器        | `--host ADDR` `--port PORT`                           |
+| `gui`       | 啟動內建 Web GUI            | `--host ADDR` `--port PORT` `--no-browser`            |
 
 ## 測試
 
@@ -447,7 +466,7 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 # 安裝開發依賴
 pip install -e ".[dev]"
 
-# 執行單元測試（162 個測試）
+# 執行單元測試（共 174 項，170 通過 + 4 項 e2e 略過）
 pytest
 
 # 含覆蓋率
@@ -460,7 +479,7 @@ pytest -m e2e
 pytest -m "not e2e"
 ```
 
-**測試覆蓋率：** 162 個測試涵蓋所有模組 — backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI 及 E2E 整合。
+**測試覆蓋率：** 共收集 174 個測試（170 通過、4 略過），涵蓋所有模組 — backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI 及 E2E 整合。
 
 ## 執行畫面
 

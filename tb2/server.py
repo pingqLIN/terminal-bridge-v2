@@ -10,12 +10,14 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from .backend import TerminalBackend, TmuxBackend, TmuxError
 from .diff import diff_new_lines, strip_prompt_tail
 from .intervention import Action, InterventionLayer
 from .profile import get_profile, list_profiles, strip_ansi
+from .gui import build_gui_html
 from .room import Room, cleanup_stale, create_room, delete_room, get_room, list_rooms
 
 
@@ -458,13 +460,118 @@ HANDLERS = {
     "status": handle_status,
 }
 
+TOOL_DESCRIPTIONS = {
+    "terminal_init": "Create a terminal session with pane A and pane B.",
+    "terminal_capture": "Capture recent lines from a target pane.",
+    "terminal_send": "Send text to a target pane.",
+    "terminal_interrupt": "Send Ctrl+C to one or both panes of a bridge.",
+    "room_create": "Create a chat room buffer.",
+    "room_poll": "Poll room messages after a cursor id.",
+    "room_post": "Post a message to a room and optionally deliver to pane(s).",
+    "bridge_start": "Start background bridge worker between two panes.",
+    "bridge_stop": "Stop a running bridge worker.",
+    "intervention_list": "List pending human-review messages.",
+    "intervention_approve": "Approve pending message(s) for delivery.",
+    "intervention_reject": "Reject pending message(s).",
+    "list_profiles": "List available parsing profiles.",
+    "status": "Return active rooms and bridge ids.",
+}
+
+_DEFAULT_TOOL_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": True,
+}
+
+SERVER_INFO = {"name": "terminal-bridge-v2", "version": "0.1.0"}
+LATEST_PROTOCOL_VERSION = "2025-11-25"
+
+
+def _tool_specs() -> List[Dict[str, Any]]:
+    tools: List[Dict[str, Any]] = []
+    for name in HANDLERS:
+        tools.append({
+            "name": name,
+            "description": TOOL_DESCRIPTIONS.get(name, name),
+            "inputSchema": _DEFAULT_TOOL_SCHEMA,
+        })
+    return tools
+
+
+def _as_tool_text(payload: Any) -> str:
+    if isinstance(payload, str):
+        return payload
+    try:
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+    except TypeError:
+        return str(payload)
+
+
+def _as_structured_content(payload: Any) -> Dict[str, Any]:
+    if isinstance(payload, dict):
+        return payload
+    return {"result": payload}
+
+
+def _tool_call_result(payload: Any, *, is_error: bool = False) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "content": [{"type": "text", "text": _as_tool_text(payload)}],
+        "structuredContent": _as_structured_content(payload),
+    }
+    if is_error:
+        result["isError"] = True
+    return result
+
+
+def _looks_like_tool_error(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    err = payload.get("error")
+    return isinstance(err, str) and bool(err.strip())
+
+
+def _json_bytes(payload: Any) -> bytes:
+    return json.dumps(payload).encode("utf-8")
+
+
+def _handle_get_path(path: str) -> Tuple[int, str, bytes]:
+    if path in ("", "/", "/ui", "/index.html"):
+        html = build_gui_html("/mcp").encode("utf-8")
+        return 200, "text/html; charset=utf-8", html
+
+    if path == "/healthz":
+        return 200, "application/json", _json_bytes({"ok": True})
+
+    if path == "/mcp":
+        return 200, "application/json", _json_bytes({
+            "ok": True,
+            "service": "terminal-bridge-v2",
+            "endpoint": "/mcp",
+            "ui": "/",
+        })
+
+    return 404, "application/json", _json_bytes({
+        "error": "not found",
+        "path": path,
+    })
+
 
 # ---------------------------------------------------------------------------
 # HTTP handler (MCP JSON-RPC)
 # ---------------------------------------------------------------------------
 
 class MCPHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:
+        path = urlparse(self.path).path
+        code, content_type, body = _handle_get_path(path)
+        self._reply_raw(code, content_type, body)
+
     def do_POST(self) -> None:
+        path = urlparse(self.path).path
+        if path != "/mcp":
+            self._reply(404, {"error": "not found", "path": path})
+            return
+
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length)
         try:
@@ -473,45 +580,152 @@ class MCPHandler(BaseHTTPRequestHandler):
             self._reply(400, {"error": "invalid JSON"})
             return
 
-        method = req.get("method", "")
+        # JSON-RPC batch support
+        if isinstance(req, list):
+            responses: List[Dict[str, Any]] = []
+            for item in req:
+                if not isinstance(item, dict):
+                    responses.append({
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32600, "message": "invalid request"},
+                    })
+                    continue
+                res = self._handle_rpc(item)
+                if res is not None:
+                    responses.append(res)
+            if responses:
+                self._reply(200, responses)
+            else:
+                self._reply_empty(202)
+            return
+
+        if not isinstance(req, dict):
+            self._reply(200, {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32600, "message": "invalid request"},
+            })
+            return
+
+        response = self._handle_rpc(req)
+        if response is None:
+            self._reply_empty(202)
+            return
+        self._reply(200, response)
+
+    def _handle_rpc(self, req: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        method = str(req.get("method", ""))
         params = req.get("params", {})
         req_id = req.get("id")
+        is_notification = "id" not in req
+        if not isinstance(params, dict):
+            params = {}
+
+        # MCP initialize handshake
+        if method == "initialize":
+            protocol = str(params.get("protocolVersion", LATEST_PROTOCOL_VERSION))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "protocolVersion": protocol,
+                    "capabilities": {
+                        "tools": {"listChanged": False},
+                        "resources": {},
+                        "prompts": {},
+                    },
+                    "serverInfo": SERVER_INFO,
+                },
+            }
+
+        # MCP lifecycle notification
+        if method == "notifications/initialized":
+            if is_notification:
+                return None
+            return {"jsonrpc": "2.0", "id": req_id, "result": {}}
+
+        # MCP ping
+        if method == "ping":
+            return {"jsonrpc": "2.0", "id": req_id, "result": {}}
 
         # MCP tools/list
         if method == "tools/list":
-            tools = [{"name": name} for name in HANDLERS]
-            self._reply(200, {"jsonrpc": "2.0", "id": req_id,
-                              "result": {"tools": tools}})
-            return
+            return {"jsonrpc": "2.0", "id": req_id, "result": {"tools": _tool_specs()}}
 
         # MCP tools/call
         if method == "tools/call":
             tool_name = params.get("name", "")
             tool_args = params.get("arguments", {})
+            if not isinstance(tool_name, str) or not tool_name:
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32602, "message": "tools/call requires a non-empty string name"},
+                }
+            if not isinstance(tool_args, dict):
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32602, "message": "tools/call arguments must be an object"},
+                }
             handler = HANDLERS.get(tool_name)
             if not handler:
-                self._reply(200, {"jsonrpc": "2.0", "id": req_id,
-                                  "error": {"code": -32601, "message": f"unknown tool: {tool_name}"}})
-                return
+                payload = {"error": f"unknown tool: {tool_name}", "tool": tool_name}
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": _tool_call_result(payload, is_error=True),
+                }
             try:
-                result = handler(tool_args)
+                payload = handler(tool_args)
             except Exception as exc:
-                self._reply(200, {"jsonrpc": "2.0", "id": req_id,
-                                  "error": {"code": -32000, "message": str(exc)}})
-                return
-            self._reply(200, {"jsonrpc": "2.0", "id": req_id, "result": result})
-            return
+                payload = {"error": str(exc), "tool": tool_name}
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": _tool_call_result(payload, is_error=True),
+                }
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": _tool_call_result(payload, is_error=_looks_like_tool_error(payload)),
+            }
 
-        self._reply(200, {"jsonrpc": "2.0", "id": req_id,
-                          "error": {"code": -32601, "message": f"unknown method: {method}"}})
+        # Optional lists for clients that probe server capabilities
+        if method == "resources/list":
+            return {"jsonrpc": "2.0", "id": req_id, "result": {"resources": []}}
+        if method == "prompts/list":
+            return {"jsonrpc": "2.0", "id": req_id, "result": {"prompts": []}}
 
-    def _reply(self, code: int, body: dict) -> None:
-        data = json.dumps(body).encode()
+        # Ignore unknown notifications to avoid noisy disconnects.
+        if is_notification:
+            return None
+        return {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "error": {"code": -32601, "message": f"unknown method: {method}"},
+        }
+
+    def _reply(self, code: int, body: Any) -> None:
+        data = json.dumps(body).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _reply_raw(self, code: int, content_type: str, body: bytes) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _reply_empty(self, code: int) -> None:
+        self.send_response(code)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def log_message(self, fmt: str, *args: Any) -> None:
         pass  # Quiet by default.

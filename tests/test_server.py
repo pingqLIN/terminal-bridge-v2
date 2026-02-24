@@ -1,5 +1,6 @@
 """Tests for tb2.server — MCP handler functions."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -193,3 +194,129 @@ class TestInterventionHandlers:
     def test_terminal_interrupt_not_found(self):
         result = server_mod.handle_terminal_interrupt({"bridge_id": "nope"})
         assert "error" in result
+
+
+class TestMCPProtocol:
+    def _rpc(self, req):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        return handler._handle_rpc(req)
+
+    def test_initialize(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "pytest", "version": "1.0"},
+            },
+        })
+        assert result["result"]["serverInfo"]["name"] == "terminal-bridge-v2"
+        assert result["result"]["protocolVersion"] == "2025-11-05"
+
+    def test_initialize_echoes_client_protocol(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "initialize",
+            "params": {"protocolVersion": "2025-11-25"},
+        })
+        assert result["result"]["protocolVersion"] == "2025-11-25"
+
+    def test_ping(self):
+        result = self._rpc({"jsonrpc": "2.0", "id": 2, "method": "ping", "params": {}})
+        assert result["result"] == {}
+
+    def test_notifications_initialized_is_ignored_without_id(self):
+        result = self._rpc({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        assert result is None
+
+    def test_tools_list_has_mcp_shape(self):
+        result = self._rpc({"jsonrpc": "2.0", "id": 3, "method": "tools/list", "params": {}})
+        tools = result["result"]["tools"]
+        assert isinstance(tools, list)
+        assert tools
+        tool0 = tools[0]
+        assert "name" in tool0
+        assert "description" in tool0
+        assert "inputSchema" in tool0
+
+    def test_tools_call_returns_mcp_content_shape(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "tools/call",
+            "params": {"name": "list_profiles", "arguments": {}},
+        })
+        tool_result = result["result"]
+        assert "content" in tool_result
+        assert isinstance(tool_result["content"], list)
+        assert tool_result["content"]
+        assert tool_result["content"][0]["type"] == "text"
+        assert "structuredContent" in tool_result
+        assert "profiles" in tool_result["structuredContent"]
+        assert tool_result.get("isError") is not True
+
+    def test_tools_call_unknown_tool_uses_is_error(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "tools/call",
+            "params": {"name": "missing_tool", "arguments": {}},
+        })
+        tool_result = result["result"]
+        assert tool_result["isError"] is True
+        assert "unknown tool" in tool_result["structuredContent"]["error"]
+
+    def test_tools_call_handler_error_payload_sets_is_error(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "tools/call",
+            "params": {"name": "bridge_stop", "arguments": {"bridge_id": "nope"}},
+        })
+        tool_result = result["result"]
+        assert tool_result["isError"] is True
+        assert tool_result["structuredContent"]["error"] == "bridge not found"
+
+    def test_tools_call_rejects_non_object_arguments(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 13,
+            "method": "tools/call",
+            "params": {"name": "status", "arguments": []},
+        })
+        assert result["error"]["code"] == -32602
+
+    def test_unknown_notification_is_ignored(self):
+        result = self._rpc({"jsonrpc": "2.0", "method": "notifications/custom", "params": {}})
+        assert result is None
+
+
+class TestGuiRouting:
+    def test_gui_html_has_endpoint(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert "tb2 Control Center" in html
+        assert "MCP endpoint /mcp" in html
+
+    def test_get_root_returns_html(self):
+        code, content_type, body = server_mod._handle_get_path("/")
+        assert code == 200
+        assert content_type.startswith("text/html")
+        assert b"tb2 Control Center" in body
+
+    def test_get_mcp_returns_json(self):
+        code, content_type, body = server_mod._handle_get_path("/mcp")
+        assert code == 200
+        assert content_type == "application/json"
+        payload = json.loads(body.decode("utf-8"))
+        assert payload["ok"] is True
+        assert payload["endpoint"] == "/mcp"
+
+    def test_get_unknown_path(self):
+        code, content_type, body = server_mod._handle_get_path("/missing")
+        assert code == 404
+        assert content_type == "application/json"
+        payload = json.loads(body.decode("utf-8"))
+        assert payload["error"] == "not found"

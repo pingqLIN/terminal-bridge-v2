@@ -117,6 +117,24 @@ curl -sS http://127.0.0.1:3189/mcp \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge_start","arguments":{"pane_a":"demo:0.0","pane_b":"demo:0.1","profile":"codex","auto_forward":true}}}'
 ```
 
+For Codex/Claude/Gemini MCP registration, health checks, and compatibility notes, see:
+
+- [`docs/mcp-client-setup.md`](docs/mcp-client-setup.md)
+
+### Web GUI (for non-terminal users)
+
+```bash
+# Start GUI server and open browser automatically
+python -m tb2 gui --host 127.0.0.1 --port 3189
+
+# Or start without auto-opening a browser
+python -m tb2 gui --host 127.0.0.1 --port 3189 --no-browser
+```
+
+Open:
+
+- `http://127.0.0.1:3189/`
+
 ### Pipe Backend (non-interactive tools)
 
 ```bash
@@ -400,7 +418,7 @@ Server status snapshot. No parameters.
 
 ```
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
-                      {init,list,capture,send,broker,profiles,server} ...
+                      {init,list,capture,send,broker,profiles,server,gui} ...
 ```
 
 | Subcommand  | Description                         | Key Arguments                                        |
@@ -412,6 +430,7 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `broker`    | Start interactive broker REPL       | `--a PANE --b PANE` `--profile NAME` `--auto` `--intervention` |
 | `profiles`  | List available profiles             | —                                                    |
 | `server`    | Start MCP HTTP server               | `--host ADDR` `--port PORT`                          |
+| `gui`       | Start built-in web GUI              | `--host ADDR` `--port PORT` `--no-browser`           |
 
 ## Testing
 
@@ -419,7 +438,7 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 # Install dev dependencies
 pip install -e ".[dev]"
 
-# Run unit tests (162 tests)
+# Run unit tests (174 collected: 170 pass + 4 skipped e2e)
 pytest
 
 # Run with coverage
@@ -431,6 +450,14 @@ pytest -m e2e
 # Skip E2E tests
 pytest -m "not e2e"
 ```
+
+**Test coverage:** 174 collected tests (170 pass, 4 skipped) covering all modules — backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, and E2E integration.
+
+## Runtime Screenshots
+
+![tb2 + Gemini screen 1](docs/images/tb2-gemini-01-20260218-215825.png)
+![tb2 + Gemini screen 2](docs/images/tb2-gemini-02-20260218-215827.png)
+![tb2 + Gemini screen 3](docs/images/tb2-gemini-03-20260218-215830.png)
 
 ## License
 
