@@ -89,6 +89,8 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 
 開啟 `http://127.0.0.1:3189/`。
 
+![控制台介面](docs/images/control-center.png)
+
 ---
 
 ## 功能特色

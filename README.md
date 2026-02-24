@@ -89,6 +89,8 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 
 Open `http://127.0.0.1:3189/` in your browser.
 
+![Control Center](docs/images/control-center.png)
+
 ---
 
 ## Features
