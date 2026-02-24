@@ -143,6 +143,7 @@ Built-in prompt detection for popular CLI LLM tools:
 | `aider` | `aider> >` | Yes | Aider CLI |
 | `llama` | `> llama>` | No | llama.cpp / Ollama |
 | `gemini` | `> gemini> ✦` | Yes | Gemini CLI |
+| `acpx` | `$ # >` | Yes | acpx ACP client |
 
 ### Human Intervention
 

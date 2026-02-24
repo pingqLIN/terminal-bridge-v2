@@ -143,6 +143,7 @@ graph TD
 | `aider` | `aider> >` | 是 | Aider CLI |
 | `llama` | `> llama>` | 否 | llama.cpp / Ollama |
 | `gemini` | `> gemini> ✦` | 是 | Gemini CLI |
+| `acpx` | `$ # >` | 是 | acpx ACP 客戶端 |
 
 ### 人工介入
 

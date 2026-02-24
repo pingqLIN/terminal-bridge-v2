@@ -89,6 +89,12 @@ BUILTIN_PROFILES: Dict[str, ToolProfile] = {
         msg_prefix="MSG:",
         strip_ansi=True,
     ),
+    "acpx": ToolProfile(
+        name="acpx",
+        prompt_patterns=[r"\$\s*$", r"#\s*$", r">\s*$"],
+        msg_prefix="MSG:",
+        strip_ansi=True,
+    ),
 }
 
 

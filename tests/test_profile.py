@@ -39,6 +39,11 @@ class TestToolProfile:
         p = BUILTIN_PROFILES["gemini"]
         assert p.is_prompt("✦ ")
 
+    def test_is_prompt_acpx(self):
+        p = BUILTIN_PROFILES["acpx"]
+        assert p.is_prompt("user@host:~$ ")
+        assert p.is_prompt("$ ")
+
     def test_is_prompt_not_prompt(self):
         p = BUILTIN_PROFILES["generic"]
         assert not p.is_prompt("hello world")
@@ -89,6 +94,7 @@ class TestRegistry:
         assert "aider" in names
         assert "llama" in names
         assert "gemini" in names
+        assert "acpx" in names
 
     def test_get_unknown_returns_generic(self):
         p = get_profile("nonexistent")
