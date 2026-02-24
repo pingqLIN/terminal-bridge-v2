@@ -1,23 +1,99 @@
-# terminal-bridge-v2
+<h1 align="center">terminal-bridge-v2</h1>
 
-[中文版](README.zh-TW.md)
+<p align="center">
+  <strong>Universal CLI LLM remote control + real-time monitoring + human intervention</strong>
+</p>
 
-> Universal CLI LLM remote control + real-time monitoring + human intervention
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-%3E%3D3.9-blue.svg" alt="Python >= 3.9"></a>
+  <img src="https://img.shields.io/badge/version-0.1.0-green.svg" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/tests-174%20passed-brightgreen.svg" alt="Tests: 174 passed">
+  <img src="https://img.shields.io/badge/MCP-JSON--RPC-orange.svg" alt="MCP JSON-RPC">
+</p>
 
-**terminal-bridge-v2** (tb2) lets you orchestrate any CLI-based LLM tool — Codex, Claude Code, Aider, Gemini, llama.cpp, or your own — from a single control plane. It captures terminal output, detects new lines via hash-based diffing, auto-forwards messages between panes, and optionally puts a human in the loop before anything is delivered.
+<p align="center">
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#features">Features</a> •
+  <a href="#mcp-api-reference">API Reference</a> •
+  <a href="#cli-reference">CLI Reference</a> •
+  <a href="README.zh-TW.md">中文版</a>
+</p>
+
+---
+
+## Overview
+
+**tb2** orchestrates any CLI-based LLM tool from a single control plane. Connect Codex, Claude Code, Aider, Gemini, llama.cpp, or your own tool — capture output, auto-forward messages, and optionally put a human in the loop.
+
+- **Multi-backend** — pluggable terminal backends: tmux (Linux/macOS), process/ConPTY (Windows), pipe (non-interactive)
+- **Human-in-the-loop** — pending queue with approve / edit / reject before auto-forward delivery
+- **MCP server** — 14-tool JSON-RPC HTTP API for full programmatic control
+
+---
+
+## Installation
+
+```bash
+git clone https://github.com/pingqLIN/terminal-bridge-v2.git
+cd terminal-bridge-v2
+pip install -e .
+```
+
+<details>
+<summary>Platform-specific options</summary>
+
+```bash
+# Windows ConPTY support
+pip install -e ".[windows]"
+
+# Dev/test dependencies
+pip install -e ".[dev]"
+```
+
+</details>
+
+**Requirements:** Python >= 3.9. Linux/macOS requires `tmux` installed.
+
+---
+
+## Quick Start
+
+### Linux / macOS (tmux)
+
+```bash
+# Create session with two panes, then start broker
+python3 -m tb2 init --session demo
+python3 -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
+```
+
+### Windows (process backend)
+
+```bash
+python -m tb2 --backend process init --session demo
+python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --auto
+```
+
+### MCP Server
+
+```bash
+python3 -m tb2 server --host 127.0.0.1 --port 3189
+```
+
+### Web GUI
+
+```bash
+python -m tb2 gui --host 127.0.0.1 --port 3189
+```
+
+Open `http://127.0.0.1:3189/` in your browser.
+
+---
 
 ## Features
 
-- **Backend abstraction** — pluggable terminal backends: tmux (Linux/macOS), process/ConPTY (Windows), pipe (non-interactive)
-- **Tool profiles** — built-in prompt detection for Codex, Claude Code, Aider, Gemini, llama.cpp; easily extensible
-- **Human intervention** — pending queue with approve / edit / reject before auto-forward
-- **Adaptive polling** — exponential backoff (100 ms → 3 s) when idle, instant reset on activity
-- **Efficient diff** — hash-based O(n) new-line detection replacing naive O(n²) suffix matching
-- **Room system** — bounded message rooms with cursor-based polling and TTL cleanup
-- **MCP server** — JSON-RPC HTTP server exposing 14 tools for programmatic control
-- **Single-call capture** — both panes captured in one subprocess invocation (tmux)
-
-## Architecture
+### Architecture
 
 ```mermaid
 graph TD
@@ -53,143 +129,32 @@ graph TD
     BRIDGE --> PROFILE
 ```
 
-## Installation
+### Tool Profiles
 
-```bash
-# Clone
-git clone https://github.com/pingqLIN/terminal-bridge-v2.git
-cd terminal-bridge-v2
+Built-in prompt detection for popular CLI LLM tools:
 
-# Install (editable)
-pip install -e .
+| Profile | Prompt Patterns | Strip ANSI | Description |
+|---------|----------------|------------|-------------|
+| `generic` | `$ # >` | No | Default shell |
+| `codex` | `› > $` | No | OpenAI Codex CLI |
+| `claude-code` | `> claude> $` | No | Claude Code CLI |
+| `aider` | `aider> >` | Yes | Aider CLI |
+| `llama` | `> llama>` | No | llama.cpp / Ollama |
+| `gemini` | `> gemini> ✦` | Yes | Gemini CLI |
 
-# With Windows ConPTY support
-pip install -e ".[windows]"
+### Human Intervention
 
-# With dev/test dependencies
-pip install -e ".[dev]"
-```
-
-**Requirements:** Python >= 3.9. On Linux/macOS the tmux backend requires `tmux` installed.
-
-## Quick Start
-
-### Linux / macOS (tmux backend)
-
-```bash
-# 1. Create a tmux session with two panes
-python3 -m tb2 init --session demo
-
-# 2. Attach to see the panes
-tmux attach -t demo
-
-# 3. Start broker with Codex profile + auto-forward
-python3 -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
-
-# 4. With human review enabled
-python3 -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto --intervention
-```
-
-### Windows (process backend)
-
-```powershell
-# 1. Create session (spawns two ConPTY processes)
-python -m tb2 --backend process init --session demo
-
-# 2. Start broker
-python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --auto
-```
-
-### MCP Server (any platform)
-
-```bash
-# Start the JSON-RPC HTTP server
-python3 -m tb2 server --host 127.0.0.1 --port 3189
-
-# Init a session via MCP
-curl -sS http://127.0.0.1:3189/mcp \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"terminal_init","arguments":{"session":"demo"}}}'
-
-# Start a bridge with auto-forward
-curl -sS http://127.0.0.1:3189/mcp \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"bridge_start","arguments":{"pane_a":"demo:0.0","pane_b":"demo:0.1","profile":"codex","auto_forward":true}}}'
-```
-
-For Codex/Claude/Gemini MCP registration, health checks, and compatibility notes, see:
-
-- [`docs/mcp-client-setup.md`](docs/mcp-client-setup.md)
-
-### Web GUI (for non-terminal users)
-
-```bash
-# Start GUI server and open browser automatically
-python -m tb2 gui --host 127.0.0.1 --port 3189
-
-# Or start without auto-opening a browser
-python -m tb2 gui --host 127.0.0.1 --port 3189 --no-browser
-```
-
-Open:
-
-- `http://127.0.0.1:3189/`
-
-### Pipe Backend (non-interactive tools)
-
-```bash
-# For tools that read stdin / write stdout (no PTY needed)
-python3 -m tb2 --backend pipe init --session demo
-python3 -m tb2 --backend pipe broker --a demo:a --b demo:b --profile generic --auto
-```
-
-## Broker Commands
-
-The interactive broker REPL accepts these commands:
-
-| Command              | Description                              |
-| -------------------- | ---------------------------------------- |
-| `/a <text>`          | Send text to pane A (with Enter)         |
-| `/b <text>`          | Send text to pane B (with Enter)         |
-| `/both <text>`       | Send text to both panes                  |
-| `/auto on\|off`      | Toggle `MSG:` auto-forward               |
-| `/pause`             | Enable human review queue                |
-| `/resume`            | Disable review + deliver all pending     |
-| `/pending`           | List pending messages with age           |
-| `/approve <id\|all>` | Approve and deliver message(s)           |
-| `/reject <id\|all>`  | Reject and discard message(s)            |
-| `/edit <id> <text>`  | Replace message text and deliver         |
-| `/profile [name]`    | Show current profile / switch to `name`  |
-| `/status`            | Show broker state and poll interval      |
-| `/help`              | Print command reference                  |
-| `/quit`              | Exit broker                              |
-
-Any text without a `/` prefix is sent directly to pane A.
-
-## Available Profiles
-
-| Profile        | Prompt Patterns              | Strip ANSI | Description          |
-| -------------- | ---------------------------- | ---------- | -------------------- |
-| `generic`      | `$ #  >`                     | No         | Default shell        |
-| `codex`        | `› > $`                      | No         | OpenAI Codex CLI     |
-| `claude-code`  | `> claude> $`                | No         | Claude Code CLI      |
-| `aider`        | `aider> >`                   | Yes        | Aider CLI            |
-| `llama`        | `> llama>`                   | No         | llama.cpp / Ollama   |
-| `gemini`       | `> gemini> ✦`                | Yes        | Gemini CLI           |
-
-## Human Intervention
-
-When `--intervention` is enabled, all `MSG:` auto-forwards are queued for human review before delivery.
+Enable `--intervention` to queue all `MSG:` auto-forwards for human review before delivery.
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING : MSG prefix detected
-    PENDING --> APPROVED: /approve
-    PENDING --> EDITED: /edit
-    PENDING --> REJECTED: /reject
-    APPROVED --> [*]: Delivered to target pane
-    EDITED --> [*]: Delivered with modified text
-    REJECTED --> [*]: Discarded
+    PENDING --> APPROVED : /approve
+    PENDING --> EDITED : /edit
+    PENDING --> REJECTED : /reject
+    APPROVED --> [*] : Delivered to target pane
+    EDITED --> [*] : Delivered with modified text
+    REJECTED --> [*] : Discarded
 ```
 
 **Workflow:**
@@ -202,9 +167,43 @@ stateDiagram-v2
    - `/reject <id>` — discard silently
 4. `/resume` flushes all pending messages and disables the queue
 
+### Key Internals
+
+| Component | Description |
+|-----------|-------------|
+| Adaptive polling | Exponential backoff (100 ms → 3 s) when idle, instant reset on activity |
+| Hash-based diff | O(n) new-line detection replacing naive O(n²) suffix matching |
+| Room system | Bounded message rooms with cursor-based polling and TTL cleanup |
+| Single-call capture | Both panes captured in one subprocess invocation (tmux) |
+
+---
+
+## Broker Commands
+
+| Command | Description |
+|---------|-------------|
+| `/a <text>` | Send text to pane A (with Enter) |
+| `/b <text>` | Send text to pane B (with Enter) |
+| `/both <text>` | Send text to both panes |
+| `/auto on\|off` | Toggle `MSG:` auto-forward |
+| `/pause` | Enable human review queue |
+| `/resume` | Disable review + deliver all pending |
+| `/pending` | List pending messages with age |
+| `/approve <id\|all>` | Approve and deliver message(s) |
+| `/reject <id\|all>` | Reject and discard message(s) |
+| `/edit <id> <text>` | Replace message text and deliver |
+| `/profile [name]` | Show current profile / switch to `name` |
+| `/status` | Show broker state and poll interval |
+| `/help` | Print command reference |
+| `/quit` | Exit broker |
+
+Any text without a `/` prefix is sent directly to pane A.
+
+---
+
 ## MCP API Reference
 
-The MCP server exposes 14 tools via JSON-RPC over HTTP at `POST /mcp`.
+14 tools exposed via JSON-RPC over HTTP at `POST /mcp`.
 
 **Request format:**
 
@@ -215,10 +214,12 @@ The MCP server exposes 14 tools via JSON-RPC over HTTP at `POST /mcp`.
   "method": "tools/call",
   "params": {
     "name": "<tool_name>",
-    "arguments": { ... }
+    "arguments": { }
   }
 }
 ```
+
+For MCP client registration (Codex, Claude, Gemini), see [`docs/mcp-client-setup.md`](docs/mcp-client-setup.md).
 
 ### Terminal Tools
 
@@ -226,13 +227,13 @@ The MCP server exposes 14 tools via JSON-RPC over HTTP at `POST /mcp`.
 
 Create a session with two panes (A and B).
 
-| Parameter    | Type   | Default     | Description                    |
-| ------------ | ------ | ----------- | ------------------------------ |
-| `session`    | string | `"tb2"`     | Session name                   |
-| `backend`    | string | `"tmux"`    | `tmux` / `process` / `pipe`   |
-| `backend_id` | string | `"default"` | Backend instance identifier    |
-| `shell`      | string | —           | Shell override (process/pipe)  |
-| `distro`     | string | —           | WSL distro (tmux only)         |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `session` | string | `"tb2"` | Session name |
+| `backend` | string | `"tmux"` | `tmux` / `process` / `pipe` |
+| `backend_id` | string | `"default"` | Backend instance identifier |
+| `shell` | string | — | Shell override (process/pipe) |
+| `distro` | string | — | WSL distro (tmux only) |
 
 **Returns:** `{ "session", "pane_a", "pane_b" }`
 
@@ -245,47 +246,37 @@ curl -sS http://127.0.0.1:3189/mcp -H 'content-type: application/json' \
 
 Capture current screen content of a pane.
 
-| Parameter    | Type   | Default     | Required | Description              |
-| ------------ | ------ | ----------- | -------- | ------------------------ |
-| `target`     | string | —           | Yes      | Pane identifier          |
-| `lines`      | int    | `200`       | No       | Scrollback lines         |
-| `backend`    | string | `"tmux"`    | No       | Backend type             |
-| `backend_id` | string | `"default"` | No       | Backend instance         |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `target` | string | — | Yes | Pane identifier |
+| `lines` | int | `200` | No | Scrollback lines |
+| `backend` | string | `"tmux"` | No | Backend type |
+| `backend_id` | string | `"default"` | No | Backend instance |
 
 **Returns:** `{ "lines": [...], "count": int }`
-
-```bash
-curl -sS http://127.0.0.1:3189/mcp -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"terminal_capture","arguments":{"target":"demo:0.0"}}}'
-```
 
 #### `terminal_send`
 
 Send text to a pane, optionally pressing Enter.
 
-| Parameter    | Type    | Default     | Required | Description            |
-| ------------ | ------- | ----------- | -------- | ---------------------- |
-| `target`     | string  | —           | Yes      | Pane identifier        |
-| `text`       | string  | —           | Yes      | Text to send           |
-| `enter`      | boolean | `false`     | No       | Press Enter after text |
-| `backend`    | string  | `"tmux"`    | No       | Backend type           |
-| `backend_id` | string  | `"default"` | No       | Backend instance       |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `target` | string | — | Yes | Pane identifier |
+| `text` | string | — | Yes | Text to send |
+| `enter` | boolean | `false` | No | Press Enter after text |
+| `backend` | string | `"tmux"` | No | Backend type |
+| `backend_id` | string | `"default"` | No | Backend instance |
 
 **Returns:** `{ "ok": true }`
-
-```bash
-curl -sS http://127.0.0.1:3189/mcp -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"terminal_send","arguments":{"target":"demo:0.0","text":"echo hello","enter":true}}}'
-```
 
 #### `terminal_interrupt`
 
 Send SIGINT (Ctrl+C) to bridge pane(s).
 
-| Parameter    | Type   | Default  | Required | Description                              |
-| ------------ | ------ | -------- | -------- | ---------------------------------------- |
-| `bridge_id`  | string | —        | Yes      | Bridge to target                         |
-| `target`     | string | `"both"` | No       | `a` / `b` / `both` / specific pane id   |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `bridge_id` | string | — | Yes | Bridge to target |
+| `target` | string | `"both"` | No | `a` / `b` / `both` |
 
 **Returns:** `{ "bridge_id", "sent": [...], "errors": [...], "ok": bool }`
 
@@ -295,9 +286,9 @@ Send SIGINT (Ctrl+C) to bridge pane(s).
 
 Create a message room (idempotent).
 
-| Parameter | Type   | Default      | Description                     |
-| --------- | ------ | ------------ | ------------------------------- |
-| `room_id` | string | auto-generated | Desired room ID               |
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `room_id` | string | auto-generated | Desired room ID |
 
 **Returns:** `{ "room_id" }`
 
@@ -305,11 +296,11 @@ Create a message room (idempotent).
 
 Poll a room for new messages after a cursor.
 
-| Parameter  | Type   | Default | Required | Description                    |
-| ---------- | ------ | ------- | -------- | ------------------------------ |
-| `room_id`  | string | —       | Yes      | Room to poll                   |
-| `after_id` | int    | `0`     | No       | Cursor — messages after this ID |
-| `limit`    | int    | `50`    | No       | Max messages to return         |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `room_id` | string | — | Yes | Room to poll |
+| `after_id` | int | `0` | No | Cursor — messages after this ID |
+| `limit` | int | `50` | No | Max messages to return |
 
 **Returns:** `{ "messages": [{id, author, text, kind, ts}], "latest_id" }`
 
@@ -317,14 +308,14 @@ Poll a room for new messages after a cursor.
 
 Post a message to a room, optionally delivering to a bridge pane.
 
-| Parameter    | Type   | Default  | Required | Description                     |
-| ------------ | ------ | -------- | -------- | ------------------------------- |
-| `room_id`    | string | —        | Yes      | Target room                     |
-| `text`       | string | —        | Yes      | Message body                    |
-| `author`     | string | `"user"` | No       | Author name                     |
-| `kind`       | string | `"chat"` | No       | `chat` / `terminal` / `system`  |
-| `deliver`    | string | —        | No       | `a` / `b` / `both` — also send to pane |
-| `bridge_id`  | string | —        | No       | Required when `deliver` is set  |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `room_id` | string | — | Yes | Target room |
+| `text` | string | — | Yes | Message body |
+| `author` | string | `"user"` | No | Author name |
+| `kind` | string | `"chat"` | No | `chat` / `terminal` / `system` |
+| `deliver` | string | — | No | `a` / `b` / `both` |
+| `bridge_id` | string | — | No | Required when `deliver` is set |
 
 **Returns:** `{ "id" }`
 
@@ -334,34 +325,29 @@ Post a message to a room, optionally delivering to a bridge pane.
 
 Start a background bridge worker that polls two panes, diffs output, and posts new lines to a room.
 
-| Parameter       | Type    | Default     | Required | Description                    |
-| --------------- | ------- | ----------- | -------- | ------------------------------ |
-| `pane_a`        | string  | —           | Yes      | Pane A identifier              |
-| `pane_b`        | string  | —           | Yes      | Pane B identifier              |
-| `room_id`       | string  | auto-created | No      | Room for messages              |
-| `bridge_id`     | string  | auto-generated | No   | Custom bridge ID               |
-| `profile`       | string  | `"generic"` | No       | Tool profile name              |
-| `poll_ms`       | int     | `400`       | No       | Base poll interval (ms)        |
-| `lines`         | int     | `200`       | No       | Scrollback lines per poll      |
-| `auto_forward`  | boolean | `false`     | No       | Auto-forward `MSG:` lines      |
-| `intervention`  | boolean | `false`     | No       | Enable human review queue      |
-| `backend`       | string  | `"tmux"`    | No       | Backend type                   |
-| `backend_id`    | string  | `"default"` | No       | Backend instance               |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `pane_a` | string | — | Yes | Pane A identifier |
+| `pane_b` | string | — | Yes | Pane B identifier |
+| `room_id` | string | auto-created | No | Room for messages |
+| `bridge_id` | string | auto-generated | No | Custom bridge ID |
+| `profile` | string | `"generic"` | No | Tool profile name |
+| `poll_ms` | int | `400` | No | Base poll interval (ms) |
+| `lines` | int | `200` | No | Scrollback lines per poll |
+| `auto_forward` | boolean | `false` | No | Auto-forward `MSG:` lines |
+| `intervention` | boolean | `false` | No | Enable human review queue |
+| `backend` | string | `"tmux"` | No | Backend type |
+| `backend_id` | string | `"default"` | No | Backend instance |
 
 **Returns:** `{ "bridge_id", "room_id" }`
-
-```bash
-curl -sS http://127.0.0.1:3189/mcp -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"bridge_start","arguments":{"pane_a":"demo:0.0","pane_b":"demo:0.1","profile":"codex","auto_forward":true,"intervention":true}}}'
-```
 
 #### `bridge_stop`
 
 Stop a running bridge worker.
 
-| Parameter    | Type   | Required | Description |
-| ------------ | ------ | -------- | ----------- |
-| `bridge_id`  | string | Yes      | Bridge ID   |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `bridge_id` | string | Yes | Bridge ID |
 
 **Returns:** `{ "ok": true }`
 
@@ -371,31 +357,31 @@ Stop a running bridge worker.
 
 List all pending messages in a bridge's intervention queue.
 
-| Parameter    | Type   | Required | Description |
-| ------------ | ------ | -------- | ----------- |
-| `bridge_id`  | string | Yes      | Bridge ID   |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `bridge_id` | string | Yes | Bridge ID |
 
-**Returns:** `{ "bridge_id", "pending": [{id, from_pane, to_pane, text, action, edited_text, created_at}], "count" }`
+**Returns:** `{ "bridge_id", "pending": [...], "count" }`
 
 #### `intervention_approve`
 
 Approve and deliver pending message(s).
 
-| Parameter    | Type         | Default | Required | Description                 |
-| ------------ | ------------ | ------- | -------- | --------------------------- |
-| `bridge_id`  | string       | —       | Yes      | Bridge ID                   |
-| `id`         | int\|string  | `"all"` | No       | Message ID or `"all"`       |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `bridge_id` | string | — | Yes | Bridge ID |
+| `id` | int\|string | `"all"` | No | Message ID or `"all"` |
 
-**Returns:** `{ "bridge_id", "approved", "delivered": [{id, to_pane}], "errors": [...], "remaining" }`
+**Returns:** `{ "bridge_id", "approved", "delivered": [...], "errors": [...], "remaining" }`
 
 #### `intervention_reject`
 
 Reject and discard pending message(s).
 
-| Parameter    | Type         | Default | Required | Description                 |
-| ------------ | ------------ | ------- | -------- | --------------------------- |
-| `bridge_id`  | string       | —       | Yes      | Bridge ID                   |
-| `id`         | int\|string  | `"all"` | No       | Message ID or `"all"`       |
+| Parameter | Type | Default | Required | Description |
+|-----------|------|---------|----------|-------------|
+| `bridge_id` | string | — | Yes | Bridge ID |
+| `id` | int\|string | `"all"` | No | Message ID or `"all"` |
 
 **Returns:** `{ "bridge_id", "rejected", "remaining" }`
 
@@ -413,35 +399,40 @@ Server status snapshot. No parameters.
 
 **Returns:** `{ "rooms": [{id, messages, age}], "bridges": [...] }`
 
+---
 
 ## CLI Reference
 
-```
+```text
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
                       {init,list,capture,send,broker,profiles,server,gui} ...
 ```
 
-| Subcommand  | Description                         | Key Arguments                                        |
-| ----------- | ----------------------------------- | ---------------------------------------------------- |
-| `init`      | Create session with two panes       | `--session NAME`                                     |
-| `list`      | List panes in a session             | `--session NAME`                                     |
-| `capture`   | Capture pane output                 | `--target PANE` `--lines N`                          |
-| `send`      | Send text to a pane                 | `--target PANE` `--text TEXT` `--enter`               |
-| `broker`    | Start interactive broker REPL       | `--a PANE --b PANE` `--profile NAME` `--auto` `--intervention` |
-| `profiles`  | List available profiles             | —                                                    |
-| `server`    | Start MCP HTTP server               | `--host ADDR` `--port PORT`                          |
-| `gui`       | Start built-in web GUI              | `--host ADDR` `--port PORT` `--no-browser`           |
+| Subcommand | Description | Key Arguments |
+|------------|-------------|---------------|
+| `init` | Create session with two panes | `--session NAME` |
+| `list` | List panes in a session | `--session NAME` |
+| `capture` | Capture pane output | `--target PANE` `--lines N` |
+| `send` | Send text to a pane | `--target PANE` `--text TEXT` `--enter` |
+| `broker` | Start interactive broker REPL | `--a PANE --b PANE` `--profile NAME` `--auto` `--intervention` |
+| `profiles` | List available profiles | — |
+| `server` | Start MCP HTTP server | `--host ADDR` `--port PORT` |
+| `gui` | Start built-in web GUI | `--host ADDR` `--port PORT` `--no-browser` |
+
+---
 
 ## Testing
 
 ```bash
-# Install dev dependencies
 pip install -e ".[dev]"
-
-# Run unit tests (174 collected: 170 pass + 4 skipped e2e)
 pytest
+```
 
-# Run with coverage
+<details>
+<summary>More test commands</summary>
+
+```bash
+# Coverage report
 pytest --cov=tb2 --cov-report=term-missing
 
 # Run E2E tests (requires tmux)
@@ -451,24 +442,32 @@ pytest -m e2e
 pytest -m "not e2e"
 ```
 
+</details>
+
 **Test coverage:** 174 collected tests (170 pass, 4 skipped) covering all modules — backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, and E2E integration.
 
-## Runtime Screenshots
+---
+
+## Screenshots
 
 ![tb2 + Gemini screen 1](docs/images/tb2-gemini-01-20260218-215825.png)
 ![tb2 + Gemini screen 2](docs/images/tb2-gemini-02-20260218-215827.png)
 ![tb2 + Gemini screen 3](docs/images/tb2-gemini-03-20260218-215830.png)
 
+---
+
 ## License
 
 [MIT License](https://opensource.org/licenses/MIT)
+
+---
 
 ## AI-Assisted Development
 
 This project was developed with AI assistance.
 
 | Model | Role |
-| ----- | ---- |
+|-------|------|
 | Claude Opus 4 | Primary architect and implementation |
 | OpenAI Codex CLI | Code review and sub-agent contributions |
 
