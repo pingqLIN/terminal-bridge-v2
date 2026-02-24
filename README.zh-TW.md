@@ -36,7 +36,7 @@ graph TD
     subgraph 服務
         ROOM[Room<br/>訊息緩衝區]
         INTERVENTION[InterventionLayer<br/>人工審查佇列]
-        DIFF[Diff Engine<br/>Hash-based O&#40;n&#41;]
+        DIFF["Diff Engine<br/>Hash-based O(n)"]
         PROFILE[ToolProfile<br/>提示偵測]
     end
 
@@ -165,7 +165,7 @@ python3 -m tb2 --backend pipe broker --a demo:a --b demo:b --profile generic --a
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: "偵測到 MSG:"
+    [*] --> PENDING: 偵測到 MSG
     PENDING --> APPROVED: /approve
     PENDING --> EDITED: /edit
     PENDING --> REJECTED: /reject

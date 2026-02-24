@@ -36,7 +36,7 @@ graph TD
     subgraph Services
         ROOM[Room<br/>Message buffer]
         INTERVENTION[InterventionLayer<br/>Human review queue]
-        DIFF[Diff Engine<br/>Hash-based O&#40;n&#41;]
+        DIFF["Diff Engine<br/>Hash-based O(n)"]
         PROFILE[ToolProfile<br/>Prompt detection]
     end
 
@@ -165,7 +165,7 @@ When `--intervention` is enabled, all `MSG:` auto-forwards are queued for human 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: "MSG: detected"
+    [*] --> PENDING: MSG detected
     PENDING --> APPROVED: /approve
     PENDING --> EDITED: /edit
     PENDING --> REJECTED: /reject
