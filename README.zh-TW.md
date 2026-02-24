@@ -448,14 +448,6 @@ pytest -m "not e2e"
 
 ---
 
-## 執行畫面
-
-![tb2 + Gemini 畫面 1](docs/images/tb2-gemini-01-20260218-215825.png)
-![tb2 + Gemini 畫面 2](docs/images/tb2-gemini-02-20260218-215827.png)
-![tb2 + Gemini 畫面 3](docs/images/tb2-gemini-03-20260218-215830.png)
-
----
-
 ## 授權
 
 [MIT License](https://opensource.org/licenses/MIT)

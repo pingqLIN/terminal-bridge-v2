@@ -448,14 +448,6 @@ pytest -m "not e2e"
 
 ---
 
-## Screenshots
-
-![tb2 + Gemini screen 1](docs/images/tb2-gemini-01-20260218-215825.png)
-![tb2 + Gemini screen 2](docs/images/tb2-gemini-02-20260218-215827.png)
-![tb2 + Gemini screen 3](docs/images/tb2-gemini-03-20260218-215830.png)
-
----
-
 ## License
 
 [MIT License](https://opensource.org/licenses/MIT)
