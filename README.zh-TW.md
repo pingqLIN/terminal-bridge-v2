@@ -462,6 +462,12 @@ pytest -m "not e2e"
 
 **測試覆蓋率：** 162 個測試涵蓋所有模組 — backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI 及 E2E 整合。
 
+## WEB 版控制台預覽
+
+> 🚧 下次更新即將上線 — 瀏覽器版控制面板，無需 CLI 即可管理 session、bridge 與 room。
+
+![WEB 版控制台預覽](preview.png)
+
 ## 執行畫面
 
 ![tb2 + Gemini 畫面 1](docs/images/tb2-gemini-01-20260218-215825.png)

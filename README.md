@@ -413,6 +413,12 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `profiles`  | List available profiles             | —                                                    |
 | `server`    | Start MCP HTTP server               | `--host ADDR` `--port PORT`                          |
 
+## Web Console Preview
+
+> 🚧 Coming in the next release — a browser-based control panel for managing sessions, bridges, and rooms without the CLI.
+
+![Web Console Preview](preview.png)
+
 ## Testing
 
 ```bash
