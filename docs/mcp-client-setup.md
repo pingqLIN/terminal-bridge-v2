@@ -31,6 +31,19 @@ pip install pywinpty
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
+For cross-platform detached hosting, you can use:
+
+```bash
+python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+```
+
+Optional quick health check:
+
+```bash
+curl -sS http://127.0.0.1:3189/healthz
+```
+
 Endpoint used by all clients:
 
 - `http://127.0.0.1:3189/mcp`

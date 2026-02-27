@@ -64,6 +64,22 @@ class TestBuildParser:
         with pytest.raises(SystemExit):
             p.parse_args(["--backend", "invalid", "init"])
 
+    def test_service_start_defaults(self):
+        p = build_parser()
+        args = p.parse_args(["service", "start"])
+        assert args.cmd == "service"
+        assert args.service_cmd == "start"
+        assert args.host == "127.0.0.1"
+        assert args.port == 3189
+        assert args.force is False
+
+    def test_service_logs_defaults(self):
+        p = build_parser()
+        args = p.parse_args(["service", "logs"])
+        assert args.cmd == "service"
+        assert args.service_cmd == "logs"
+        assert args.lines == 120
+
 
 class TestCreateBackend:
     def test_tmux_backend(self):
@@ -109,6 +125,17 @@ class TestMain:
                 result = main(["init"])
         assert result == 130
 
+    @patch("tb2.cli._create_backend")
+    def test_runtime_error(self, mock_factory):
+        mock_factory.return_value = MagicMock()
+        p = build_parser()
+        args = p.parse_args(["service", "status"])
+        args.fn = lambda b, a: (_ for _ in ()).throw(RuntimeError("boom"))
+        with patch("tb2.cli.build_parser", return_value=p):
+            with patch.object(p, "parse_args", return_value=args):
+                result = main(["service", "status"])
+        assert result == 3
+
 
 class TestGuiCommand:
     @patch("tb2.server.run_server")
@@ -120,3 +147,81 @@ class TestGuiCommand:
         assert result == 0
         mock_run_server.assert_called_once_with(host="127.0.0.1", port=3199)
         mock_open.assert_not_called()
+
+
+class TestServiceCommand:
+    @patch("tb2.service.start_service")
+    def test_service_start_dispatch(self, mock_start):
+        p = build_parser()
+        args = p.parse_args(["service", "start", "--host", "127.0.0.1", "--port", "3199"])
+        mock_start.return_value.to_dict.return_value = {
+            "running": True,
+            "pid": 1234,
+            "host": "127.0.0.1",
+            "port": 3199,
+            "state_file": "/tmp/state.json",
+            "log_file": "/tmp/server.log",
+        }
+        result = args.fn(MagicMock(), args)
+        assert result == 0
+        mock_start.assert_called_once_with(host="127.0.0.1", port=3199, python_exe="", force=False)
+
+    @patch("tb2.service.stop_service")
+    def test_service_stop_dispatch(self, mock_stop):
+        p = build_parser()
+        args = p.parse_args(["service", "stop", "--timeout", "3.5"])
+        mock_stop.return_value.to_dict.return_value = {
+            "running": False,
+            "pid": None,
+            "host": "127.0.0.1",
+            "port": 3189,
+            "state_file": "/tmp/state.json",
+            "log_file": "/tmp/server.log",
+        }
+        result = args.fn(MagicMock(), args)
+        assert result == 0
+        mock_stop.assert_called_once_with(timeout=3.5)
+
+    @patch("tb2.service.restart_service")
+    def test_service_restart_dispatch(self, mock_restart):
+        p = build_parser()
+        args = p.parse_args(["service", "restart", "--host", "127.0.0.1", "--port", "3200"])
+        mock_restart.return_value.to_dict.return_value = {
+            "running": True,
+            "pid": 7,
+            "host": "127.0.0.1",
+            "port": 3200,
+            "state_file": "/tmp/state.json",
+            "log_file": "/tmp/server.log",
+        }
+        result = args.fn(MagicMock(), args)
+        assert result == 0
+        mock_restart.assert_called_once_with(host="127.0.0.1", port=3200, python_exe="")
+
+    @patch("tb2.service.tail_log")
+    def test_service_logs_dispatch(self, mock_tail, capsys):
+        p = build_parser()
+        args = p.parse_args(["service", "logs", "--lines", "2"])
+        mock_tail.return_value = ["line-a", "line-b"]
+        result = args.fn(MagicMock(), args)
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "line-a" in out
+        assert "line-b" in out
+        mock_tail.assert_called_once_with(lines=2)
+
+    @patch("tb2.service.status_service")
+    def test_service_status_dispatch(self, mock_status):
+        p = build_parser()
+        args = p.parse_args(["service", "status"])
+        mock_status.return_value.to_dict.return_value = {
+            "running": True,
+            "pid": 101,
+            "host": "127.0.0.1",
+            "port": 3189,
+            "state_file": "/tmp/state.json",
+            "log_file": "/tmp/server.log",
+        }
+        result = args.fn(MagicMock(), args)
+        assert result == 0
+        mock_status.assert_called_once_with()

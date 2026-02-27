@@ -8,7 +8,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-%3E%3D3.9-blue.svg" alt="Python >= 3.9"></a>
   <img src="https://img.shields.io/badge/version-0.1.0-green.svg" alt="Version 0.1.0">
-  <img src="https://img.shields.io/badge/tests-174%20passed-brightgreen.svg" alt="Tests: 174 passed">
+  <img src="https://img.shields.io/badge/tests-pytest-blue.svg" alt="Tests: pytest">
   <img src="https://img.shields.io/badge/MCP-JSON--RPC-orange.svg" alt="MCP JSON-RPC">
 </p>
 
@@ -80,6 +80,26 @@ python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --a
 ```bash
 python3 -m tb2 server --host 127.0.0.1 --port 3189
 ```
+
+### Unified Hosting (cross-platform background service)
+
+```bash
+# Start detached service (secure default: localhost only)
+python -m tb2 service start --host 127.0.0.1 --port 3189
+
+# Status / logs / stop
+python -m tb2 service status
+python -m tb2 service logs --lines 120
+python -m tb2 service stop
+```
+
+Common service options:
+
+- `python -m tb2 service restart --host 127.0.0.1 --port 3189` to do rolling restart
+- `python -m tb2 service start --force` to replace an existing tracked instance
+- `python -m tb2 service start --python /path/to/python` to pin runtime
+- `python -m tb2 service stop --timeout 12` to tune graceful shutdown wait
+- set `TB2_STATE_DIR=/path/to/state` to override state/log location
 
 ### Web GUI
 
@@ -407,7 +427,7 @@ Server status snapshot. No parameters.
 
 ```text
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
-                      {init,list,capture,send,broker,profiles,server,gui} ...
+                      {init,list,capture,send,broker,profiles,server,gui,service} ...
 ```
 
 | Subcommand | Description | Key Arguments |
@@ -420,6 +440,7 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `profiles` | List available profiles | — |
 | `server` | Start MCP HTTP server | `--host ADDR` `--port PORT` |
 | `gui` | Start built-in web GUI | `--host ADDR` `--port PORT` `--no-browser` |
+| `service` | Cross-platform background hosting for `tb2 server` | `start|stop|status|restart|logs` |
 
 ---
 
@@ -446,7 +467,9 @@ pytest -m "not e2e"
 
 </details>
 
-**Test coverage:** 174 collected tests (170 pass, 4 skipped) covering all modules — backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, and E2E integration.
+**Test coverage:** current suite collects `194` tests (`pytest --collect-only`), covering backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, service manager, and E2E integration.
+
+Note: E2E tests require tmux + local socket permissions. In restricted sandbox environments, E2E may fail due environment constraints even when core unit/integration tests pass.
 
 ---
 

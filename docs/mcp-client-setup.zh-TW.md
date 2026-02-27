@@ -31,6 +31,19 @@ pip install pywinpty
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
+若要跨平台背景常駐託管，可改用：
+
+```bash
+python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+```
+
+可選的快速健康檢查：
+
+```bash
+curl -sS http://127.0.0.1:3189/healthz
+```
+
 所有用戶端共用端點：
 
 - `http://127.0.0.1:3189/mcp`

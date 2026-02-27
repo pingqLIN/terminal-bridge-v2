@@ -8,7 +8,7 @@
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-%3E%3D3.9-blue.svg" alt="Python >= 3.9"></a>
   <img src="https://img.shields.io/badge/version-0.1.0-green.svg" alt="Version 0.1.0">
-  <img src="https://img.shields.io/badge/tests-174%20passed-brightgreen.svg" alt="Tests: 174 passed">
+  <img src="https://img.shields.io/badge/tests-pytest-blue.svg" alt="Tests: pytest">
   <img src="https://img.shields.io/badge/MCP-JSON--RPC-orange.svg" alt="MCP JSON-RPC">
 </p>
 
@@ -80,6 +80,26 @@ python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --a
 ```bash
 python3 -m tb2 server --host 127.0.0.1 --port 3189
 ```
+
+### 統一託管（跨平台背景服務）
+
+```bash
+# 啟動背景服務（安全預設: 127.0.0.1）
+python -m tb2 service start --host 127.0.0.1 --port 3189
+
+# 查狀態 / 看日誌 / 停止
+python -m tb2 service status
+python -m tb2 service logs --lines 120
+python -m tb2 service stop
+```
+
+常用託管選項：
+
+- `python -m tb2 service restart --host 127.0.0.1 --port 3189` 可無縫重啟
+- `python -m tb2 service start --force` 可強制替換已追蹤的舊實例
+- `python -m tb2 service start --python /path/to/python` 可固定 Python 執行環境
+- `python -m tb2 service stop --timeout 12` 可調整優雅停機等待秒數
+- 設定 `TB2_STATE_DIR=/path/to/state` 可覆寫 state/log 存放路徑
 
 ### Web GUI
 
@@ -407,7 +427,7 @@ curl -sS http://127.0.0.1:3189/mcp -H 'content-type: application/json' \
 
 ```text
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
-                      {init,list,capture,send,broker,profiles,server,gui} ...
+                      {init,list,capture,send,broker,profiles,server,gui,service} ...
 ```
 
 | 子指令 | 說明 | 主要參數 |
@@ -420,6 +440,7 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `profiles` | 列出可用 profile | — |
 | `server` | 啟動 MCP HTTP 伺服器 | `--host ADDR` `--port PORT` |
 | `gui` | 啟動內建 Web GUI | `--host ADDR` `--port PORT` `--no-browser` |
+| `service` | 跨平台背景託管 `tb2 server` | `start|stop|status|restart|logs` |
 
 ---
 
@@ -446,7 +467,9 @@ pytest -m "not e2e"
 
 </details>
 
-**測試覆蓋率：** 共收集 174 個測試（170 通過、4 略過），涵蓋所有模組 — backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI 及 E2E 整合。
+**測試覆蓋率：** 目前測試套件可收集 `194` 個測試（`pytest --collect-only`），涵蓋 backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI、service manager 與 E2E 整合。
+
+註：E2E 測試需要 tmux 與本機 socket 權限；在受限 sandbox 環境中，E2E 可能因環境限制失敗，但核心單元/整合測試仍可通過。
 
 ---
 

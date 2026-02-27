@@ -6,6 +6,7 @@ Usage:
     python -m tb2 capture --target TARGET [--lines N]
     python -m tb2 send --target TARGET --text TEXT [--enter]
     python -m tb2 broker --a TARGET --b TARGET [--profile NAME] [--auto] [--intervention]
+    python -m tb2 service {start,stop,status,restart,logs} [...]
     python -m tb2 gui [--host ADDR] [--port PORT] [--no-browser]
     python -m tb2 profiles
 """
@@ -91,6 +92,44 @@ def cmd_gui(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    import json
+    from .service import restart_service, start_service, status_service, stop_service, tail_log
+
+    if args.service_cmd == "start":
+        st = start_service(
+            host=args.host,
+            port=args.port,
+            python_exe=args.python,
+            force=args.force,
+        )
+        print(json.dumps({"action": "start", **st.to_dict()}, ensure_ascii=False))
+        return 0
+
+    if args.service_cmd == "stop":
+        st = stop_service(timeout=float(args.timeout))
+        print(json.dumps({"action": "stop", **st.to_dict()}, ensure_ascii=False))
+        return 0
+
+    if args.service_cmd == "restart":
+        st = restart_service(
+            host=args.host,
+            port=args.port,
+            python_exe=args.python,
+        )
+        print(json.dumps({"action": "restart", **st.to_dict()}, ensure_ascii=False))
+        return 0
+
+    if args.service_cmd == "logs":
+        for line in tail_log(lines=int(args.lines)):
+            print(line)
+        return 0
+
+    st = status_service()
+    print(json.dumps({"action": "status", **st.to_dict()}, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     import platform
     _default_backend = "process" if platform.system() == "Windows" else "tmux"
@@ -154,6 +193,34 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-browser", action="store_true", help="do not open browser automatically")
     s.set_defaults(fn=cmd_gui)
 
+    # service manager
+    s = sub.add_parser("service", help="manage tb2 server as a background service")
+    ss = s.add_subparsers(dest="service_cmd", required=True)
+
+    s_start = ss.add_parser("start", help="start detached tb2 server")
+    s_start.add_argument("--host", default="127.0.0.1")
+    s_start.add_argument("--port", type=int, default=3189)
+    s_start.add_argument("--python", default="", help="python executable to launch")
+    s_start.add_argument("--force", action="store_true", help="stop existing instance first")
+    s_start.set_defaults(fn=cmd_service)
+
+    s_stop = ss.add_parser("stop", help="stop detached tb2 server")
+    s_stop.add_argument("--timeout", type=float, default=8.0, help="graceful stop timeout in seconds")
+    s_stop.set_defaults(fn=cmd_service)
+
+    s_status = ss.add_parser("status", help="show detached tb2 server status")
+    s_status.set_defaults(fn=cmd_service)
+
+    s_restart = ss.add_parser("restart", help="restart detached tb2 server")
+    s_restart.add_argument("--host", default="127.0.0.1")
+    s_restart.add_argument("--port", type=int, default=3189)
+    s_restart.add_argument("--python", default="", help="python executable to launch")
+    s_restart.set_defaults(fn=cmd_service)
+
+    s_logs = ss.add_parser("logs", help="show service logs")
+    s_logs.add_argument("--lines", type=int, default=120)
+    s_logs.set_defaults(fn=cmd_service)
+
     return p
 
 
@@ -186,6 +253,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         return int(args.fn(backend, args))
     except KeyboardInterrupt:
         return 130
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 3
     except TmuxError as exc:
         print(str(exc), file=sys.stderr)
         return 2
