@@ -1,0 +1,22 @@
+name: Usage question
+description: Ask for help with setup or workflow
+title: "[question] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For open-ended workflow discussion, GitHub Discussions is usually the best place.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Backend, profile, OS, commands tried, and what happened

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions
+    url: https://github.com/pingqLIN/terminal-bridge-v2/discussions
+    about: Ask open-ended usage and orchestration questions here
+  - name: Security policy
+    url: https://github.com/pingqLIN/terminal-bridge-v2/security/policy
+    about: Please use the private security reporting path for vulnerabilities
