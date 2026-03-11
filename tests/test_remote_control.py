@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import hashlib
 import json
 import socket
@@ -252,11 +253,12 @@ class TestRemoteControlMcp:
             "auto_forward": True,
             "profile": "generic",
         })
+        command = "echo agent^> MSG:echo REMOTE_OK" if os.name == "nt" else "printf 'agent> MSG:echo REMOTE_OK\\n'"
         sent = _tool(base_url, "terminal_send", {
             "target": init["pane_a"],
             "backend": "pipe",
             "backend_id": "mcp-forward-check",
-            "text": "echo agent^> MSG:echo REMOTE_OK",
+            "text": command,
             "enter": True,
         })
 
