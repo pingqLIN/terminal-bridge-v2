@@ -14,7 +14,9 @@
 
 <p align="center">
   <a href="#installation">Installation</a> •
+  <a href="#supported-cli-tools">Supported Tools</a> •
   <a href="#quick-start">Quick Start</a> •
+  <a href="#docs">Docs</a> •
   <a href="#features">Features</a> •
   <a href="#mcp-api-reference">API Reference</a> •
   <a href="#cli-reference">CLI Reference</a> •
@@ -31,7 +33,31 @@
 - **Human-in-the-loop** — pending queue with approve / edit / reject before auto-forward delivery
 - **MCP server** — 14-tool JSON-RPC HTTP API for full programmatic control
 
----
+## Supported CLI Tools
+
+`tb2` keeps six profiles, but these are the four first-class interactive clients the repo now treats as fully supported:
+
+| Tool | Profile | Windows | Linux / macOS | Status |
+|------|---------|---------|---------------|--------|
+| OpenAI Codex CLI | `codex` | `process` | `tmux` | Fully supported |
+| Claude Code CLI | `claude-code` | `process` | `tmux` | Fully supported |
+| Gemini CLI | `gemini` | `process` | `tmux` | Fully supported |
+| Aider | `aider` | `process` | `tmux` | Fully supported |
+
+Other profiles remain available:
+
+- `generic` is the fallback for unknown shell-like tools.
+- `llama` remains available as a community profile for llama.cpp / Ollama-style shells.
+
+Before your first real session, run:
+
+```bash
+python -m tb2 doctor
+```
+
+That command checks backend readiness plus whether the first-class CLI tools are actually installed on the current machine.
+
+--- 
 
 ## Installation
 
@@ -59,6 +85,12 @@ pip install -e ".[dev]"
 ---
 
 ## Quick Start
+
+Recommended first step:
+
+```bash
+python -m tb2 doctor
+```
 
 ### Linux / macOS (tmux)
 
@@ -108,8 +140,22 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
 Open `http://127.0.0.1:3189/` in your browser.
+The built-in GUI now defaults to a workflow-first model:
+
+- `Launch Session` for Host / Guest setup
+- `Run Collaboration` for room-aware operator messages
+- `Human Control` for intervention approvals and interrupts
+- live room streaming over `SSE`, `WebSocket`, or `room_poll`
 
 ![Control Center](docs/images/control-center.png)
+
+## Docs
+
+- [Getting Started](docs/getting-started.md)
+- [AI Orchestration Guide](docs/ai-orchestration.md)
+- [MCP Client Setup](docs/mcp-client-setup.md)
+- [Traditional Chinese Getting Started](docs/getting-started.zh-TW.md)
+- [Traditional Chinese AI Orchestration Guide](docs/ai-orchestration.zh-TW.md)
 
 ---
 
@@ -195,8 +241,14 @@ stateDiagram-v2
 |-----------|-------------|
 | Adaptive polling | Exponential backoff (100 ms → 3 s) when idle, instant reset on activity |
 | Hash-based diff | O(n) new-line detection replacing naive O(n²) suffix matching |
-| Room system | Bounded message rooms with cursor-based polling and TTL cleanup |
+| Room system | Bounded rooms with cursor polling, live subscriptions, and TTL cleanup |
 | Single-call capture | Both panes captured in one subprocess invocation (tmux) |
+
+### Live Room Transport
+
+- `GET /rooms/{room_id}/stream` provides `text/event-stream` room events for GUI and operator tools
+- `GET /ws` provides bidirectional WebSocket subscribe/post/control for advanced clients
+- `room_poll` remains the compatibility fallback for scripted or low-friction clients
 
 ---
 
@@ -225,7 +277,7 @@ Any text without a `/` prefix is sent directly to pane A.
 
 ## MCP API Reference
 
-14 tools exposed via JSON-RPC over HTTP at `POST /mcp`.
+15 tools exposed via JSON-RPC over HTTP at `POST /mcp`.
 
 **Request format:**
 
@@ -423,11 +475,30 @@ Server status snapshot. No parameters.
 
 ---
 
+## Live Room Endpoints
+
+### `GET /rooms/{room_id}/stream`
+
+Server-Sent Events room stream.
+
+- query: `after_id` cursor, `limit` backlog size
+- events: `ready`, `room`
+- payload shape: `{ "event_id", "id", "room_id", "bridge_id", "author", "text", "kind", "meta", "created_at" }`
+
+### `GET /ws`
+
+WebSocket room stream and control endpoint.
+
+- client actions: `subscribe`, `unsubscribe`, `room_post`, `intervention_list`, `intervention_approve`, `intervention_reject`, `status`
+- stream events: `ready`, `subscribed`, `room_event`, `result`, `error`
+
+---
+
 ## CLI Reference
 
 ```text
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
-                      {init,list,capture,send,broker,profiles,server,gui,service} ...
+                      {init,list,capture,send,room,broker,profiles,doctor,server,gui,service} ...
 ```
 
 | Subcommand | Description | Key Arguments |
@@ -436,8 +507,10 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `list` | List panes in a session | `--session NAME` |
 | `capture` | Capture pane output | `--target PANE` `--lines N` |
 | `send` | Send text to a pane | `--target PANE` `--text TEXT` `--enter` |
+| `room` | Human operator room CLI | `watch|post|pending|approve|reject` |
 | `broker` | Start interactive broker REPL | `--a PANE --b PANE` `--profile NAME` `--auto` `--intervention` |
-| `profiles` | List available profiles | — |
+| `profiles` | List available profiles | `--verbose` |
+| `doctor` | Check backends + first-class CLI compatibility | `--json` |
 | `server` | Start MCP HTTP server | `--host ADDR` `--port PORT` |
 | `gui` | Start built-in web GUI | `--host ADDR` `--port PORT` `--no-browser` |
 | `service` | Cross-platform background hosting for `tb2 server` | `start|stop|status|restart|logs` |
@@ -467,7 +540,7 @@ pytest -m "not e2e"
 
 </details>
 
-**Test coverage:** current suite collects `194` tests (`pytest --collect-only`), covering backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, service manager, and E2E integration.
+**Test coverage:** current suite collects `225` tests (`pytest --collect-only`), covering backend, process_backend, pipe_backend, broker, server, room, intervention, diff, profile, CLI, support, remote-control transport, service manager, and E2E integration.
 
 Note: E2E tests require tmux + local socket permissions. In restricted sandbox environments, E2E may fail due environment constraints even when core unit/integration tests pass.
 

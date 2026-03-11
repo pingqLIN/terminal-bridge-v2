@@ -35,6 +35,14 @@ class TestRoom:
         assert len(msgs) == 2
         assert msgs[0].id == 4
 
+    def test_poll_updates_last_active(self):
+        room = Room("active-test")
+        room.post(author="a", text="hello")
+        before = room.last_active
+        time.sleep(0.01)
+        room.poll(after_id=0, limit=10)
+        assert room.last_active > before
+
     def test_poll_with_limit(self, sample_room):
         msgs = sample_room.poll(after_id=0, limit=2)
         assert len(msgs) == 2
@@ -60,6 +68,32 @@ class TestRoom:
         room = Room("kind-test")
         msg = room.post(author="a", text="hello", kind="system")
         assert msg.kind == "system"
+
+    def test_subscribe_replays_backlog_then_new_messages(self):
+        room = Room("live")
+        room.post(author="host", text="first")
+        room.post(author="guest", text="second")
+
+        sub = room.subscribe(after_id=0, backlog_limit=10)
+        backlog = sub.get(timeout=0.0, limit=10)
+        room.post(author="host", text="third")
+        fresh = sub.get(timeout=0.1, limit=10)
+
+        assert [msg.text for msg in backlog] == ["first", "second"]
+        assert [msg.text for msg in fresh] == ["third"]
+        sub.close()
+
+    def test_subscription_closes_when_room_closes(self):
+        room = Room("closing")
+        sub = room.subscribe()
+        room.close()
+
+        try:
+            sub.get(timeout=0.0)
+        except EOFError:
+            pass
+        else:
+            raise AssertionError("expected EOFError for closed subscription")
 
 
 class TestRoomRegistry:

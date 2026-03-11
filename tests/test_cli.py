@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tb2.cli import build_parser, _create_backend, cmd_gui, main
+from tb2.cli import build_parser, _create_backend, cmd_gui, cmd_doctor, main
 
 
 class TestBuildParser:
@@ -80,6 +80,35 @@ class TestBuildParser:
         assert args.service_cmd == "logs"
         assert args.lines == 120
 
+    def test_profiles_verbose_flag(self):
+        p = build_parser()
+        args = p.parse_args(["profiles", "--verbose"])
+        assert args.cmd == "profiles"
+        assert args.verbose is True
+
+    def test_doctor_json_flag(self):
+        p = build_parser()
+        args = p.parse_args(["doctor", "--json"])
+        assert args.cmd == "doctor"
+        assert args.json is True
+
+    def test_room_watch_args(self):
+        p = build_parser()
+        args = p.parse_args(["room", "watch", "--room-id", "demo-room"])
+        assert args.cmd == "room"
+        assert args.room_cmd == "watch"
+        assert args.room_id == "demo-room"
+        assert args.transport == "auto"
+
+    def test_room_approve_args(self):
+        p = build_parser()
+        args = p.parse_args(["room", "approve", "--bridge-id", "br-1", "--id", "7", "--text", "edited"])
+        assert args.cmd == "room"
+        assert args.room_cmd == "approve"
+        assert args.bridge_id == "br-1"
+        assert args.msg_id == 7
+        assert args.text == "edited"
+
 
 class TestCreateBackend:
     def test_tmux_backend(self):
@@ -136,6 +165,17 @@ class TestMain:
                 result = main(["service", "status"])
         assert result == 3
 
+    @patch("tb2.cli._create_backend")
+    def test_room_command_skips_backend_creation(self, mock_factory):
+        p = build_parser()
+        args = p.parse_args(["room", "pending", "--bridge-id", "br-1"])
+        args.fn = lambda b, a: 0
+        with patch("tb2.cli.build_parser", return_value=p):
+            with patch.object(p, "parse_args", return_value=args):
+                result = main(["room", "pending", "--bridge-id", "br-1"])
+        assert result == 0
+        mock_factory.assert_not_called()
+
 
 class TestGuiCommand:
     @patch("tb2.server.run_server")
@@ -147,6 +187,30 @@ class TestGuiCommand:
         assert result == 0
         mock_run_server.assert_called_once_with(host="127.0.0.1", port=3199)
         mock_open.assert_not_called()
+
+
+class TestDoctorCommand:
+    @patch("tb2.cli.doctor_report")
+    def test_cmd_doctor_json(self, mock_report, capsys):
+        mock_report.return_value = {"platform": "Windows"}
+        p = build_parser()
+        args = p.parse_args(["doctor", "--json"])
+        result = cmd_doctor(MagicMock(), args)
+        out = capsys.readouterr().out
+        assert result == 0
+        assert '"platform": "Windows"' in out
+
+    @patch("tb2.cli.render_doctor")
+    @patch("tb2.cli.doctor_report")
+    def test_cmd_doctor_text(self, mock_report, mock_render, capsys):
+        mock_report.return_value = {"platform": "Windows"}
+        mock_render.return_value = "doctor text"
+        p = build_parser()
+        args = p.parse_args(["doctor"])
+        result = cmd_doctor(MagicMock(), args)
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "doctor text" in out
 
 
 class TestServiceCommand:

@@ -59,6 +59,18 @@ class TestToolProfile:
         p = ToolProfile(name="test", msg_prefix="MSG:")
         assert p.parse_message("  MSG: hello") == "hello"
 
+    def test_parse_message_without_space_after_prefix(self):
+        p = ToolProfile(name="test", msg_prefix="MSG:")
+        assert p.parse_message("MSG:hello") == "hello"
+
+    def test_parse_message_mid_line_after_prompt(self):
+        p = ToolProfile(name="test", msg_prefix="MSG:")
+        assert p.parse_message("agent> MSG: hello") == "hello"
+
+    def test_parse_message_strips_ansi_prefix(self):
+        p = ToolProfile(name="test", msg_prefix="MSG:")
+        assert p.parse_message("\x1b[32mMSG: green\x1b[0m") == "green"
+
     def test_lazy_compilation(self):
         p = ToolProfile(name="test", prompt_patterns=[r"\$\s*$"])
         assert p._compiled == []

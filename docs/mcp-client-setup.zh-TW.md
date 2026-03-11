@@ -25,6 +25,14 @@ pip install -e ".[windows]"
 pip install pywinpty
 ```
 
+- 建議先做一次：
+
+```bash
+python -m tb2 doctor
+```
+
+`tb2 doctor` 會回報 backend 是否可用，也會檢查完整支援的互動式 CLI (`codex`、`claude`、`gemini`、`aider`) 是否真的安裝在本機。
+
 ## 2) 啟動 tb2 MCP 伺服器
 
 ```bash

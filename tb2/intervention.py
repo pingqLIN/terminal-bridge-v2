@@ -68,8 +68,8 @@ class InterventionLayer:
         with self._lock:
             return [m for m in self._pending if m.action == Action.PENDING]
 
-    def approve(self, msg_id: int) -> Optional[PendingMessage]:
-        return self._resolve(msg_id, Action.APPROVED)
+    def approve(self, msg_id: int, edited_text: Optional[str] = None) -> Optional[PendingMessage]:
+        return self._resolve(msg_id, Action.APPROVED, edited_text=edited_text)
 
     def reject(self, msg_id: int) -> Optional[PendingMessage]:
         return self._resolve(msg_id, Action.REJECTED)
@@ -113,11 +113,21 @@ class InterventionLayer:
     def resume(self) -> None:
         self.active = False
 
-    def _resolve(self, msg_id: int, action: Action) -> Optional[PendingMessage]:
+    def _resolve(
+        self,
+        msg_id: int,
+        action: Action,
+        *,
+        edited_text: Optional[str] = None,
+    ) -> Optional[PendingMessage]:
         with self._lock:
             for msg in self._pending:
                 if msg.id == msg_id and msg.action == Action.PENDING:
-                    msg.action = action
+                    if edited_text is not None:
+                        msg.action = Action.EDITED
+                        msg.edited_text = edited_text
+                    else:
+                        msg.action = action
                     self._pending.remove(msg)
                     self._history.append(msg)
                     return msg

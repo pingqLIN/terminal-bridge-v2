@@ -83,6 +83,57 @@ class TestRoomHandlers:
         result = server_mod.handle_room_post({"room_id": "nope", "text": "hello"})
         assert "error" in result
 
+    @patch.object(server_mod, "_make_backend")
+    def test_room_post_rejects_cross_room_delivery(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("room-a")
+        create_room("room-b")
+        server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "room-a",
+            "bridge_id": "br-room",
+        })
+
+        result = server_mod.handle_room_post({
+            "room_id": "room-b",
+            "author": "user",
+            "text": "hello",
+            "deliver": "a",
+            "bridge_id": "br-room",
+        })
+        assert result["deliver_error"] == "bridge br-room belongs to room room-a, not room-b"
+        mock_backend.send.assert_not_called()
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-room"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_room_post_rejects_invalid_deliver_target(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("post-invalid")
+        server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "post-invalid",
+            "bridge_id": "br-invalid",
+        })
+        result = server_mod.handle_room_post({
+            "room_id": "post-invalid",
+            "author": "user",
+            "text": "hello",
+            "deliver": "sideways",
+            "bridge_id": "br-invalid",
+        })
+        assert result["deliver_error"] == "deliver must be one of: a, b, both"
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-invalid"})
+
 
 class TestTerminalHandlers:
     @patch.object(server_mod, "_make_backend")
@@ -124,6 +175,13 @@ class TestProfileHandlers:
         assert "generic" in result["profiles"]
         assert "codex" in result["profiles"]
 
+    @patch("tb2.server.doctor_report")
+    def test_doctor(self, mock_doctor):
+        mock_doctor.return_value = {"platform": "Windows", "recommended_backend": "process"}
+        result = server_mod.handle_doctor({"distro": "Ubuntu"})
+        assert result["platform"] == "Windows"
+        mock_doctor.assert_called_once_with(distro="Ubuntu")
+
 
 class TestStatusHandler:
     def test_status(self):
@@ -157,6 +215,107 @@ class TestBridgeHandlers:
     def test_bridge_stop_not_found(self):
         result = server_mod.handle_bridge_stop({"bridge_id": "nope"})
         assert "error" in result
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_honors_requested_room_id(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        result = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "wanted-room",
+            "bridge_id": "br-room-id",
+        })
+        assert result["room_id"] == "wanted-room"
+        assert get_room("wanted-room") is not None
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-room-id"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_same_panes_is_idempotent(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        first = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "same-room",
+            "bridge_id": "br-first",
+        })
+        second = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "same-room",
+        })
+        assert second["existing"] is True
+        assert second["bridge_id"] == first["bridge_id"]
+        with server_mod._bridges_lock:
+            assert len(server_mod._bridges) == 1
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-first"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_same_panes_conflicting_room_errors(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "room-a",
+            "bridge_id": "br-conflict",
+        })
+        result = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "room-b",
+        })
+        assert "pane pair already bridged" in result["error"]
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-conflict"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_preflight_failure_returns_error(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.side_effect = RuntimeError("capture failed")
+        mock_factory.return_value = mock_backend
+
+        result = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "broken-room",
+        })
+        assert result["error"] == "bridge preflight failed: capture failed"
+
+    def test_bridge_process_new_lines_deduplicates_forwarded_messages(self):
+        backend = MagicMock()
+        room = create_room("bridge-dedupe")
+        bridge = server_mod.Bridge(
+            bridge_id="br-dedupe",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+        )
+
+        profile = server_mod.get_profile("generic")
+        bridge._process_new_lines(
+            "A",
+            "test:a",
+            "test:b",
+            [
+                "C:\\work>echo MSG:echo HELLO",
+                "MSG:echo HELLO",
+            ],
+            profile,
+        )
+
+        backend.send.assert_called_once_with("test:b", "echo HELLO", enter=True)
 
 
 class TestInterventionHandlers:
@@ -194,6 +353,35 @@ class TestInterventionHandlers:
     def test_terminal_interrupt_not_found(self):
         result = server_mod.handle_terminal_interrupt({"bridge_id": "nope"})
         assert "error" in result
+
+    @patch.object(server_mod, "_make_backend")
+    def test_intervention_approve_supports_edited_text(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("int-edit")
+        server_mod.handle_bridge_start({
+            "pane_a": "t:a",
+            "pane_b": "t:b",
+            "room_id": "int-edit",
+            "bridge_id": "br-edit",
+            "intervention": True,
+            "auto_forward": True,
+        })
+        bridge = server_mod._get_bridge("br-edit")
+        pending = bridge.intervention_layer.submit("t:a", "t:b", "echo OLD")
+
+        result = server_mod.handle_intervention_approve({
+            "bridge_id": "br-edit",
+            "id": pending.id,
+            "edited_text": "echo NEW",
+        })
+
+        assert result["approved"] == 1
+        mock_backend.send.assert_called_with("t:b", "echo NEW", enter=True)
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-edit"})
 
 
 class TestMCPProtocol:
@@ -258,6 +446,17 @@ class TestMCPProtocol:
         assert "profiles" in tool_result["structuredContent"]
         assert tool_result.get("isError") is not True
 
+    def test_tools_call_doctor_returns_report(self):
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 14,
+            "method": "tools/call",
+            "params": {"name": "doctor", "arguments": {}},
+        })
+        tool_result = result["result"]["structuredContent"]
+        assert "backends" in tool_result
+        assert "clients" in tool_result
+
     def test_tools_call_unknown_tool_uses_is_error(self):
         result = self._rpc({
             "jsonrpc": "2.0",
@@ -297,14 +496,14 @@ class TestMCPProtocol:
 class TestGuiRouting:
     def test_gui_html_has_endpoint(self):
         html = server_mod.build_gui_html("/mcp")
-        assert "tb2 Control Center" in html
-        assert "MCP endpoint /mcp" in html
+        assert "Host, Guest, and Human operator workflow" in html
+        assert "MCP /mcp" in html
 
     def test_get_root_returns_html(self):
         code, content_type, body = server_mod._handle_get_path("/")
         assert code == 200
         assert content_type.startswith("text/html")
-        assert b"tb2 Control Center" in body
+        assert b"Host, Guest, and Human operator workflow" in body
 
     def test_get_mcp_returns_json(self):
         code, content_type, body = server_mod._handle_get_path("/mcp")

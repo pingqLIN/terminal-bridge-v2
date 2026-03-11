@@ -38,6 +38,11 @@ class TestDiffNewLines:
         curr = ["b", "c", "d"]
         assert diff_new_lines(prev, curr) == ["d"]
 
+    def test_large_window_small_overlap(self):
+        prev = [f"line-{i}" for i in range(200)]
+        curr = [f"line-{i}" for i in range(195, 395)]
+        assert diff_new_lines(prev, curr) == [f"line-{i}" for i in range(200, 395)]
+
 
 class TestStripPromptTail:
     def test_empty_list(self):

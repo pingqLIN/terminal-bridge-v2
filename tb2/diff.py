@@ -8,7 +8,7 @@ from typing import List
 def diff_new_lines(prev: List[str], curr: List[str]) -> List[str]:
     """Return lines in *curr* that are new compared to *prev*.
 
-    Uses hash-based suffix matching — O(n) average case instead of O(n^2).
+    Uses hash-based suffix matching with string verification.
     """
     if not prev:
         return curr
@@ -32,10 +32,6 @@ def diff_new_lines(prev: List[str], curr: List[str]) -> List[str]:
                 # Verify with actual strings to avoid hash collisions.
                 if curr[i : i + k] == prev[-k:]:
                     return curr[i + k :]
-
-        # Early exit: if k is large and no match, smaller k won't help for stable diffs.
-        if k < max_k // 2:
-            break
 
     return curr
 

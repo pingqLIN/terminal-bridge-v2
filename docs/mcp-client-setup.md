@@ -25,6 +25,14 @@ pip install -e ".[windows]"
 pip install pywinpty
 ```
 
+- Recommended first check:
+
+```bash
+python -m tb2 doctor
+```
+
+`tb2 doctor` reports backend readiness plus whether the first-class interactive clients (`codex`, `claude`, `gemini`, `aider`) are installed on the current machine.
+
 ## 2) Start tb2 MCP server
 
 ```bash

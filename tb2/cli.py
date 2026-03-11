@@ -5,21 +5,29 @@ Usage:
     python -m tb2 list [--session NAME]
     python -m tb2 capture --target TARGET [--lines N]
     python -m tb2 send --target TARGET --text TEXT [--enter]
+    python -m tb2 room {watch,post,pending,approve,reject} [...]
     python -m tb2 broker --a TARGET --b TARGET [--profile NAME] [--auto] [--intervention]
     python -m tb2 service {start,stop,status,restart,logs} [...]
     python -m tb2 gui [--host ADDR] [--port PORT] [--no-browser]
-    python -m tb2 profiles
+    python -m tb2 profiles [--verbose]
+    python -m tb2 doctor [--json]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Sequence
 
 from .backend import TmuxBackend, TmuxError
 from .broker import BrokerConfig, broker_loop
 from .profile import list_profiles
+from .support import doctor_report, profile_rows, render_doctor
 
 
 def cmd_init(backend: TmuxBackend, args: argparse.Namespace) -> int:
@@ -64,9 +72,14 @@ def cmd_broker(backend: TmuxBackend, args: argparse.Namespace) -> int:
     return broker_loop(backend, cfg)
 
 
-def cmd_profiles(_backend: TmuxBackend, _args: argparse.Namespace) -> int:
-    for name in list_profiles():
-        print(f"  {name}")
+def cmd_profiles(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    if not args.verbose:
+        for name in list_profiles():
+            print(f"  {name}")
+        return 0
+
+    for row in profile_rows():
+        print(f"{row['profile']}\t{row['tool']}\t{row['support']}\t{row['recommended_backend']}")
     return 0
 
 
@@ -93,7 +106,6 @@ def cmd_gui(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
 
 def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
-    import json
     from .service import restart_service, start_service, status_service, stop_service, tail_log
 
     if args.service_cmd == "start":
@@ -127,6 +139,154 @@ def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
     st = status_service()
     print(json.dumps({"action": "status", **st.to_dict()}, ensure_ascii=False))
+    return 0
+
+
+def cmd_doctor(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    report = doctor_report(distro=args.distro)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
+    print(render_doctor(report))
+    return 0
+
+
+def _server_root(raw: str) -> str:
+    text = raw.strip().rstrip("/")
+    if text.endswith("/mcp"):
+        text = text[:-4]
+    return text or "http://127.0.0.1:3189"
+
+
+def _tool_url(server: str) -> str:
+    return _server_root(server) + "/mcp"
+
+
+def _tool_call(server: str, name: str, arguments: dict) -> dict:
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        _tool_url(server),
+        data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+    result = payload["result"]["structuredContent"]
+    if isinstance(result, dict) and isinstance(result.get("error"), str):
+        raise RuntimeError(result["error"])
+    return result
+
+
+def _stream_url(server: str, room_id: str, *, after_id: int = 0, limit: int = 200) -> str:
+    encoded_room = urllib.parse.quote(room_id, safe="")
+    query = urllib.parse.urlencode({"after_id": after_id, "limit": limit})
+    return f"{_server_root(server)}/rooms/{encoded_room}/stream?{query}"
+
+
+def _format_room_event(event: dict) -> str:
+    kind = event.get("kind", "chat")
+    author = event.get("author", "?")
+    text = event.get("text", "")
+    room_id = event.get("room_id", "")
+    event_id = event.get("id", "?")
+    return f"[{room_id} #{event_id} {kind}] {author}: {text}"
+
+
+def _watch_room_sse(server: str, room_id: str, *, after_id: int = 0, limit: int = 200) -> int:
+    req = urllib.request.Request(
+        _stream_url(server, room_id, after_id=after_id, limit=limit),
+        headers={"Accept": "text/event-stream"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        event_name = "message"
+        data_lines = []
+        for raw_line in resp:
+            line = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
+            if not line:
+                if data_lines:
+                    payload = json.loads("\n".join(data_lines))
+                    if event_name == "room":
+                        print(_format_room_event(payload))
+                    elif event_name != "ready":
+                        print(json.dumps(payload, ensure_ascii=False))
+                    data_lines = []
+                    event_name = "message"
+                continue
+            if line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].lstrip())
+    return 0
+
+
+def _watch_room_poll(server: str, room_id: str, *, after_id: int = 0, interval: float = 1.0) -> int:
+    cursor = after_id
+    while True:
+        result = _tool_call(server, "room_poll", {"room_id": room_id, "after_id": cursor, "limit": 200})
+        messages = result.get("messages", [])
+        for item in messages:
+            print(_format_room_event(item))
+            cursor = max(cursor, int(item.get("id", 0) or 0))
+        time.sleep(max(0.2, interval))
+
+
+def cmd_room_watch(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    if args.transport == "poll":
+        return _watch_room_poll(args.server, args.room_id, after_id=args.after_id, interval=args.poll_interval)
+    try:
+        return _watch_room_sse(args.server, args.room_id, after_id=args.after_id, limit=args.limit)
+    except (urllib.error.URLError, TimeoutError, OSError, RuntimeError) as exc:
+        if args.transport == "sse":
+            raise RuntimeError(f"SSE room watch failed: {exc}")
+        print(f"[tb2 room] SSE unavailable, falling back to room_poll: {exc}", file=sys.stderr)
+        return _watch_room_poll(args.server, args.room_id, after_id=args.after_id, interval=args.poll_interval)
+
+
+def cmd_room_post(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    payload = {
+        "room_id": args.room_id,
+        "author": args.author,
+        "text": args.text,
+    }
+    if args.deliver:
+        payload["deliver"] = args.deliver
+    if args.bridge_id:
+        payload["bridge_id"] = args.bridge_id
+    print(json.dumps(_tool_call(args.server, "room_post", payload), ensure_ascii=False))
+    return 0
+
+
+def cmd_room_pending(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    print(json.dumps(_tool_call(args.server, "intervention_list", {"bridge_id": args.bridge_id}), ensure_ascii=False))
+    return 0
+
+
+def cmd_room_approve(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    if not args.all and args.msg_id is None:
+        raise RuntimeError("approve requires --id or --all")
+    if args.all and args.text:
+        raise RuntimeError("approve --text only works with a single --id")
+    payload = {"bridge_id": args.bridge_id, "id": "all" if args.all else args.msg_id}
+    if args.text:
+        payload["edited_text"] = args.text
+    print(json.dumps(_tool_call(args.server, "intervention_approve", payload), ensure_ascii=False))
+    return 0
+
+
+def cmd_room_reject(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    if not args.all and args.msg_id is None:
+        raise RuntimeError("reject requires --id or --all")
+    payload = {"bridge_id": args.bridge_id, "id": "all" if args.all else args.msg_id}
+    print(json.dumps(_tool_call(args.server, "intervention_reject", payload), ensure_ascii=False))
     return 0
 
 
@@ -165,6 +325,44 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--enter", action="store_true")
     s.set_defaults(fn=cmd_send)
 
+    # room operator CLI
+    s = sub.add_parser("room", help="watch or control a room via the tb2 server")
+    s.add_argument("--server", default="http://127.0.0.1:3189", help="tb2 server root URL or MCP endpoint")
+    rs = s.add_subparsers(dest="room_cmd", required=True)
+
+    r_watch = rs.add_parser("watch", help="watch a room stream")
+    r_watch.add_argument("--room-id", required=True)
+    r_watch.add_argument("--transport", choices=["auto", "sse", "poll"], default="auto")
+    r_watch.add_argument("--after-id", type=int, default=0)
+    r_watch.add_argument("--limit", type=int, default=200)
+    r_watch.add_argument("--poll-interval", type=float, default=1.0)
+    r_watch.set_defaults(fn=cmd_room_watch)
+
+    r_post = rs.add_parser("post", help="post a message into a room")
+    r_post.add_argument("--room-id", required=True)
+    r_post.add_argument("--text", required=True)
+    r_post.add_argument("--author", default="human")
+    r_post.add_argument("--deliver", choices=["a", "b", "both"], default=None)
+    r_post.add_argument("--bridge-id", default="")
+    r_post.set_defaults(fn=cmd_room_post)
+
+    r_pending = rs.add_parser("pending", help="list pending intervention items")
+    r_pending.add_argument("--bridge-id", required=True)
+    r_pending.set_defaults(fn=cmd_room_pending)
+
+    r_approve = rs.add_parser("approve", help="approve one or all pending messages")
+    r_approve.add_argument("--bridge-id", required=True)
+    r_approve.add_argument("--id", dest="msg_id", type=int, default=None)
+    r_approve.add_argument("--all", action="store_true")
+    r_approve.add_argument("--text", default="", help="optional edited text for a single approval")
+    r_approve.set_defaults(fn=cmd_room_approve)
+
+    r_reject = rs.add_parser("reject", help="reject one or all pending messages")
+    r_reject.add_argument("--bridge-id", required=True)
+    r_reject.add_argument("--id", dest="msg_id", type=int, default=None)
+    r_reject.add_argument("--all", action="store_true")
+    r_reject.set_defaults(fn=cmd_room_reject)
+
     # broker
     s = sub.add_parser("broker", help="interactive broker with monitoring")
     s.add_argument("--a", required=True, help="pane A target")
@@ -178,7 +376,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     # profiles
     s = sub.add_parser("profiles", help="list available tool profiles")
+    s.add_argument("--verbose", action="store_true", help="show support matrix and recommended backends")
     s.set_defaults(fn=cmd_profiles)
+
+    # doctor
+    s = sub.add_parser("doctor", help="check local backend and supported CLI compatibility")
+    s.add_argument("--json", action="store_true", help="emit machine-readable JSON report")
+    s.set_defaults(fn=cmd_doctor)
 
     # server
     s = sub.add_parser("server", help="start MCP HTTP server")
@@ -247,7 +451,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     p = build_parser()
     args = p.parse_args(list(argv) if argv is not None else None)
 
-    backend = _create_backend(args)
+    backend = None
+    if args.cmd in {"init", "list", "capture", "send", "broker"}:
+        backend = _create_backend(args)
 
     try:
         return int(args.fn(backend, args))

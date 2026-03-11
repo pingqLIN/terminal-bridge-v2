@@ -14,7 +14,9 @@
 
 <p align="center">
   <a href="#安裝">安裝</a> •
+  <a href="#完全支援的-cli-工具">支援工具</a> •
   <a href="#快速開始">快速開始</a> •
+  <a href="#文件導覽">文件導覽</a> •
   <a href="#功能特色">功能特色</a> •
   <a href="#mcp-api-參考">API 參考</a> •
   <a href="#cli-參考">CLI 參考</a> •
@@ -30,6 +32,30 @@
 - **多後端** — 可插拔的終端後端：tmux（Linux/macOS）、process/ConPTY（Windows）、pipe（非互動式）
 - **人工介入** — 待審佇列，支援核准 / 編輯 / 拒絕後再轉發
 - **MCP 伺服器** — 14 個工具的 JSON-RPC HTTP API，完整程式化控制
+
+## 完全支援的 CLI 工具
+
+`tb2` 保留多個 profile，但目前真正收斂為完整支援的互動式 CLI 工具有四套：
+
+| 工具 | Profile | Windows | Linux / macOS | 狀態 |
+|------|---------|---------|---------------|------|
+| OpenAI Codex CLI | `codex` | `process` | `tmux` | 完整支援 |
+| Claude Code CLI | `claude-code` | `process` | `tmux` | 完整支援 |
+| Gemini CLI | `gemini` | `process` | `tmux` | 完整支援 |
+| Aider | `aider` | `process` | `tmux` | 完整支援 |
+
+其餘 profile 仍可使用：
+
+- `generic`：未知 shell / 自訂 CLI 的保底設定
+- `llama`：llama.cpp / Ollama 類 shell 的社群支援 profile
+
+第一次上手建議先跑：
+
+```bash
+python -m tb2 doctor
+```
+
+它會檢查 backend 是否可用，也會檢查這四套完整支援工具是否真的安裝在目前機器上。
 
 ---
 
@@ -59,6 +85,12 @@ pip install -e ".[dev]"
 ---
 
 ## 快速開始
+
+建議先做環境檢查：
+
+```bash
+python -m tb2 doctor
+```
 
 ### Linux / macOS（tmux）
 
@@ -108,8 +140,22 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
 開啟 `http://127.0.0.1:3189/`。
+內建 GUI 現在預設採 workflow-first 模型：
+
+- `Launch Session`：建立 Host / Guest 工作面
+- `Run Collaboration`：以 room 為中心送出人類指令
+- `Human Control`：審核 intervention 佇列與送出 interrupt
+- 以 `SSE`、`WebSocket`、或 `room_poll` 觀看 live room
 
 ![控制台介面](docs/images/control-center.png)
+
+## 文件導覽
+
+- [入門指南](docs/getting-started.zh-TW.md)
+- [AI 協作指南](docs/ai-orchestration.zh-TW.md)
+- [MCP 用戶端設定](docs/mcp-client-setup.zh-TW.md)
+- [English Getting Started](docs/getting-started.md)
+- [English AI Orchestration Guide](docs/ai-orchestration.md)
 
 ---
 
@@ -427,7 +473,7 @@ curl -sS http://127.0.0.1:3189/mcp -H 'content-type: application/json' \
 
 ```text
 usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-wsl]
-                      {init,list,capture,send,broker,profiles,server,gui,service} ...
+                      {init,list,capture,send,room,broker,profiles,doctor,server,gui,service} ...
 ```
 
 | 子指令 | 說明 | 主要參數 |
@@ -436,8 +482,10 @@ usage: python -m tb2 [--backend {tmux,process,pipe}] [--distro DISTRO] [--use-ws
 | `list` | 列出 session 中的 pane | `--session NAME` |
 | `capture` | 擷取 pane 輸出 | `--target PANE` `--lines N` |
 | `send` | 發送文字到 pane | `--target PANE` `--text TEXT` `--enter` |
+| `room` | Human operator room CLI | `watch|post|pending|approve|reject` |
 | `broker` | 啟動互動式 broker REPL | `--a PANE --b PANE` `--profile NAME` `--auto` `--intervention` |
-| `profiles` | 列出可用 profile | — |
+| `profiles` | 列出可用 profile | `--verbose` |
+| `doctor` | 檢查 backend 與完整支援 CLI 的本機相容性 | `--json` |
 | `server` | 啟動 MCP HTTP 伺服器 | `--host ADDR` `--port PORT` |
 | `gui` | 啟動內建 Web GUI | `--host ADDR` `--port PORT` `--no-browser` |
 | `service` | 跨平台背景託管 `tb2 server` | `start|stop|status|restart|logs` |
@@ -467,7 +515,7 @@ pytest -m "not e2e"
 
 </details>
 
-**測試覆蓋率：** 目前測試套件可收集 `194` 個測試（`pytest --collect-only`），涵蓋 backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI、service manager 與 E2E 整合。
+**測試覆蓋率：** 目前測試套件可收集 `225` 個測試（`pytest --collect-only`），涵蓋 backend、process_backend、pipe_backend、broker、server、room、intervention、diff、profile、CLI、support、remote-control transport、service manager 與 E2E 整合。
 
 註：E2E 測試需要 tmux 與本機 socket 權限；在受限 sandbox 環境中，E2E 可能因環境限制失敗，但核心單元/整合測試仍可通過。
 

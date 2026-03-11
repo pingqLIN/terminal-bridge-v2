@@ -23,6 +23,45 @@ class RoomMessage:
     ts: float = field(default_factory=time.time)
 
 
+class RoomSubscription:
+    """Cursor-aware live subscription for a room."""
+
+    def __init__(self, room: "Room", sub_id: int, queue: Deque[RoomMessage]):
+        self._room = room
+        self._sub_id = sub_id
+        self._queue = queue
+        self._closed = False
+
+    def get(self, *, timeout: Optional[float] = None, limit: int = 100) -> List[RoomMessage]:
+        with self._room._cv:
+            if self._closed or self._room._closed:
+                raise EOFError("subscription closed")
+
+            deadline = None if timeout is None else (time.time() + max(0.0, timeout))
+            while not self._queue:
+                if self._closed or self._room._closed:
+                    raise EOFError("subscription closed")
+                if deadline is not None:
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        return []
+                    self._room._cv.wait(remaining)
+                else:
+                    self._room._cv.wait()
+
+            items: List[RoomMessage] = []
+            while self._queue and len(items) < limit:
+                items.append(self._queue.popleft())
+            self._room.last_active = time.time()
+            return items
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._room._remove_subscription(self._sub_id)
+
+
 class Room:
     """Bounded message room with O(log n) cursor-based polling."""
 
@@ -32,13 +71,17 @@ class Room:
         self.created_at = time.time()
         self.last_active = time.time()
         self._lock = threading.Lock()
+        self._cv = threading.Condition(self._lock)
         self._counter = 0
         self._messages: Deque[RoomMessage] = deque(maxlen=max_messages)
         self._ids: Deque[int] = deque(maxlen=max_messages)  # parallel id index
+        self._subscriptions: Dict[int, Deque[RoomMessage]] = {}
+        self._subscription_counter = 0
+        self._closed = False
 
     def post(self, author: str, text: str, kind: str = "chat",
              meta: Optional[Dict[str, Any]] = None) -> RoomMessage:
-        with self._lock:
+        with self._cv:
             self._counter += 1
             msg = RoomMessage(
                 id=self._counter,
@@ -49,7 +92,10 @@ class Room:
             )
             self._messages.append(msg)
             self._ids.append(msg.id)
+            for queue in self._subscriptions.values():
+                queue.append(msg)
             self.last_active = time.time()
+            self._cv.notify_all()
             return msg
 
     def poll(self, *, after_id: int = 0, limit: int = 50) -> List[RoomMessage]:
@@ -58,12 +104,34 @@ class Room:
         Uses binary search on the id index for O(log n) lookup.
         """
         with self._lock:
-            if not self._ids:
-                return []
-            ids_list = list(self._ids)
-            idx = bisect_right(ids_list, after_id)
-            msgs = list(self._messages)
-            return msgs[idx: idx + limit]
+            msgs = self._poll_locked(after_id=after_id, limit=limit)
+            self.last_active = time.time()
+            return msgs
+
+    def subscribe(
+        self,
+        *,
+        after_id: int = 0,
+        backlog_limit: int = 200,
+        max_queue: int = 400,
+    ) -> RoomSubscription:
+        with self._cv:
+            if self._closed:
+                raise RuntimeError("room closed")
+            self._subscription_counter += 1
+            sub_id = self._subscription_counter
+            queue: Deque[RoomMessage] = deque(maxlen=max_queue)
+            for msg in self._poll_locked(after_id=after_id, limit=backlog_limit):
+                queue.append(msg)
+            self._subscriptions[sub_id] = queue
+            self.last_active = time.time()
+            return RoomSubscription(self, sub_id, queue)
+
+    def close(self) -> None:
+        with self._cv:
+            self._closed = True
+            self._subscriptions.clear()
+            self._cv.notify_all()
 
     @property
     def message_count(self) -> int:
@@ -73,6 +141,24 @@ class Room:
     def latest_id(self) -> int:
         with self._lock:
             return self._counter
+
+    @property
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._subscriptions)
+
+    def _poll_locked(self, *, after_id: int, limit: int) -> List[RoomMessage]:
+        if not self._ids:
+            return []
+        ids_list = list(self._ids)
+        idx = bisect_right(ids_list, after_id)
+        msgs = list(self._messages)
+        return msgs[idx: idx + limit]
+
+    def _remove_subscription(self, sub_id: int) -> None:
+        with self._cv:
+            self._subscriptions.pop(sub_id, None)
+            self._cv.notify_all()
 
 
 # ---------------------------------------------------------------------------
@@ -110,10 +196,14 @@ def cleanup_stale(ttl_seconds: float = 3600) -> int:
     with _rooms_lock:
         stale = [rid for rid, r in _rooms.items() if now - r.last_active > ttl_seconds]
         for rid in stale:
-            del _rooms[rid]
+            _rooms.pop(rid).close()
         return len(stale)
 
 
 def delete_room(room_id: str) -> bool:
     with _rooms_lock:
-        return _rooms.pop(room_id, None) is not None
+        room = _rooms.pop(room_id, None)
+    if room is None:
+        return False
+    room.close()
+    return True
