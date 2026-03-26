@@ -654,3 +654,20 @@ class TestGuiRouting:
         assert content_type == "application/json"
         payload = json.loads(body.decode("utf-8"))
         assert payload["error"] == "not found"
+
+
+class TestHttpReplies:
+    def test_reply_raw_sanitizes_header_value(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.wfile = MagicMock()
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+
+        handler._reply_raw(200, "text/plain\r\nX-Evil: yes", b"ok")
+
+        handler.send_response.assert_called_once_with(200)
+        handler.send_header.assert_any_call("Content-Type", "text/plainX-Evil: yes")
+        handler.send_header.assert_any_call("Content-Length", "2")
+        handler.end_headers.assert_called_once_with()
+        handler.wfile.write.assert_called_once_with(b"ok")
