@@ -16,6 +16,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import tb2.server as server_mod
+from tb2.osutils import default_shell
 
 
 class _WsClient:
@@ -192,6 +193,15 @@ def mcp_server():
 
 
 class TestRemoteControlMcp:
+    @staticmethod
+    def _shell_handoff_command() -> str:
+        shell_name = os.path.basename(default_shell()).lower()
+        if shell_name in {"pwsh", "pwsh.exe", "powershell", "powershell.exe"}:
+            return "cmd /c echo agent^> MSG:echo REMOTE_OK"
+        if shell_name in {"cmd", "cmd.exe"}:
+            return "echo agent^> MSG:echo REMOTE_OK"
+        return "printf 'agent> MSG:echo REMOTE_OK\\n'"
+
     def test_room_binding_and_duplicate_bridge_detection(self, mcp_server):
         base_url = mcp_server["base_url"]
         init = _tool(base_url, "terminal_init", {
@@ -253,7 +263,7 @@ class TestRemoteControlMcp:
             "auto_forward": True,
             "profile": "generic",
         })
-        command = "echo agent^> MSG:echo REMOTE_OK" if os.name == "nt" else "printf 'agent> MSG:echo REMOTE_OK\\n'"
+        command = self._shell_handoff_command()
         sent = _tool(base_url, "terminal_send", {
             "target": init["pane_a"],
             "backend": "pipe",

@@ -33,3 +33,6 @@ htmlcov/
 dist/
 build/
 .eggs/
+
+# Local artifacts
+.del/

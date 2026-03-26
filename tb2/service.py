@@ -16,6 +16,7 @@ from __future__ import annotations
 import errno
 import json
 import os
+import platform
 import signal
 import subprocess
 import sys
@@ -187,7 +188,7 @@ def _state_root() -> Path:
     if env_root:
         return Path(env_root).expanduser().resolve()
 
-    if os.name == "nt":
+    if platform.system() == "Windows":
         local_app = os.environ.get("LOCALAPPDATA")
         if local_app:
             return Path(local_app) / "tb2"
@@ -196,7 +197,29 @@ def _state_root() -> Path:
     xdg_state = os.environ.get("XDG_STATE_HOME")
     if xdg_state:
         return Path(xdg_state) / "tb2"
+
+    if platform.system() == "Darwin":
+        return _macos_state_root()
+
+    return _legacy_state_root()
+
+
+def _legacy_state_root() -> Path:
     return Path.home() / ".local" / "state" / "tb2"
+
+
+def _macos_state_root() -> Path:
+    root = Path.home() / "Library" / "Application Support" / "tb2"
+    legacy = _legacy_state_root()
+    if _has_state_files(root):
+        return root
+    if _has_state_files(legacy):
+        return legacy
+    return root
+
+
+def _has_state_files(root: Path) -> bool:
+    return any((root / name).exists() for name in ("server.state.json", "server.log"))
 
 
 def _ensure_runtime_dir(root: Path) -> None:

@@ -17,6 +17,35 @@ def test_service_paths_from_env(tmp_path, monkeypatch):
     assert paths.state_file == tmp_path.resolve() / "server.state.json"
 
 
+def test_state_root_uses_macos_application_support(tmp_path, monkeypatch):
+    monkeypatch.delenv("TB2_STATE_DIR", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(service.Path, "home", staticmethod(lambda: tmp_path))
+    assert service._state_root() == tmp_path / "Library" / "Application Support" / "tb2"
+
+
+def test_state_root_uses_xdg_on_macos(tmp_path, monkeypatch):
+    monkeypatch.delenv("TB2_STATE_DIR", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
+    assert service._state_root() == tmp_path / "xdg" / "tb2"
+
+
+def test_state_root_preserves_legacy_macos_state(tmp_path, monkeypatch):
+    monkeypatch.delenv("TB2_STATE_DIR", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    monkeypatch.setattr(service.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(service.Path, "home", staticmethod(lambda: tmp_path))
+    legacy = tmp_path / ".local" / "state" / "tb2"
+    legacy.mkdir(parents=True, exist_ok=True)
+    (legacy / "server.state.json").write_text("{}", encoding="utf-8")
+    assert service._state_root() == legacy
+
+
 def test_tail_log_returns_last_lines(tmp_path, monkeypatch):
     monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
     log = tmp_path / "server.log"

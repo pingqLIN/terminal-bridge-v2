@@ -7,10 +7,13 @@ never touch tmux (or any multiplexer) directly.
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List, Optional, Sequence, Tuple
+
+from .osutils import command_runner_shell
 
 
 # ---------------------------------------------------------------------------
@@ -165,14 +168,15 @@ class TmuxBackend(TerminalBackend):
         start = str(-abs(lines))
         # Use a shell one-liner so we only spawn one process.
         script = (
-            f"tmux capture-pane -p -J -t {target_a} -S {start}; "
-            f"echo '{_SEPARATOR}'; "
-            f"tmux capture-pane -p -J -t {target_b} -S {start}"
+            f"tmux capture-pane -p -J -t {shlex.quote(target_a)} -S {start}; "
+            f"printf '%s\\n' {shlex.quote(_SEPARATOR)}; "
+            f"tmux capture-pane -p -J -t {shlex.quote(target_b)} -S {start}"
         )
+        runner = command_runner_shell()
         if self.use_wsl:
-            cmd = ["wsl", "-d", self.distro, "--", "bash", "-c", script]
+            cmd = ["wsl", "-d", self.distro, "--", runner, "-lc", script]
         else:
-            cmd = ["bash", "-c", script]
+            cmd = [runner, "-lc", script]
 
         cp = subprocess.run(cmd, check=False, text=True, capture_output=True,
                             encoding="utf-8", errors="replace")

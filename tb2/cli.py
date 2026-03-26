@@ -26,6 +26,7 @@ from typing import Sequence
 
 from .backend import TmuxBackend, TmuxError
 from .broker import BrokerConfig, broker_loop
+from .osutils import default_backend_name
 from .profile import list_profiles
 from .support import doctor_report, profile_rows, render_doctor
 
@@ -36,7 +37,10 @@ def cmd_init(backend: TmuxBackend, args: argparse.Namespace) -> int:
     print(f"session: {args.session}")
     print(f"pane A:  {a}")
     print(f"pane B:  {b}")
-    print(f"\nAttach:  tmux attach -t {args.session}")
+    if isinstance(backend, TmuxBackend):
+        print(f"\nAttach:  tmux attach -t {args.session}")
+    else:
+        print("\nNext:    use `tb2 capture`, `tb2 send`, `tb2 broker`, or the GUI/service flow")
     return 0
 
 
@@ -162,6 +166,26 @@ def _tool_url(server: str) -> str:
     return _server_root(server) + "/mcp"
 
 
+def _tool_error_text(result: dict) -> str:
+    message = str(result.get("error", "tool call failed"))
+    candidates = result.get("bridge_candidates")
+    if not isinstance(candidates, list) or not candidates:
+        return message
+    labels = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        bridge_id = str(item.get("bridge_id", "")).strip()
+        room_id = str(item.get("room_id", "")).strip()
+        if bridge_id and room_id:
+            labels.append(f"{bridge_id} ({room_id})")
+        elif bridge_id:
+            labels.append(bridge_id)
+    if not labels:
+        return message
+    return message + " | candidates: " + ", ".join(labels)
+
+
 def _tool_call(server: str, name: str, arguments: dict) -> dict:
     body = json.dumps(
         {
@@ -180,7 +204,7 @@ def _tool_call(server: str, name: str, arguments: dict) -> dict:
         payload = json.loads(resp.read().decode("utf-8"))
     result = payload["result"]["structuredContent"]
     if isinstance(result, dict) and isinstance(result.get("error"), str):
-        raise RuntimeError(result["error"])
+        raise RuntimeError(_tool_error_text(result))
     return result
 
 
@@ -265,8 +289,17 @@ def cmd_room_post(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     return 0
 
 
+def _room_bridge_payload(args: argparse.Namespace) -> dict:
+    payload = {}
+    if args.bridge_id:
+        payload["bridge_id"] = args.bridge_id
+    if getattr(args, "room_id", ""):
+        payload["room_id"] = args.room_id
+    return payload
+
+
 def cmd_room_pending(_backend: TmuxBackend, args: argparse.Namespace) -> int:
-    print(json.dumps(_tool_call(args.server, "intervention_list", {"bridge_id": args.bridge_id}), ensure_ascii=False))
+    print(json.dumps(_tool_call(args.server, "intervention_list", _room_bridge_payload(args)), ensure_ascii=False))
     return 0
 
 
@@ -275,7 +308,7 @@ def cmd_room_approve(_backend: TmuxBackend, args: argparse.Namespace) -> int:
         raise RuntimeError("approve requires --id or --all")
     if args.all and args.text:
         raise RuntimeError("approve --text only works with a single --id")
-    payload = {"bridge_id": args.bridge_id, "id": "all" if args.all else args.msg_id}
+    payload = {**_room_bridge_payload(args), "id": "all" if args.all else args.msg_id}
     if args.text:
         payload["edited_text"] = args.text
     print(json.dumps(_tool_call(args.server, "intervention_approve", payload), ensure_ascii=False))
@@ -285,14 +318,13 @@ def cmd_room_approve(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 def cmd_room_reject(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     if not args.all and args.msg_id is None:
         raise RuntimeError("reject requires --id or --all")
-    payload = {"bridge_id": args.bridge_id, "id": "all" if args.all else args.msg_id}
+    payload = {**_room_bridge_payload(args), "id": "all" if args.all else args.msg_id}
     print(json.dumps(_tool_call(args.server, "intervention_reject", payload), ensure_ascii=False))
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    import platform
-    _default_backend = "process" if platform.system() == "Windows" else "tmux"
+    _default_backend = default_backend_name()
 
     p = argparse.ArgumentParser(prog="tb2", description="TerminalBridge v2 — universal CLI LLM bridge")
     p.add_argument("--backend", choices=["tmux", "process", "pipe"], default=_default_backend,
@@ -303,7 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # init
-    s = sub.add_parser("init", help="create tmux session with 2 panes")
+    s = sub.add_parser("init", help="create a two-pane session")
     s.add_argument("--session", default="tb2", help="session name (default: tb2)")
     s.set_defaults(fn=cmd_init)
 
@@ -347,18 +379,21 @@ def build_parser() -> argparse.ArgumentParser:
     r_post.set_defaults(fn=cmd_room_post)
 
     r_pending = rs.add_parser("pending", help="list pending intervention items")
-    r_pending.add_argument("--bridge-id", required=True)
+    r_pending.add_argument("--bridge-id", default="")
+    r_pending.add_argument("--room-id", default="", help="resolve the active bridge from a room when possible")
     r_pending.set_defaults(fn=cmd_room_pending)
 
     r_approve = rs.add_parser("approve", help="approve one or all pending messages")
-    r_approve.add_argument("--bridge-id", required=True)
+    r_approve.add_argument("--bridge-id", default="")
+    r_approve.add_argument("--room-id", default="", help="resolve the active bridge from a room when possible")
     r_approve.add_argument("--id", dest="msg_id", type=int, default=None)
     r_approve.add_argument("--all", action="store_true")
     r_approve.add_argument("--text", default="", help="optional edited text for a single approval")
     r_approve.set_defaults(fn=cmd_room_approve)
 
     r_reject = rs.add_parser("reject", help="reject one or all pending messages")
-    r_reject.add_argument("--bridge-id", required=True)
+    r_reject.add_argument("--bridge-id", default="")
+    r_reject.add_argument("--room-id", default="", help="resolve the active bridge from a room when possible")
     r_reject.add_argument("--id", dest="msg_id", type=int, default=None)
     r_reject.add_argument("--all", action="store_true")
     r_reject.set_defaults(fn=cmd_room_reject)

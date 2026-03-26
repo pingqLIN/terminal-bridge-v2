@@ -10,6 +10,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
+from .osutils import default_backend_name
+
 
 @dataclass(frozen=True)
 class ClientSpec:
@@ -227,7 +229,7 @@ def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
         )
 
     recommended = [client for client in clients if client["support"] == "full" and client["available"]]
-    suggested = "process" if platform.system() == "Windows" else "tmux"
+    suggested = default_backend_name()
     return {
         "platform": platform.system(),
         "python": platform.python_version(),

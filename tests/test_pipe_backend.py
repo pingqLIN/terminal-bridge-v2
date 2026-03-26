@@ -28,6 +28,18 @@ class TestLineBuffer:
 
 
 class TestPipeBackend:
+    @patch("tb2.pipe_backend.default_shell_argv", return_value=["pwsh", "-NoLogo", "-NoProfile"])
+    def test_default_shell(self, mock_default_shell):
+        backend = PipeBackend()
+        assert backend.shell == "pwsh"
+        assert backend.shell_argv == ["pwsh", "-NoLogo", "-NoProfile"]
+        mock_default_shell.assert_called_once_with()
+
+    def test_explicit_powershell_adds_flags(self):
+        backend = PipeBackend(shell="pwsh")
+        assert backend.shell == "pwsh"
+        assert backend.shell_argv == ["pwsh", "-NoLogo", "-NoProfile"]
+
     @patch("tb2.pipe_backend.subprocess.Popen")
     @patch("tb2.pipe_backend.threading.Thread")
     def test_init_session(self, mock_thread, mock_popen):
@@ -71,7 +83,8 @@ class TestPipeBackend:
 
     @patch("tb2.pipe_backend.subprocess.Popen")
     @patch("tb2.pipe_backend.threading.Thread")
-    def test_send(self, mock_thread, mock_popen):
+    @patch("tb2.pipe_backend.shell_enter_sequence", return_value="\n")
+    def test_send(self, mock_enter, mock_thread, mock_popen):
         mock_stdin = MagicMock()
         mock_proc = MagicMock()
         mock_proc.stdin = mock_stdin
@@ -83,6 +96,7 @@ class TestPipeBackend:
         backend.send("test:a", "echo hello", enter=True)
         mock_stdin.write.assert_called_with("echo hello\n")
         mock_stdin.flush.assert_called()
+        mock_enter.assert_called_once_with("/bin/bash")
 
     @patch("tb2.pipe_backend.subprocess.Popen")
     @patch("tb2.pipe_backend.threading.Thread")

@@ -1,13 +1,32 @@
 """Tests for tb2.cli — CLI argument parsing and backend factory."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tb2.cli import build_parser, _create_backend, cmd_gui, cmd_doctor, main
+from tb2.cli import (
+    _create_backend,
+    _tool_call,
+    build_parser,
+    cmd_doctor,
+    cmd_gui,
+    cmd_init,
+    cmd_room_approve,
+    cmd_room_pending,
+    cmd_room_reject,
+    main,
+)
 
 
 class TestBuildParser:
+    @patch("tb2.cli.default_backend_name", return_value="process")
+    def test_default_backend_uses_platform_policy(self, mock_default):
+        p = build_parser()
+        args = p.parse_args(["init"])
+        assert args.backend == "process"
+        mock_default.assert_called_once_with()
+
     def test_init_defaults(self):
         p = build_parser()
         args = p.parse_args(["init"])
@@ -109,6 +128,75 @@ class TestBuildParser:
         assert args.msg_id == 7
         assert args.text == "edited"
 
+    def test_room_pending_room_id_args(self):
+        p = build_parser()
+        args = p.parse_args(["room", "pending", "--room-id", "demo-room"])
+        assert args.cmd == "room"
+        assert args.room_cmd == "pending"
+        assert args.bridge_id == ""
+        assert args.room_id == "demo-room"
+
+
+class TestRoomCommands:
+    @patch("tb2.cli._tool_call")
+    def test_cmd_room_pending_uses_room_id(self, mock_tool):
+        mock_tool.return_value = {"count": 0}
+        args = build_parser().parse_args(["room", "pending", "--room-id", "demo-room"])
+        result = cmd_room_pending(MagicMock(), args)
+        assert result == 0
+        mock_tool.assert_called_once_with(
+            "http://127.0.0.1:3189",
+            "intervention_list",
+            {"room_id": "demo-room"},
+        )
+
+    @patch("tb2.cli._tool_call")
+    def test_cmd_room_approve_uses_room_id(self, mock_tool):
+        mock_tool.return_value = {"approved": 1}
+        args = build_parser().parse_args(["room", "approve", "--room-id", "demo-room", "--id", "7"])
+        result = cmd_room_approve(MagicMock(), args)
+        assert result == 0
+        mock_tool.assert_called_once_with(
+            "http://127.0.0.1:3189",
+            "intervention_approve",
+            {"room_id": "demo-room", "id": 7},
+        )
+
+    @patch("tb2.cli._tool_call")
+    def test_cmd_room_reject_uses_bridge_id_when_present(self, mock_tool):
+        mock_tool.return_value = {"rejected": 1}
+        args = build_parser().parse_args(["room", "reject", "--bridge-id", "br-1", "--id", "7"])
+        result = cmd_room_reject(MagicMock(), args)
+        assert result == 0
+        mock_tool.assert_called_once_with(
+            "http://127.0.0.1:3189",
+            "intervention_reject",
+            {"bridge_id": "br-1", "id": 7},
+        )
+
+
+class TestToolCall:
+    @patch("tb2.cli.urllib.request.urlopen")
+    def test_tool_call_surfaces_bridge_candidates_in_error(self, mock_urlopen):
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps(
+            {
+                "result": {
+                    "structuredContent": {
+                        "error": "bridge resolution requires a bridge_id or room_id",
+                        "bridge_candidates": [
+                            {"bridge_id": "br-a", "room_id": "room-a"},
+                            {"bridge_id": "br-b", "room_id": "room-b"},
+                        ],
+                    }
+                }
+            }
+        ).encode("utf-8")
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        with pytest.raises(RuntimeError, match=r"candidates: br-a \(room-a\), br-b \(room-b\)"):
+            _tool_call("http://127.0.0.1:3189", "intervention_list", {})
+
 
 class TestCreateBackend:
     def test_tmux_backend(self):
@@ -187,6 +275,18 @@ class TestGuiCommand:
         assert result == 0
         mock_run_server.assert_called_once_with(host="127.0.0.1", port=3199)
         mock_open.assert_not_called()
+
+
+class TestInitCommand:
+    def test_cmd_init_for_process_backend_prints_generic_next_step(self, capsys):
+        backend = MagicMock()
+        backend.init_session.return_value = ("demo:a", "demo:b")
+        args = build_parser().parse_args(["--backend", "process", "init", "--session", "demo"])
+        result = cmd_init(backend, args)
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "tmux attach" not in out
+        assert "tb2 capture" in out
 
 
 class TestDoctorCommand:

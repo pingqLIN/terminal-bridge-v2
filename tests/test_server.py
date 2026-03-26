@@ -22,6 +22,13 @@ def clean_server_state():
 
 
 class TestMakeBackend:
+    @patch("tb2.server.default_backend_name", return_value="process")
+    def test_default_backend_follows_platform_policy(self, mock_default):
+        from tb2.process_backend import ProcessBackend
+        b = server_mod._make_backend({})
+        assert isinstance(b, ProcessBackend)
+        mock_default.assert_called_once_with()
+
     def test_tmux_default(self):
         from tb2.backend import TmuxBackend
         b = server_mod._make_backend({"backend": "tmux"})
@@ -184,13 +191,31 @@ class TestProfileHandlers:
 
 
 class TestStatusHandler:
-    def test_status(self):
+    @patch.object(server_mod, "_make_backend")
+    def test_status(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
         create_room("status-test")
+        server_mod.handle_bridge_start({
+            "pane_a": "status:a",
+            "pane_b": "status:b",
+            "room_id": "status-test",
+            "bridge_id": "status-bridge",
+            "profile": "codex",
+            "auto_forward": True,
+            "intervention": True,
+        })
         result = server_mod.handle_status({})
         assert "rooms" in result
         assert "bridges" in result
+        assert "bridge_details" in result
         room_ids = [r["id"] for r in result["rooms"]]
         assert "status-test" in room_ids
+        assert result["bridges"] == ["status-bridge"]
+        assert result["bridge_details"][0]["room_id"] == "status-test"
+        assert result["bridge_details"][0]["profile"] == "codex"
+        server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
 
 
 class TestBridgeHandlers:
@@ -342,6 +367,70 @@ class TestInterventionHandlers:
         result = server_mod.handle_intervention_list({"bridge_id": "nope"})
         assert "error" in result
 
+    @patch.object(server_mod, "_make_backend")
+    def test_intervention_list_resolves_single_bridge_without_id(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("single-int")
+        server_mod.handle_bridge_start({
+            "pane_a": "single:a",
+            "pane_b": "single:b",
+            "room_id": "single-int",
+            "bridge_id": "br-single",
+            "intervention": True,
+        })
+
+        result = server_mod.handle_intervention_list({})
+        assert result["bridge_id"] == "br-single"
+        assert result["count"] == 0
+
+    @patch.object(server_mod, "_make_backend")
+    def test_intervention_list_resolves_bridge_from_room(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("room-int")
+        server_mod.handle_bridge_start({
+            "pane_a": "room:a",
+            "pane_b": "room:b",
+            "room_id": "room-int",
+            "bridge_id": "br-room-int",
+            "intervention": True,
+        })
+
+        result = server_mod.handle_intervention_list({"room_id": "room-int"})
+        assert result["bridge_id"] == "br-room-int"
+
+    @patch.object(server_mod, "_make_backend")
+    def test_intervention_list_requires_disambiguation_with_multiple_bridges(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("multi-a")
+        create_room("multi-b")
+        server_mod.handle_bridge_start({
+            "pane_a": "multi:a",
+            "pane_b": "multi:b",
+            "room_id": "multi-a",
+            "bridge_id": "br-multi-a",
+            "intervention": True,
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "multi:c",
+            "pane_b": "multi:d",
+            "room_id": "multi-b",
+            "bridge_id": "br-multi-b",
+            "intervention": True,
+        })
+
+        result = server_mod.handle_intervention_list({})
+        assert result["error"] == "bridge_id required: multiple active bridges"
+        assert len(result["bridge_candidates"]) == 2
+
     def test_intervention_approve_not_found(self):
         result = server_mod.handle_intervention_approve({"bridge_id": "nope"})
         assert "error" in result
@@ -382,6 +471,26 @@ class TestInterventionHandlers:
         mock_backend.send.assert_called_with("t:b", "echo NEW", enter=True)
 
         server_mod.handle_bridge_stop({"bridge_id": "br-edit"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_terminal_interrupt_resolves_bridge_from_room(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("interrupt-room")
+        server_mod.handle_bridge_start({
+            "pane_a": "i:a",
+            "pane_b": "i:b",
+            "room_id": "interrupt-room",
+            "bridge_id": "br-interrupt",
+            "intervention": True,
+        })
+
+        result = server_mod.handle_terminal_interrupt({"room_id": "interrupt-room", "target": "a"})
+        assert result["bridge_id"] == "br-interrupt"
+        assert result["sent"] == ["i:a"]
+        mock_backend.send.assert_called_with("i:a", "\x03", enter=False)
 
 
 class TestMCPProtocol:
@@ -429,6 +538,16 @@ class TestMCPProtocol:
         assert "name" in tool0
         assert "description" in tool0
         assert "inputSchema" in tool0
+
+    def test_tools_list_exposes_bridge_resolution_schema(self):
+        result = self._rpc({"jsonrpc": "2.0", "id": 13, "method": "tools/list", "params": {}})
+        tools = {tool["name"]: tool for tool in result["result"]["tools"]}
+        intervention_list = tools["intervention_list"]["inputSchema"]
+        assert intervention_list["properties"]["bridge_id"]["type"] == "string"
+        assert intervention_list["properties"]["room_id"]["type"] == "string"
+        approve = tools["intervention_approve"]["inputSchema"]
+        assert "id" in approve["properties"]
+        assert "edited_text" in approve["properties"]
 
     def test_tools_call_returns_mcp_content_shape(self):
         result = self._rpc({
@@ -496,8 +615,24 @@ class TestMCPProtocol:
 class TestGuiRouting:
     def test_gui_html_has_endpoint(self):
         html = server_mod.build_gui_html("/mcp")
+        assert "Terminal Bridge" in html
         assert "Host, Guest, and Human operator workflow" in html
-        assert "MCP /mcp" in html
+        assert "/mcp" in html
+        assert 'data-lang="en"' in html
+        assert 'data-lang="zh-TW"' in html
+        assert 'data-layout-mode="wide"' in html
+        assert 'data-layout-mode="stacked"' in html
+        assert "快速配對" in html
+        assert "Handoff Radar" in html
+        assert "Quiet Loop" in html
+        assert "Mission Control" in html
+        assert "bridge_candidates" in html
+
+    @patch("tb2.gui.default_backend_name", return_value="tmux")
+    def test_gui_html_marks_platform_default_backend(self, mock_default):
+        html = server_mod.build_gui_html("/mcp")
+        assert '<option value="tmux" selected>tmux</option>' in html
+        mock_default.assert_called_once_with()
 
     def test_get_root_returns_html(self):
         code, content_type, body = server_mod._handle_get_path("/")

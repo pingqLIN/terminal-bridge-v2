@@ -1,49 +1,141 @@
 # 使用場景
 
-當你需要讓終端型 AI 工具彼此協作，但又不想失去人類控制點時，`tb2` 最有價值。
+這份文件把常見 TB2 任務映射到合適的 preset、transport 與 review posture。
 
-## 1. Host 與 Guest 的協作迴圈
+## 1. 一般 Host + Guest coding loop
 
-- Host 擁有 plan、room、bridge 與 intervention 決策權。
-- Guest 在 pane 內工作，並用簡短的 `MSG:` 做 handoff。
-- Human operator 可以看 room、審核敏感轉發、必要時中斷。
+使用：
 
-適合：
-
-- code review handoff
-- 多步驟重構
-- 委派式除錯
-
-## 2. MCP-first 的本地協作控制面
-
-- 把 `tb2` 當作本地 MCP server。
-- 用你偏好的 CLI client 呼叫 `terminal_init`、`bridge_start`、`room_post` 與 intervention 工具。
-- 即使不同 client 的 UX 不同，也能維持穩定控制面。
+- preset：`Quick Pairing`
+- transport：`SSE`
+- forwarding：`auto_forward=true`
+- review：`intervention=false`
 
 適合：
 
-- 工具鏈串接
-- 可重現的本地自動化
-- 混合 Codex、Claude Code、Gemini、Aider 的工作流
+- 委派除錯
+- code review 迴圈
+- Host 仍保留最終判斷權的多步驟重構
 
-## 3. Human-in-the-loop 審核佇列
+## 2. 敏感轉發且需要人工審核
 
-- 當 auto-forward 需要審查時，開啟 intervention mode。
-- 在訊息送到目標 pane 前，先 approve、edit、或 reject。
+使用：
 
-適合：
-
-- 接近正式環境的變更
-- 執行前需要人工確認的 prompt
-- 共用 operator 環境
-
-## 4. 跨平台 operator console
-
-- Windows 用 `process`，Linux / macOS 用 `tmux`。
-- 可透過 GUI、SSE、WebSocket、或 `tb2 room watch` 觀看 live room。
+- preset：`Approval Gate`
+- transport：`SSE`
+- forwarding：`auto_forward=true`
+- review：`intervention=true`
 
 適合：
 
-- 本地 command center
-- support / triage 流程
-- 需要強調可觀測性的 demo
+- 可能改動 repo 的 shell 命令
+- dependency 變更
+- migration 或 CI 修復
+
+## 3. 從其他 AI client 做 MCP-first orchestration
+
+使用：
+
+- preset：`MCP Operator`
+- 瀏覽器 UI 主要拿來看 status、room 與 pending queue
+- 真正的啟動與控制走 MCP tools
+
+適合：
+
+- 讓 Codex 規劃，Guest 在 panes 裡工作
+- 讓 Claude Code 或 Gemini 驅動 tool calls
+- 以穩定 control plane 做可重現本地自動化
+
+## 4. Terminal incident recovery
+
+使用：
+
+- preset：`Diagnostics`
+- transport：`room_poll` 或 `SSE`
+- 以 capture、interrupt、status 為主
+
+適合：
+
+- Guest 工具卡死
+- pane 輸出難以理解
+- 驗證 shell 啟動與 backend 行為
+
+## 5. 純 CLI operator workflow
+
+使用：
+
+- `python -m tb2 room watch --room-id <ROOM_ID>`
+- `python -m tb2 capture --target <PANE>`
+- `python -m tb2 send --target <PANE> --text "..."`
+
+適合：
+
+- SSH-only 環境
+- 低摩擦 demo
+- 沒有瀏覽器的恢復流程
+
+## 6. 密集 handoff review 迴圈
+
+使用：
+
+- preset：`Handoff Radar`
+- transport：`SSE`
+- forwarding：`auto_forward=true`
+- review：`intervention=true`
+
+適合：
+
+- 反覆 review / approve / reject 的流程
+- Host 需要同時盯 room 與 pending queue 的工作面
+- Guest 主要在 shell 裡頻繁送出 handoff 的情境
+
+## 7. 低噪音 pairing 與 operator 指導
+
+使用：
+
+- preset：`Quiet Loop`
+- transport：`SSE`
+- forwarding：`auto_forward=true`
+- review：`intervention=false`
+
+適合：
+
+- human operator 主要只會送短指示的 pairing
+- 不想讓 diagnostics 先佔走視覺重心的 demo
+- 啟動與 live room 就是主流程的情境
+
+## 8. Host 主導的總控班次
+
+使用：
+
+- preset：`Mission Control`
+- transport：`WebSocket`
+- forwarding：`auto_forward=false`
+- review：預設 `intervention=false`
+
+適合：
+
+- Host AI 同時看拓樸、診斷與 room 流量
+- raw status 與 live room 同樣重要的 investigation
+- 需要更寬 control-plane 視角的長時間 session
+
+## 9. 什麼時候從簡單模式切進進階模式
+
+以下情況請留在預設任務 preset：
+
+- pane ID 來自同一條啟動流程
+- 目前只有一條 active bridge
+- 不需要自訂 transport 細節
+
+以下情況請打開進階控制：
+
+- 你需要明確指定 `backend_id`、`bridge_id`、`room_id`
+- 你要固定 `transport`
+- 你同時混用瀏覽器 UI 與 MCP automation
+- 你在 debug pane naming 或 delivery routing
+
+## 相關文件
+
+- [控制台指南](control-console.zh-TW.md)
+- [AI 協作指南](ai-orchestration.zh-TW.md)
+- [平台與終端行為](platform-behavior.zh-TW.md)

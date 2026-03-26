@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from .backend import TerminalBackend, TmuxBackend, TmuxError
 from .diff import diff_new_lines, strip_prompt_tail
 from .intervention import Action, InterventionLayer
+from .osutils import default_backend_name
 from .profile import get_profile, list_profiles, strip_ansi
 from .support import doctor_report
 from .gui import build_gui_html
@@ -177,7 +178,7 @@ _backend_cache_lock = threading.Lock()
 
 def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
     """Get or create a backend instance. Cached by (kind, backend_id)."""
-    kind = str(args.get("backend", "tmux"))
+    kind = str(args.get("backend") or default_backend_name())
     backend_id = str(args.get("backend_id", "default"))
     key = f"{kind}:{backend_id}"
 
@@ -204,6 +205,57 @@ def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
 def _get_bridge(bridge_id: str) -> Optional[Bridge]:
     with _bridges_lock:
         return _bridges.get(bridge_id)
+
+
+def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
+    return {
+        "bridge_id": bridge.bridge_id,
+        "room_id": bridge.room.room_id,
+        "pane_a": bridge.pane_a,
+        "pane_b": bridge.pane_b,
+        "profile": bridge.profile_name,
+        "auto_forward": bridge.auto_forward,
+        "intervention": bridge.intervention_layer.active,
+        "pending_count": len(bridge.intervention_layer.list_pending()),
+    }
+
+
+def _resolve_bridge(args: Dict[str, Any]) -> Tuple[Optional[str], Optional[Bridge], Optional[Dict[str, Any]]]:
+    requested_bridge_id = str(args.get("bridge_id", "") or "").strip()
+    if requested_bridge_id:
+        bridge = _get_bridge(requested_bridge_id)
+        if bridge:
+            return requested_bridge_id, bridge, None
+        return None, None, {"error": "bridge not found"}
+
+    requested_room_id = str(args.get("room_id", "") or "").strip()
+    with _bridges_lock:
+        items = list(_bridges.items())
+
+    if requested_room_id:
+        matches = [(bridge_id, bridge) for bridge_id, bridge in items if bridge.room.room_id == requested_room_id]
+        if not matches:
+            return None, None, {"error": f"no active bridge for room {requested_room_id}"}
+        if len(matches) == 1:
+            bridge_id, bridge = matches[0]
+            return bridge_id, bridge, None
+        return None, None, {
+            "error": f"multiple active bridges for room {requested_room_id}; provide bridge_id",
+            "room_id": requested_room_id,
+            "bridge_candidates": [_bridge_detail(bridge) for _, bridge in matches],
+        }
+
+    if len(items) == 1:
+        bridge_id, bridge = items[0]
+        return bridge_id, bridge, None
+
+    if not items:
+        return None, None, {"error": "bridge_id required: no active bridges"}
+
+    return None, None, {
+        "error": "bridge_id required: multiple active bridges",
+        "bridge_candidates": [_bridge_detail(bridge) for _, bridge in items],
+    }
 
 
 def _pending_to_dict(msg: Any) -> Dict[str, Any]:
@@ -339,12 +391,12 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
     )
     # Optionally deliver to a bridge pane
     deliver = args.get("deliver")
-    bridge_id = args.get("bridge_id")
     deliver_error = None
-    if deliver and bridge_id:
-        with _bridges_lock:
-            bridge = _bridges.get(bridge_id)
-        if bridge:
+    if deliver:
+        bridge_id, bridge, error = _resolve_bridge(args)
+        if error:
+            deliver_error = str(error["error"])
+        elif bridge:
             try:
                 if bridge.room.room_id != room.room_id:
                     deliver_error = (
@@ -361,8 +413,6 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
                     deliver_error = "deliver must be one of: a, b, both"
             except Exception as exc:
                 deliver_error = str(exc)
-        else:
-            deliver_error = f"bridge {bridge_id} not found"
     result: Dict[str, Any] = {"id": msg.id}
     if deliver_error:
         result["deliver_error"] = deliver_error
@@ -438,9 +488,10 @@ def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_intervention_list(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id = str(args["bridge_id"])
-    bridge = _get_bridge(bridge_id)
-    if not bridge:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
         return {"error": "bridge not found"}
     pending = bridge.intervention_layer.list_pending()
     return {
@@ -451,9 +502,10 @@ def handle_intervention_list(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id = str(args["bridge_id"])
-    bridge = _get_bridge(bridge_id)
-    if not bridge:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
         return {"error": "bridge not found"}
 
     mid = args.get("id", "all")
@@ -491,9 +543,10 @@ def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id = str(args["bridge_id"])
-    bridge = _get_bridge(bridge_id)
-    if not bridge:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
         return {"error": "bridge not found"}
 
     mid = args.get("id", "all")
@@ -530,9 +583,10 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id = str(args["bridge_id"])
-    bridge = _get_bridge(bridge_id)
-    if not bridge:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
         return {"error": "bridge not found"}
 
     target = args.get("target", "both")
@@ -577,6 +631,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
     rooms = list_rooms()
     with _bridges_lock:
         bridge_ids = list(_bridges.keys())
+        bridge_details = [_bridge_detail(bridge) for bridge in _bridges.values()]
     transports = _transport_snapshot()
     transport_by_room = {item["room_id"]: item for item in transports["rooms"]}
     return {
@@ -587,6 +642,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
                    )}
                   for r in rooms],
         "bridges": bridge_ids,
+        "bridge_details": bridge_details,
         "transports": transports,
     }
 
@@ -633,7 +689,81 @@ _DEFAULT_TOOL_SCHEMA: Dict[str, Any] = {
     "additionalProperties": True,
 }
 
-SERVER_INFO = {"name": "terminal-bridge-v2", "version": "0.1.0"}
+_BRIDGE_RESOLUTION_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "bridge_id": {
+            "type": "string",
+            "description": "Explicit bridge id. Optional when room_id or a single active bridge can resolve the target.",
+        },
+        "room_id": {
+            "type": "string",
+            "description": "Optional room id fallback when bridge_id is unknown.",
+        },
+    },
+    "additionalProperties": True,
+}
+
+_TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "room_post": {
+        "type": "object",
+        "properties": {
+            "room_id": {"type": "string"},
+            "author": {"type": "string"},
+            "text": {"type": "string"},
+            "kind": {"type": "string"},
+            "deliver": {"type": "string", "enum": ["a", "b", "both"]},
+            "bridge_id": {
+                "type": "string",
+                "description": "Optional when room_id already identifies a single active bridge.",
+            },
+        },
+        "required": ["room_id", "text"],
+        "additionalProperties": True,
+    },
+    "intervention_list": _BRIDGE_RESOLUTION_SCHEMA,
+    "intervention_approve": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "id": {
+                "description": "Pending message id or 'all'.",
+                "oneOf": [{"type": "integer"}, {"type": "string", "enum": ["all"]}],
+            },
+            "edited_text": {"type": "string"},
+        },
+        "additionalProperties": True,
+    },
+    "intervention_reject": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "id": {
+                "description": "Pending message id or 'all'.",
+                "oneOf": [{"type": "integer"}, {"type": "string", "enum": ["all"]}],
+            },
+        },
+        "additionalProperties": True,
+    },
+    "terminal_interrupt": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "target": {
+                "type": "string",
+                "description": "Interrupt target: a, b, both, or a raw pane id.",
+            },
+        },
+        "additionalProperties": True,
+    },
+    "status": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+}
+
+SERVER_INFO = {"name": "terminal-bridge-v2", "version": "0.2.0"}
 LATEST_PROTOCOL_VERSION = "2025-11-25"
 
 
@@ -643,7 +773,7 @@ def _tool_specs() -> List[Dict[str, Any]]:
         tools.append({
             "name": name,
             "description": TOOL_DESCRIPTIONS.get(name, name),
-            "inputSchema": _DEFAULT_TOOL_SCHEMA,
+            "inputSchema": _TOOL_SCHEMAS.get(name, _DEFAULT_TOOL_SCHEMA),
         })
     return tools
 

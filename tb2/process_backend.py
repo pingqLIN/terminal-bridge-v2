@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Tuple
 
 from .backend import TerminalBackend
+from .osutils import default_shell_argv, shell_argv, shell_enter_sequence
 
 # Strip ANSI escape sequences + OSC sequences from PTY output.
 _ANSI_RE = re.compile(r"""
@@ -92,9 +93,10 @@ class ProcessBackend(TerminalBackend):
 
     def __init__(self, *, shell: str = ""):
         if not shell:
-            self.shell = "cmd.exe" if _IS_WINDOWS else os.environ.get("SHELL", "/bin/bash")
+            self.shell_argv = default_shell_argv()
         else:
-            self.shell = shell
+            self.shell_argv = shell_argv(shell)
+        self.shell = self.shell_argv[0]
         self._procs: Dict[str, ManagedProcess] = {}
         self._lock = threading.Lock()
 
@@ -131,7 +133,7 @@ class ProcessBackend(TerminalBackend):
 
     def send(self, target: str, text: str, enter: bool = False) -> None:
         mp = self._get(target)
-        payload = text + ("\r\n" if enter else "")
+        payload = text + (shell_enter_sequence(self.shell, pty=True) if enter else "")
         mp.write_fn(payload)
 
     def kill_session(self, session: str) -> None:
@@ -160,7 +162,7 @@ class ProcessBackend(TerminalBackend):
         return mp
 
     def _default_spawn_spec(self) -> SpawnSpec:
-        return SpawnSpec(argv=[self.shell])
+        return SpawnSpec(argv=list(self.shell_argv))
 
     @staticmethod
     def _merge_env(spec: SpawnSpec) -> Optional[Dict[str, str]]:

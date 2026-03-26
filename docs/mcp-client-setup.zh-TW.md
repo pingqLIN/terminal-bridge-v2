@@ -1,62 +1,61 @@
-# MCP 用戶端設定與相容性
+# MCP 用戶端設定
 
-本文件提供 `terminal-bridge-v2`（`tb2`）可重現的 MCP 設定流程，涵蓋：
+這份文件給想把 TB2 當成穩定本地 MCP control plane 的人或代理。
 
-- OpenAI Codex CLI
-- Claude Code CLI
-- Gemini CLI
+## TB2 透過 MCP 提供什麼
 
-並附上相依檢查與相容性驗證重點。
+核心工具：
 
-## 1) 前置需求
+- `terminal_init`
+- `terminal_capture`
+- `terminal_send`
+- `terminal_interrupt`
+- `room_create`
+- `room_poll`
+- `room_post`
+- `bridge_start`
+- `bridge_stop`
+- `intervention_list`
+- `intervention_approve`
+- `intervention_reject`
+- `list_profiles`
+- `doctor`
+- `status`
 
-- Python `>=3.9`
-- 安裝專案：
+可把它們看成三組能力：
 
-```bash
-pip install -e .
-```
+| 能力群組 | 工具 |
+| --- | --- |
+| 啟動與 I/O | `terminal_init`、`terminal_send`、`terminal_capture`、`terminal_interrupt` |
+| 協作狀態 | `room_create`、`room_poll`、`room_post`、`status` |
+| 委派控制 | `bridge_start`、`bridge_stop`、`intervention_list`、`intervention_approve`、`intervention_reject` |
 
-- Windows `process` 後端相依：
+## Server 啟動方式
 
-```bash
-pip install -e ".[windows]"
-# 或
-pip install pywinpty
-```
-
-- 建議先做一次：
-
-```bash
-python -m tb2 doctor
-```
-
-`tb2 doctor` 會回報 backend 是否可用，也會檢查完整支援的互動式 CLI (`codex`、`claude`、`gemini`、`aider`) 是否真的安裝在本機。
-
-## 2) 啟動 tb2 MCP 伺服器
+### 前景執行
 
 ```bash
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
-若要跨平台背景常駐託管，可改用：
+### 背景服務
 
 ```bash
 python -m tb2 service start --host 127.0.0.1 --port 3189
 python -m tb2 service status
 ```
 
-可選的快速健康檢查：
+健康檢查：
 
 ```bash
 curl -sS http://127.0.0.1:3189/healthz
 ```
 
-所有用戶端共用端點：
+MCP 端點：
 
 - `http://127.0.0.1:3189/mcp`
 
-## 3) 在三個 CLI 註冊 tb2
+## 在各客戶端註冊 TB2
 
 ### Codex CLI
 
@@ -76,7 +75,7 @@ claude mcp add --transport http -s user tb2 http://127.0.0.1:3189/mcp
 gemini mcp add tb2 http://127.0.0.1:3189/mcp --transport http --scope user
 ```
 
-## 4) 健康檢查
+## 驗證註冊
 
 ```bash
 codex mcp list
@@ -84,12 +83,45 @@ claude mcp list
 gemini mcp list
 ```
 
-預期結果：
+預期訊號：
 
-- Claude 與 Gemini 顯示 `tb2 ... Connected`
-- Codex 清單可見 `tb2 ... enabled`
+- Claude 與 Gemini 顯示 `Connected`
+- Codex 顯示 `enabled`
 
-## 5) 協定探測（建議）
+## Host AI 工具地圖
+
+若 Host AI 是主要協作驅動者，最小可用順序是：
+
+1. `doctor`
+2. `terminal_init`
+3. `bridge_start`
+4. `room_poll` 或 stream subscribe
+5. `intervention_list`
+6. `intervention_approve` 或 `intervention_reject`
+7. `status`
+
+### bridge 解析捷徑
+
+TB2 現在對 intervention 類工具支援更輕量的解析路徑：
+
+- `intervention_list`、`intervention_approve`、`intervention_reject`、`terminal_interrupt` 在已知情況下可直接用 `bridge_id`
+- 若不知道 `bridge_id`，但 `room_id` 只綁定一條 active bridge，可改傳 `room_id`
+- 若整個 server 目前只有一條 active bridge，這些工具可自動解析
+- 若同時存在多條 active bridge，TB2 會回傳明確錯誤與 `bridge_candidates`
+
+`status` 現在也會回傳 `bridge_details`，讓其他 AI client 可以直接看到 `bridge_id`、`room_id`、pane、profile 與 pending count，而不是自己猜。
+
+## Human Operator 工具地圖
+
+如果人類是透過支援 MCP 的 app 監看，而不是透過瀏覽器 UI：
+
+1. `status`
+2. `room_poll`
+3. `room_post`
+4. `terminal_capture`
+5. `terminal_interrupt`
+
+## 協定探測
 
 初始化：
 
@@ -115,37 +147,25 @@ curl -sS http://127.0.0.1:3189/mcp \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}'
 ```
 
-## 6) 相容性重點
+## 相容性說明
 
-目前 `tb2` MCP 伺服器已補齊：
+TB2 目前提供：
 
 - `initialize`
 - `ping`
 - `notifications/initialized`
-- `tools/list` 回傳 MCP 標準欄位（`name` `description` `inputSchema`）
-- `resources/list` 與 `prompts/list` 空清單回應
-- `initialize` 回應會回傳 client 要求的 `protocolVersion`（新版 MCP SDK 關鍵）
+- `tools/list`
+- 空的 `resources/list`
+- 空的 `prompts/list`
 
-因此可與以下模式相容：
+目前相容性建議：
 
-- Codex CLI URL transport
-- Claude Code HTTP transport
-- Gemini HTTP transport（MCP SDK streamable HTTP client）
+- 優先使用 HTTP MCP transport
+- 除非你有明確信任邊界，否則請綁定 localhost
+- 出現問題時先跑 `doctor`，不要第一時間把錯誤歸咎於 MCP 協定
+- 不要硬編 intervention 參數；先看 `tools/list`，schema 已經會標出可用 `room_id` 當 bridge-scoped 工具的 fallback
 
-## 7) 後端相依矩陣
-
-| 後端 | 平台 | 相依 | Smoke 結果 |
-| --- | --- | --- | --- |
-| `tmux` | Linux/macOS/WSL | `tmux` | 本次 Windows 檢查未驗 |
-| `process` | Windows/Linux/macOS | Windows 需 `pywinpty` | 通過 |
-| `pipe` | 全平台 | 無 | 通過 |
-
-Windows `process` 後端提醒：
-
-- shell 啟動暖機後才會穩定看到第一批輸出
-- 自動驗證建議在第一個命令前保留短暫等待
-
-## 8) 移除註冊
+## 移除註冊
 
 ```bash
 codex mcp remove tb2
@@ -153,12 +173,8 @@ claude mcp remove -s user tb2
 gemini mcp remove --scope user tb2
 ```
 
-## 9) 非終端機使用者可用的 GUI
+## 相關文件
 
-```bash
-python -m tb2 gui --host 127.0.0.1 --port 3189
-```
-
-開啟：
-
-- `http://127.0.0.1:3189/`
+- [入門指南](getting-started.zh-TW.md)
+- [AI 協作指南](ai-orchestration.zh-TW.md)
+- [平台與終端行為](platform-behavior.zh-TW.md)

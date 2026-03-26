@@ -77,6 +77,18 @@ def _make_managed_process(target="test:a"):
 
 
 class TestProcessBackend:
+    @patch("tb2.process_backend.default_shell_argv", return_value=["pwsh", "-NoLogo", "-NoProfile"])
+    def test_default_shell(self, mock_default_shell):
+        backend = ProcessBackend()
+        assert backend.shell == "pwsh"
+        assert backend.shell_argv == ["pwsh", "-NoLogo", "-NoProfile"]
+        mock_default_shell.assert_called_once_with()
+
+    def test_explicit_powershell_adds_flags(self):
+        backend = ProcessBackend(shell="pwsh")
+        assert backend.shell == "pwsh"
+        assert backend.shell_argv == ["pwsh", "-NoLogo", "-NoProfile"]
+
     def test_init_session(self):
         backend = ProcessBackend(shell="/bin/bash")
         # Mock _spawn to avoid real process creation
@@ -121,12 +133,14 @@ class TestProcessBackend:
         with pytest.raises(RuntimeError, match="process not found"):
             backend.capture("nonexistent")
 
-    def test_send(self):
+    @patch("tb2.process_backend.shell_enter_sequence", return_value="\r")
+    def test_send(self, mock_enter):
         backend = ProcessBackend(shell="/bin/bash")
         mp = _make_managed_process("test:a")
         backend._procs["test:a"] = mp
         backend.send("test:a", "hello", enter=True)
-        mp.write_fn.assert_called_once_with("hello\r\n")
+        mp.write_fn.assert_called_once_with("hello\r")
+        mock_enter.assert_called_once_with("/bin/bash", pty=True)
 
     def test_capture_both(self):
         backend = ProcessBackend(shell="/bin/bash")

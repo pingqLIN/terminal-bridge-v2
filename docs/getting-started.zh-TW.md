@@ -1,92 +1,127 @@
 # 入門指南
 
-這份文件提供從乾淨環境到可用 `tb2` session 的最短穩定路徑。
+這份文件提供從乾淨 checkout 到可用 `tb2` session 的最短穩定路徑。
 
 ## 1. 安裝
 
-```bash
-pip install -e .
-```
-
-Windows 互動式 session 另外需要：
+### Linux / macOS
 
 ```bash
-pip install -e ".[windows]"
+pip install -e ".[dev]"
 ```
 
-## 2. 先做本機相容性檢查
+### Windows
 
-執行：
+```bash
+pip install -e ".[windows,dev]"
+```
+
+## 2. 先跑 `tb2 doctor`
 
 ```bash
 python -m tb2 doctor
 ```
 
-請先看兩個區塊：
+請先看這幾個區塊：
 
-- `Backends`：確認 `tmux`、`process`、`pipe` 是否能用
-- `Transports`：確認 `SSE`、`WebSocket`、`room_poll` 是否可用
-- `Supported CLI tools`：確認完整支援的 CLI 是否真的安裝在本機
+- `Backends`：這台機器實際能跑哪些 backend
+- `Supported CLI tools`：哪些 first-class client 已存在於 `PATH`
+- `recommended_backend`：TB2 目前會自動選哪個預設 backend
 
-## 3. 選擇完整支援的工具
+## 3. 選對 backend 路徑
 
-`tb2` 目前把下面四套視為完整支援的互動式 CLI：
+### 標準預設 policy
 
-| 工具 | Profile | Windows | Linux / macOS |
-|------|---------|---------|---------------|
-| OpenAI Codex CLI | `codex` | `process` | `tmux` |
-| Claude Code CLI | `claude-code` | `process` | `tmux` |
-| Gemini CLI | `gemini` | `process` | `tmux` |
-| Aider | `aider` | `process` | `tmux` |
+- Windows：有 `pywinpty` 就用 `process`，否則透過 WSL 走 `tmux`，再不行才退 `pipe`
+- Linux / macOS / WSL：有 `tmux` 就用 `tmux`，否則退 `process`
 
-## 4. 啟動第一個 session
+### 實務規則
 
-### Windows
+- 想要最穩定的 POSIX operator 視角，就選 `tmux`
+- 不想依賴 multiplexer，但仍要互動式流程，就選 `process`
+- 只有非互動式工具才選 `pipe`
 
-```bash
-python -m tb2 --backend process init --session demo
-python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --auto
-```
+## 4. 五分鐘啟動第一個 session
 
-### Linux / macOS
+### CLI 優先
 
 ```bash
 python -m tb2 init --session demo
 python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
 ```
 
-## 5. 先理解訊息約定
+在 Windows 的 `process` 或 `pipe` 上，pane id 會長成 `demo:a` 與 `demo:b`。
 
-最重要的約定是：
+### 第一個 GUI session
 
-- 包含 `MSG:` 的行會被視為可轉發訊息
-- `--auto` 會啟用自動轉發
-- `--intervention` 會先把轉發訊息放進待審佇列，不會立刻送出
-
-範例：
-
-```text
-MSG: summarize the current failure
-agent> MSG: echo READY
+```bash
+python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-## 6. 如果你要做程式化控制
+打開 `http://127.0.0.1:3189/`，然後：
 
-啟動 MCP server：
+1. 從 `Quick Pairing` 開始。
+2. 點 `Init Session`。
+3. 點 `Start Collaboration`。
+4. 若需要人工審核，再切到 `Approval Gate`。
+
+### 第一個 MCP session
 
 ```bash
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
-接著把 `http://127.0.0.1:3189/mcp` 註冊到支援 MCP 的 CLI。
+把 MCP endpoint 註冊進 client 後，建議照這個順序：
 
-如果你要走 human-operator 流程，現在有三條 room 觀看路徑：
+1. `doctor`
+2. `terminal_init`
+3. `bridge_start`
+4. `room_poll` 或 room stream
+5. `room_post` / `terminal_send`
+6. `bridge_stop`
 
-- `python -m tb2 gui`：workflow-first 瀏覽器介面
-- `python -m tb2 room watch --room-id <ROOM_ID>`：純終端監看
-- 直接使用 `GET /rooms/{room_id}/stream` 或 `GET /ws`
+## 5. 先理解 handoff 契約
 
-延伸閱讀：
+跨 agent handoff 請使用 `MSG:`。
 
+範例：
+
+```text
+MSG: summarize the failing assertion in tests/test_server.py
+MSG: ready for review on the shell fallback patch
+```
+
+規則：
+
+- 一行 `MSG:` 只放一個可執行請求
+- 不要塞多段長文
+- 當轉發不應該立刻送出時，請啟用 `intervention`
+
+## 6. 常見首次啟動失敗
+
+### Windows 上 `process` 不可用
+
+- 安裝 `pywinpty`
+- 或改走 WSL `tmux`
+
+### Linux / macOS 上沒有 `tmux`
+
+- 安裝 `tmux`
+- 或改用 `process`
+
+### Room stream 看起來 stale
+
+- 先在 GUI 重連 transport
+- 或退回 `room_poll`
+- 只有排除 transport 後才重啟 bridge
+
+### 啟動了錯的 shell
+
+- 明確設定 `TB2_SHELL`
+- 在 Windows 上不要依賴 `SHELL`
+
+## 下一步文件
+
+- [角色導向指南](role-guides.zh-TW.md)
+- [平台相容矩陣](platforms/compatibility-matrix.zh-TW.md)
 - [MCP 用戶端設定](mcp-client-setup.zh-TW.md)
-- [AI 協作指南](ai-orchestration.zh-TW.md)

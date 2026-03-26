@@ -79,6 +79,8 @@ class TestTmuxBackendDirect:
         assert a == ["pane_a_line1"]
         # After split on separator, pane B starts with newline → first element is empty
         assert "pane_b_line1" in b
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:2] == ["sh", "-lc"]
 
     @patch("tb2.backend.subprocess.run")
     def test_send_with_enter(self, mock_run, backend):
@@ -133,6 +135,14 @@ class TestTmuxBackendWSL:
         cmd = mock_run.call_args[0][0]
         assert cmd[:2] == ["wsl", "-d"]
         assert "Ubuntu" in cmd
+
+    @patch("tb2.backend.subprocess.run")
+    def test_capture_both_uses_sh_via_wsl(self, mock_run, wsl_backend):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        wsl_backend.capture_both("test:0.0", "test:0.1")
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:4] == ["wsl", "-d", "Ubuntu", "--"]
+        assert cmd[4:6] == ["sh", "-lc"]
 
     @patch("tb2.backend.subprocess.run", side_effect=FileNotFoundError)
     def test_wsl_not_found(self, mock_run, wsl_backend):

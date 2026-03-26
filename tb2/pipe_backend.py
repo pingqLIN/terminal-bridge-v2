@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Deque, Dict, List, Optional, Tuple
 
 from .backend import TerminalBackend
+from .osutils import default_shell_argv, shell_argv, shell_enter_sequence
 
 
 @dataclass
@@ -52,11 +53,11 @@ class PipeBackend(TerminalBackend):
     """
 
     def __init__(self, *, shell: str = ""):
-        import os, platform
         if not shell:
-            self.shell = "cmd.exe" if platform.system() == "Windows" else os.environ.get("SHELL", "/bin/bash")
+            self.shell_argv = default_shell_argv()
         else:
-            self.shell = shell
+            self.shell_argv = shell_argv(shell)
+        self.shell = self.shell_argv[0]
         self._procs: Dict[str, _ManagedProc] = {}
         self._lock = threading.Lock()
 
@@ -92,7 +93,7 @@ class PipeBackend(TerminalBackend):
         mp = self._get(target)
         if not mp.proc.stdin:
             raise RuntimeError(f"stdin not available for {target}")
-        payload = text + ("\n" if enter else "")
+        payload = text + (shell_enter_sequence(self.shell) if enter else "")
         mp.proc.stdin.write(payload)
         mp.proc.stdin.flush()
 
@@ -115,7 +116,7 @@ class PipeBackend(TerminalBackend):
     def _spawn(self, target: str) -> None:
         buf = _LineBuffer()
         proc = subprocess.Popen(
-            [self.shell],
+            list(self.shell_argv),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

@@ -1,92 +1,127 @@
 # Getting Started
 
-This guide is the shortest reliable path from a fresh checkout to a usable `tb2` session.
+This is the shortest reliable path from a fresh checkout to a useful `tb2` session.
 
 ## 1. Install
 
-```bash
-pip install -e .
-```
-
-Windows interactive sessions also need:
+### Linux / macOS
 
 ```bash
-pip install -e ".[windows]"
+pip install -e ".[dev]"
 ```
 
-## 2. Check local compatibility
+### Windows
 
-Run:
+```bash
+pip install -e ".[windows,dev]"
+```
+
+## 2. Run `tb2 doctor`
 
 ```bash
 python -m tb2 doctor
 ```
 
-Focus on two sections:
+Check these sections first:
 
-- `Backends`: confirms whether `tmux`, `process`, and `pipe` are usable.
-- `Transports`: confirms `SSE`, `WebSocket`, and `room_poll` availability.
-- `Supported CLI tools`: confirms whether first-class clients are actually installed.
+- `Backends`: which backend can actually run on this machine
+- `Supported CLI tools`: which first-class clients are available in `PATH`
+- `recommended_backend`: what TB2 will choose by default
 
-## 3. Pick a fully supported client
+## 3. Pick the backend path
 
-`tb2` currently treats these as first-class interactive clients:
+### Standard default policy
 
-| Tool | Profile | Windows | Linux / macOS |
-|------|---------|---------|---------------|
-| OpenAI Codex CLI | `codex` | `process` | `tmux` |
-| Claude Code CLI | `claude-code` | `process` | `tmux` |
-| Gemini CLI | `gemini` | `process` | `tmux` |
-| Aider | `aider` | `process` | `tmux` |
+- Windows: `process` if `pywinpty` is available, else `tmux` through WSL, else `pipe`
+- Linux / macOS / WSL: `tmux` if installed, else `process`
 
-## 4. Start your first session
+### Practical rule
 
-### Windows
+- choose `tmux` when you want the most stable operator view on POSIX
+- choose `process` when you need an interactive path without a multiplexer
+- choose `pipe` only for non-interactive tools
 
-```bash
-python -m tb2 --backend process init --session demo
-python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --auto
-```
+## 4. Start your first session in 5 minutes
 
-### Linux / macOS
+### CLI-first session
 
 ```bash
 python -m tb2 init --session demo
 python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
 ```
 
-## 5. Know the message contract
+On Windows `process` or `pipe`, pane ids look like `demo:a` and `demo:b`.
 
-The most important convention is:
+### First GUI session
 
-- lines containing `MSG:` are treated as forwarding candidates
-- `--auto` enables automatic forwarding
-- `--intervention` queues forwarded messages for approval instead of sending them immediately
-
-Examples:
-
-```text
-MSG: summarize the current failure
-agent> MSG: echo READY
+```bash
+python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-## 6. When you want programmatic control
+Open `http://127.0.0.1:3189/`, then:
 
-Start the MCP server:
+1. Start with `Quick Pairing`.
+2. Click `Init Session`.
+3. Click `Start Collaboration`.
+4. Switch to `Approval Gate` if you want human review before delivery.
+
+### First MCP session
 
 ```bash
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
-Then register `http://127.0.0.1:3189/mcp` in your MCP-capable CLI.
+Register the MCP endpoint in your client, then use this sequence:
 
-For human-operator workflows, you now have three room watch paths:
+1. `doctor`
+2. `terminal_init`
+3. `bridge_start`
+4. `room_poll` or room stream
+5. `room_post` / `terminal_send`
+6. `bridge_stop`
 
-- workflow-first browser GUI via `python -m tb2 gui`
-- `python -m tb2 room watch --room-id <ROOM_ID>` for terminal-only oversight
-- direct room streams via `GET /rooms/{room_id}/stream` or `GET /ws`
+## 5. Understand the handoff contract
 
-See:
+Cross-agent handoffs should use `MSG:`.
 
+Example:
+
+```text
+MSG: summarize the failing assertion in tests/test_server.py
+MSG: ready for review on the shell fallback patch
+```
+
+Rules:
+
+- one actionable request per `MSG:` line
+- no multi-paragraph payloads
+- use `intervention` when a forwarded line should not be delivered immediately
+
+## 6. Common first-run failures
+
+### `process` unavailable on Windows
+
+- install `pywinpty`
+- or use the WSL `tmux` path
+
+### `tmux` missing on Linux / macOS
+
+- install `tmux`
+- or use the `process` backend instead
+
+### Room stream looks stale
+
+- reconnect transport in the GUI
+- or fall back to `room_poll`
+- only restart the bridge after transport has been ruled out
+
+### Wrong shell starts
+
+- set `TB2_SHELL`
+- do not rely on `SHELL` on Windows
+
+## Next docs
+
+- [Role Guides](role-guides.md)
+- [Platform Compatibility Matrix](platforms/compatibility-matrix.md)
 - [MCP Client Setup](mcp-client-setup.md)
-- [AI Orchestration Guide](ai-orchestration.md)

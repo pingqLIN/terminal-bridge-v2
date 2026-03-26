@@ -1,7 +1,7 @@
 <h1 align="center">terminal-bridge-v2</h1>
 
 <p align="center">
-  <strong>AI-first terminal orchestration for CLI-native LLM workflows</strong>
+  <strong>One local control plane for Host AI, Guest AI, and Human operators working in real terminals.</strong>
 </p>
 
 <p align="center">
@@ -9,45 +9,82 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-%3E%3D3.9-blue.svg" alt="Python >= 3.9"></a>
   <img src="https://img.shields.io/badge/MCP-JSON--RPC-orange.svg" alt="MCP JSON-RPC">
-  <img src="https://img.shields.io/badge/status-rebuilt%20main-green.svg" alt="Rebuilt main">
+  <img src="https://img.shields.io/badge/tested-linux%20runtime-green.svg" alt="Tested on Linux runtime">
 </p>
 
 <p align="center">
+  <a href="README.zh-TW.md">繁體中文</a> •
   <a href="#why-tb2">Why TB2</a> •
-  <a href="#quick-start">Quick Start</a> •
-  <a href="#core-use-cases">Use Cases</a> •
-  <a href="#docs">Docs</a> •
-  <a href="#project-status">Project Status</a> •
-  <a href="README.zh-TW.md">中文版</a>
+  <a href="#primary-workflows">Primary Workflows</a> •
+  <a href="#choose-your-role">Choose Your Role</a> •
+  <a href="#platform-snapshot">Platform Snapshot</a> •
+  <a href="#docs-map">Docs Map</a>
 </p>
 
----
+<p align="center">
+  <img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="860">
+</p>
 
 ## Why TB2
 
-`tb2` is a local control plane for terminal-native AI tools.
+`tb2` is a local orchestration layer for teams that want terminal-native AI workflows without losing human control.
 
-It gives you a practical way to run Host / Guest / Human operator workflows across Codex, Claude Code, Gemini, Aider, and similar CLI clients without giving up observability or human control.
+Use it when you need one place to run a Host AI, one or more Guest AIs, and a Human operator while keeping room-level visibility, approval gates, and cross-platform control. The same control plane can be driven from:
 
-What makes TB2 different:
+- CLI commands
+- a browser console
+- MCP-capable clients such as Codex CLI, Claude Code, and Gemini CLI
 
-- `AI-first terminal orchestration`: rooms, bridges, intervention, and live room transport are first-class concepts
-- `MCP-first control surface`: use the same project from CLI, GUI, or MCP-capable AI clients
-- `human-in-the-loop by design`: approve, edit, reject, or interrupt before forwarded actions land
-- `cross-platform runtime`: `process` on Windows, `tmux` on Linux/macOS, `pipe` for non-interactive paths
+TB2 is most useful when you want terminal-native agents to collaborate, but you still need:
 
-## What You Can Do With It
+- a stable handoff contract
+- a human approval path
+- room and bridge observability
+- a backend strategy that adapts to Windows, macOS, Linux, and WSL
 
-- run a Host agent and one or more Guest agents inside real terminal panes
-- bridge `MSG:` handoffs between agents with guardrails and optional approval
-- watch a live collaboration room over GUI, SSE, WebSocket, or `tb2 room watch`
-- expose the whole control plane through an MCP server for AI-driven orchestration
+## Why Teams Choose TB2
 
-## Quick Start
+| Decision point | TB2 answer |
+| --- | --- |
+| You want real terminals, not a toy chat sandbox | Bridges map onto actual panes, shells, and operator workflows |
+| You need Host AI, Guest AI, and Human review in one loop | Rooms, interventions, and approval gates are first-class |
+| Your agents use different clients | CLI, browser GUI, and MCP can drive the same local control plane |
+| Your fleet is mixed-platform | Backend fallback and shell policy are documented and tested per environment |
+| You need a UI that is approachable without losing power | Task presets simplify the first screen while keeping advanced controls reachable |
 
-Recommended first step:
+## Which Surface To Choose
+
+| Surface | Best when | Tradeoff |
+| --- | --- | --- |
+| CLI | one operator already knows the panes, shell, and bridge ids | fastest path, but assumes the user already understands TB2 internals |
+| Browser GUI | a human operator needs task presets, review queues, and room visibility | most approachable surface, but still local-host oriented |
+| MCP endpoint | another AI client should drive actions as tools | best automation path, but assumes the client already has its own UX |
+| Hybrid: MCP + GUI | an AI client drives the workflow while a human supervises delivery | strongest oversight model, but requires keeping both surfaces open |
+
+## Primary Workflows
+
+| Workflow | Best For | Default Surface |
+| --- | --- | --- |
+| Host + Guest coding loop | delegated coding, review, debugging | CLI or MCP + GUI oversight |
+| Approval-gated review | human-in-the-loop forwarding | GUI `Approval Gate` preset |
+| MCP control plane | Codex / Claude / Gemini orchestration | `http://127.0.0.1:3189/mcp` |
+
+The control console now groups controls by task preset:
+
+- `Quick Pairing`: start a fresh host + guest session and live room
+- `Approval Gate`: review, edit, and release pending handoffs
+- `MCP Operator`: supervise an externally-driven MCP workflow
+- `Diagnostics`: capture panes, interrupt agents, and inspect status
+- `Handoff Radar`: keep live room traffic and the approval queue side by side
+- `Quiet Loop`: reduce the UI to launch plus live operator collaboration
+- `Mission Control`: surface topology, diagnostics, and coordination together
+
+## Quick Install
+
+### Linux / macOS
 
 ```bash
+pip install -e ".[dev]"
 python -m tb2 doctor
 ```
 
@@ -55,107 +92,118 @@ python -m tb2 doctor
 
 ```bash
 pip install -e ".[windows,dev]"
-python -m tb2 --backend process init --session demo
-python -m tb2 --backend process broker --a demo:a --b demo:b --profile codex --auto
+python -m tb2 doctor
 ```
 
-### Linux / macOS
+If `doctor` reports that the Windows `process` backend is unavailable, install `pywinpty` or use the WSL `tmux` path.
+
+## Five-Minute First Session
+
+### CLI-first
 
 ```bash
-pip install -e ".[dev]"
 python -m tb2 init --session demo
 python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
 ```
 
-### MCP server and GUI
+On Windows with the `process` backend, pane ids look like `demo:a` and `demo:b`.
+
+### GUI-first
 
 ```bash
-python -m tb2 service start --host 127.0.0.1 --port 3189
 python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-Open `http://127.0.0.1:3189/` in your browser.
+Open `http://127.0.0.1:3189/`.
 
-![Control Center](docs/images/control-center.png)
+### MCP-first
 
-## Core Use Cases
+```bash
+python -m tb2 server --host 127.0.0.1 --port 3189
+```
 
-### Host-mediated coding workflow
+Then register:
 
-- Host owns the room, bridge, and intervention decisions.
-- Guest works in a pane and emits short `MSG:` handoffs.
-- Human operator watches the room and steps in only when needed.
+- Codex CLI: `codex mcp add tb2 --url http://127.0.0.1:3189/mcp`
+- Claude Code: `claude mcp add --transport http -s user tb2 http://127.0.0.1:3189/mcp`
+- Gemini CLI: `gemini mcp add tb2 http://127.0.0.1:3189/mcp --transport http --scope user`
 
-### MCP-first local orchestration
+## Choose Your Role
 
-- register `http://127.0.0.1:3189/mcp` in Codex, Claude Code, Gemini, or another MCP client
-- call `terminal_init`, `bridge_start`, `room_post`, and intervention tools through a stable local endpoint
+| If you are... | Start here |
+| --- | --- |
+| deciding whether TB2 fits your team | [Getting Started](docs/getting-started.md) |
+| running the host agent or orchestrator loop | [Role Guides](docs/role-guides.md#host-ai) |
+| writing guest prompts or agent output conventions | [Role Guides](docs/role-guides.md#guest-ai) |
+| acting as the human reviewer or support operator | [Role Guides](docs/role-guides.md#human-operator) |
+| wiring up MCP clients and automations | [MCP Client Setup](docs/mcp-client-setup.md) |
 
-### Approval-gated forwarding
+## Platform Snapshot
 
-- turn on `--intervention` when auto-forwarded messages should not go straight to the target pane
-- approve, edit, or reject before delivery
+### Validation status recorded in this repo
 
-See [docs/use-cases.md](docs/use-cases.md) for fuller scenarios.
+- Linux: runtime-verified in the current workspace, full `pytest` suite passed
+- Windows: simulated in automated tests for backend fallback, shell policy, remote-control behavior, and state paths
+- macOS: simulated in automated tests for POSIX shell semantics and service state handling
+- WSL: simulated in backend tests for `wsl -d <distro> -- sh -lc` `tmux` execution
 
-## Supported First-Class Clients
+### Current default backend policy
 
-| Tool | Profile | Windows | Linux / macOS | Status |
-| --- | --- | --- | --- | --- |
-| OpenAI Codex CLI | `codex` | `process` | `tmux` | First-class |
-| Claude Code CLI | `claude-code` | `process` | `tmux` | First-class |
-| Gemini CLI | `gemini` | `process` | `tmux` | First-class |
-| Aider | `aider` | `process` | `tmux` | First-class |
+| Environment | Default |
+| --- | --- |
+| Windows | `process` if `pywinpty` is available, else `tmux` if WSL is available, else `pipe` |
+| Linux / macOS / WSL | `tmux` if installed, else `process` |
 
-Other profiles remain available:
+For full shell, path, and Enter-key behavior differences, see [Platform Compatibility Matrix](docs/platforms/compatibility-matrix.md).
 
-- `generic` for unknown shell-like tools
-- `llama` as a community profile for llama.cpp or Ollama-style shells
+## Control Console
 
-## Docs
+The browser console is intentionally task-filtered rather than exposing every control at once.
 
-Start here:
+- primary workflow actions stay visible
+- approval controls only surface in approval-centric scenarios
+- raw ids and backend mapping remain available under advanced sections
+- diagnostics and direct terminal operations stay complete, but no longer dominate the default layout
+- built-in language toggle supports English and Traditional Chinese
+- built-in layout toggle switches between balanced, wide, and stacked workspace arrangements
+
+This keeps the UI approachable for operators while preserving the full MCP and terminal control surface.
+
+## Docs Map
+
+### Start here
 
 - [Getting Started](docs/getting-started.md)
-- [AI Orchestration Guide](docs/ai-orchestration.md)
-- [MCP Client Setup](docs/mcp-client-setup.md)
-- [Use Cases](docs/use-cases.md)
-- [FAQ](docs/faq.md)
-- [Roadmap](docs/roadmap.md)
+- [Role Guides](docs/role-guides.md)
+- [Control Console Guide](docs/control-console.md)
+- [Platform Behavior Notes](docs/platform-behavior.md)
+- [Platform Compatibility Matrix](docs/platforms/compatibility-matrix.md)
+- [Standard Operations](docs/platforms/standard-operations.md)
 
-Traditional Chinese docs:
+### Architecture and integration
+
+- [AI Orchestration](docs/ai-orchestration.md)
+- [MCP Client Setup](docs/mcp-client-setup.md)
+- [Use Cases and Workflow Index](docs/use-cases.md)
+
+### Traditional Chinese
 
 - [README.zh-TW.md](README.zh-TW.md)
 - [docs/getting-started.zh-TW.md](docs/getting-started.zh-TW.md)
-- [docs/ai-orchestration.zh-TW.md](docs/ai-orchestration.zh-TW.md)
-- [docs/use-cases.zh-TW.md](docs/use-cases.zh-TW.md)
-- [docs/faq.zh-TW.md](docs/faq.zh-TW.md)
-- [docs/roadmap.zh-TW.md](docs/roadmap.zh-TW.md)
-
-## Project Status
-
-TB2 is no longer a concept repo. The current mainline includes:
-
-- multi-backend runtime: `tmux`, `process`, `pipe`
-- broker, MCP server, GUI, and background service manager
-- room, bridge, and intervention primitives
-- SSE and WebSocket live room transport plus `room_poll` fallback
-- non-E2E regression suite currently passing in local validation
-
-Current product direction:
-
-- default to `MCP-first`
-- default to `Host / Guest / Human operator` orchestration
-- keep peer-style room usage available, but treat it as advanced mode
+- [docs/role-guides.zh-TW.md](docs/role-guides.zh-TW.md)
+- [docs/control-console.zh-TW.md](docs/control-console.zh-TW.md)
+- [docs/platform-behavior.zh-TW.md](docs/platform-behavior.zh-TW.md)
+- [docs/platforms/compatibility-matrix.zh-TW.md](docs/platforms/compatibility-matrix.zh-TW.md)
+- [docs/platforms/standard-operations.zh-TW.md](docs/platforms/standard-operations.zh-TW.md)
 
 ## Safety Notes
 
-- default host binding should stay on `127.0.0.1`
-- if you expose TB2 beyond localhost, treat it as a sensitive control surface
-- run `python -m tb2 doctor` before first use on a new machine
-- use `--intervention` when forwarded actions need human review
+- Keep server binding on `127.0.0.1` unless you fully trust the network path.
+- Treat the MCP endpoint and browser console as sensitive local control surfaces.
+- Use `intervention` mode when you are validating a new profile, a new client, or a risky workflow.
+- Keep one active bridge per pane pair.
 
-## Contributing and Support
+## Project Support
 
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [SUPPORT.md](SUPPORT.md)

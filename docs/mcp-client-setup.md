@@ -1,62 +1,61 @@
-# MCP Client Setup and Compatibility
+# MCP Client Setup
 
-This guide records a reproducible MCP setup for `terminal-bridge-v2` (`tb2`) with:
+This guide is for the person or agent that wants to use TB2 as a stable local MCP control plane.
 
-- OpenAI Codex CLI
-- Claude Code CLI
-- Gemini CLI
+## What TB2 exposes over MCP
 
-It also includes dependency checks and a quick compatibility matrix.
+Core tools:
 
-## 1) Prerequisites
+- `terminal_init`
+- `terminal_capture`
+- `terminal_send`
+- `terminal_interrupt`
+- `room_create`
+- `room_poll`
+- `room_post`
+- `bridge_start`
+- `bridge_stop`
+- `intervention_list`
+- `intervention_approve`
+- `intervention_reject`
+- `list_profiles`
+- `doctor`
+- `status`
 
-- Python `>=3.9`
-- Install project:
+Use them as three capability groups:
 
-```bash
-pip install -e .
-```
+| Capability group | Tools |
+| --- | --- |
+| launch and I/O | `terminal_init`, `terminal_send`, `terminal_capture`, `terminal_interrupt` |
+| collaboration state | `room_create`, `room_poll`, `room_post`, `status` |
+| delegation control | `bridge_start`, `bridge_stop`, `intervention_list`, `intervention_approve`, `intervention_reject` |
 
-- Windows process backend support:
+## Server Startup Options
 
-```bash
-pip install -e ".[windows]"
-# or
-pip install pywinpty
-```
-
-- Recommended first check:
-
-```bash
-python -m tb2 doctor
-```
-
-`tb2 doctor` reports backend readiness plus whether the first-class interactive clients (`codex`, `claude`, `gemini`, `aider`) are installed on the current machine.
-
-## 2) Start tb2 MCP server
+### Foreground
 
 ```bash
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
-For cross-platform detached hosting, you can use:
+### Background service
 
 ```bash
 python -m tb2 service start --host 127.0.0.1 --port 3189
 python -m tb2 service status
 ```
 
-Optional quick health check:
+Health probe:
 
 ```bash
 curl -sS http://127.0.0.1:3189/healthz
 ```
 
-Endpoint used by all clients:
+MCP endpoint:
 
 - `http://127.0.0.1:3189/mcp`
 
-## 3) Register tb2 in each CLI
+## Register TB2 in Each Client
 
 ### Codex CLI
 
@@ -76,7 +75,7 @@ claude mcp add --transport http -s user tb2 http://127.0.0.1:3189/mcp
 gemini mcp add tb2 http://127.0.0.1:3189/mcp --transport http --scope user
 ```
 
-## 4) Verify health
+## Verify Registration
 
 ```bash
 codex mcp list
@@ -84,12 +83,45 @@ claude mcp list
 gemini mcp list
 ```
 
-Expected result:
+Expected signs:
 
-- `tb2 ... Connected` in Claude and Gemini
-- `tb2 ... enabled` in Codex list output
+- Claude and Gemini show `Connected`
+- Codex shows `enabled`
 
-## 5) Protocol probes (optional but recommended)
+## Host AI Tool Map
+
+If the Host AI is driving the workflow, this is the minimal useful sequence:
+
+1. `doctor`
+2. `terminal_init`
+3. `bridge_start`
+4. `room_poll` or stream subscribe
+5. `intervention_list`
+6. `intervention_approve` or `intervention_reject`
+7. `status`
+
+### Bridge resolution shortcuts
+
+TB2 now supports a lighter control path for intervention tools:
+
+- `intervention_list`, `intervention_approve`, `intervention_reject`, and `terminal_interrupt` accept `bridge_id` when you already know it
+- if `bridge_id` is unknown, pass `room_id` when that room has exactly one active bridge
+- if the whole server currently has exactly one active bridge, these tools can resolve it automatically
+- when multiple active bridges exist, TB2 returns an explicit error plus `bridge_candidates`
+
+The `status` tool now also returns `bridge_details` so another AI client can map `bridge_id`, `room_id`, panes, profile, and pending count without guessing.
+
+## Human Operator Tool Map
+
+When a human is supervising through an MCP-capable app instead of the browser UI:
+
+1. `status`
+2. `room_poll`
+3. `room_post`
+4. `terminal_capture`
+5. `terminal_interrupt`
+
+## Protocol Probes
 
 Initialize:
 
@@ -115,37 +147,25 @@ curl -sS http://127.0.0.1:3189/mcp \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}'
 ```
 
-## 6) Compatibility notes
+## Compatibility Notes
 
-`tb2` MCP server now includes:
+TB2 currently ships:
 
 - `initialize`
 - `ping`
 - `notifications/initialized`
-- `tools/list` with MCP-style tool metadata (`name`, `description`, `inputSchema`)
-- optional empty responses for `resources/list` and `prompts/list`
-- client protocol echo in initialize response (important for newer MCP SDK versions)
+- `tools/list`
+- empty `resources/list`
+- empty `prompts/list`
 
-This setup is compatible with:
+Current compatibility guidance:
 
-- Codex CLI URL transport
-- Claude Code HTTP transport
-- Gemini HTTP transport (streamable HTTP client in MCP SDK)
+- use HTTP MCP transport
+- bind to localhost unless you have an explicit trust boundary
+- check `doctor` before blaming a client integration issue on MCP itself
+- read `tools/list` before hard-coding intervention arguments; the schema now advertises `room_id` fallback for bridge-scoped tools
 
-## 7) Backend dependency matrix
-
-| Backend | Platform | Dependency | Smoke result |
-| --- | --- | --- | --- |
-| `tmux` | Linux/macOS/WSL | `tmux` | not tested in this Windows check |
-| `process` | Windows/Linux/macOS | Windows needs `pywinpty` | pass |
-| `pipe` | all | none | pass |
-
-Windows process backend note:
-
-- First command output may appear after shell warm-up
-- Wait a short moment before first capture/assertion in automated checks
-
-## 8) Remove registration
+## Remove Registration
 
 ```bash
 codex mcp remove tb2
@@ -153,12 +173,8 @@ claude mcp remove -s user tb2
 gemini mcp remove --scope user tb2
 ```
 
-## 9) Optional GUI for non-terminal users
+## Related Docs
 
-```bash
-python -m tb2 gui --host 127.0.0.1 --port 3189
-```
-
-Open:
-
-- `http://127.0.0.1:3189/`
+- [Getting Started](getting-started.md)
+- [AI Orchestration Guide](ai-orchestration.md)
+- [Platform and Terminal Behavior](platform-behavior.md)
