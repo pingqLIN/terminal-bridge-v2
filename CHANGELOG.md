@@ -13,6 +13,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Changed
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
 - Local HTTP, SSE, and WebSocket control surfaces now enforce localhost-only `Origin` checks and safer request parsing.
+- `tb2 doctor` now surfaces readiness, validation coverage, and next-step guidance alongside backend and client probes.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.

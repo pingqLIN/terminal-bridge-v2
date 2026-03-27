@@ -107,6 +107,24 @@ class TestRoomHandlers:
         })
         assert "id" in result
 
+    def test_room_poll_includes_machine_readable_source_fields(self):
+        create_room("source-post")
+        server_mod.handle_room_post({
+            "room_id": "source-post",
+            "author": "human-operator",
+            "text": "hello",
+        })
+
+        result = server_mod.handle_room_poll({"room_id": "source-post", "after_id": 0})
+
+        assert result["messages"][0]["author"] == "human-operator"
+        assert result["messages"][0]["source"]["type"] == "client"
+        assert result["messages"][0]["source"]["role"] == "external"
+        assert result["messages"][0]["source"]["trusted"] is False
+        assert result["messages"][0]["source_type"] == "client"
+        assert result["messages"][0]["source_role"] == "external"
+        assert result["messages"][0]["trusted"] is False
+
     def test_room_post_not_found(self):
         result = server_mod.handle_room_post({"room_id": "nope", "text": "hello"})
         assert "error" in result
@@ -463,6 +481,113 @@ class TestBridgeHandlers:
         )
 
         backend.send.assert_called_once_with("test:b", "echo HELLO", enter=True)
+
+    def test_bridge_process_new_lines_adds_machine_readable_sources(self):
+        backend = MagicMock()
+        room = create_room("bridge-source")
+        bridge = server_mod.Bridge(
+            bridge_id="br-source",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+        )
+
+        profile = server_mod.get_profile("generic")
+        bridge._process_new_lines("A", "test:a", "test:b", ["MSG:echo HELLO"], profile)
+        messages = [server_mod._room_message_payload(room, msg) for msg in room.poll(after_id=0, limit=10)]
+
+        assert messages[0]["source_type"] == "terminal"
+        assert messages[0]["source_role"] == "pane_a"
+        assert messages[0]["trusted"] is False
+        assert messages[1]["source_type"] == "bridge"
+        assert messages[1]["source_role"] == "automation"
+        assert messages[1]["trusted"] is True
+        assert messages[1]["source"]["trusted"] is True
+
+    def test_bridge_auto_forward_breaker_switches_to_intervention(self):
+        backend = MagicMock()
+        room = create_room("bridge-breaker")
+        bridge = server_mod.Bridge(
+            bridge_id="br-breaker",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+        )
+
+        profile = server_mod.get_profile("generic")
+        with patch.object(server_mod.time, "time", return_value=100.0):
+            bridge._process_new_lines(
+                "A",
+                "test:a",
+                "test:b",
+                [f"MSG:echo {i}" for i in range(7)],
+                profile,
+            )
+
+        assert backend.send.call_count == server_mod._AUTO_FORWARD_MAX_PER_WINDOW
+        with patch.object(server_mod.time, "time", return_value=100.0):
+            detail = server_mod._bridge_detail(bridge)
+        assert detail["auto_forward_guard"]["blocked"] is True
+        assert detail["auto_forward_guard"]["guard_reason"] is not None
+        assert detail["pending_count"] == 1
+        messages = [server_mod._room_message_payload(room, msg) for msg in room.poll(after_id=0, limit=50)]
+        breaker = [msg for msg in messages if msg["meta"].get("guard_reason")]
+        assert len(breaker) == 1
+        assert breaker[0]["source_role"] == "safety"
+        pending = [msg for msg in messages if msg["kind"] == "intervention" and msg["meta"].get("pending_id")]
+        assert len(pending) == 1
+
+    def test_bridge_auto_forward_breaker_uses_pending_queue_after_trip(self):
+        backend = MagicMock()
+        room = create_room("bridge-breaker-reset")
+        bridge = server_mod.Bridge(
+            bridge_id="br-breaker-reset",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+        )
+
+        profile = server_mod.get_profile("generic")
+        with patch.object(server_mod.time, "time", return_value=100.0):
+            bridge._process_new_lines(
+                "A",
+                "test:a",
+                "test:b",
+                [f"MSG:echo {i}" for i in range(7)],
+                profile,
+            )
+        bridge._process_new_lines("A", "test:a", "test:b", ["MSG:echo again"], profile)
+
+        assert backend.send.call_count == server_mod._AUTO_FORWARD_MAX_PER_WINDOW
+        assert bridge.intervention_layer.active is True
+        assert len(bridge.intervention_layer.list_pending()) == 2
+
+    def test_bridge_auto_forward_streak_limit_switches_to_intervention(self):
+        backend = MagicMock()
+        room = create_room("bridge-streak")
+        bridge = server_mod.Bridge(
+            bridge_id="br-streak",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+        )
+        bridge._auto_forward_streak = server_mod._AUTO_FORWARD_STREAK_LIMIT
+
+        profile = server_mod.get_profile("generic")
+        bridge._process_new_lines("A", "test:a", "test:b", ["MSG:echo streak"], profile)
+
+        assert backend.send.call_count == 0
+        assert bridge.intervention_layer.active is True
+        detail = server_mod._bridge_detail(bridge)
+        assert "consecutive auto-forwards" in detail["auto_forward_guard"]["guard_reason"]
 
     def test_bridge_worker_waits_once_per_cycle(self):
         backend = MagicMock()

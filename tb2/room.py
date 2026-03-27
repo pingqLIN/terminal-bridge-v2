@@ -30,6 +30,9 @@ class RoomMessage:
     author: str
     text: str
     kind: str = "chat"       # chat | terminal | system
+    source_type: str = "client"
+    source_role: str = "external"
+    trusted: bool = False
     meta: Dict[str, Any] = field(default_factory=dict)
     ts: float = field(default_factory=time.time)
 
@@ -90,8 +93,17 @@ class Room:
         self._subscription_counter = 0
         self._closed = False
 
-    def post(self, author: str, text: str, kind: str = "chat",
-             meta: Optional[Dict[str, Any]] = None) -> RoomMessage:
+    def post(
+        self,
+        author: str,
+        text: str,
+        kind: str = "chat",
+        meta: Optional[Dict[str, Any]] = None,
+        *,
+        source_type: str = "client",
+        source_role: str = "external",
+        trusted: bool = False,
+    ) -> RoomMessage:
         with self._cv:
             self._counter += 1
             msg = RoomMessage(
@@ -99,6 +111,9 @@ class Room:
                 author=author,
                 text=text,
                 kind=kind,
+                source_type=source_type,
+                source_role=source_role,
+                trusted=trusted,
                 meta=meta or {},
             )
             self._messages.append(msg)

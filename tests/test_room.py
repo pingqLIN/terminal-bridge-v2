@@ -14,6 +14,9 @@ class TestRoom:
         assert msg.author == "test"
         assert msg.text == "hello"
         assert msg.kind == "chat"
+        assert msg.source_type == "client"
+        assert msg.source_role == "external"
+        assert msg.trusted is False
         assert msg.id == 6  # 5 pre-populated + 1
 
     def test_post_increments_id(self):
@@ -65,6 +68,19 @@ class TestRoom:
         room = Room("meta-test")
         msg = room.post(author="a", text="hello", meta={"pane": "test:0.0"})
         assert msg.meta == {"pane": "test:0.0"}
+
+    def test_post_with_custom_source_fields(self):
+        room = Room("source-test")
+        msg = room.post(
+            author="bridge",
+            text="hello",
+            source_type="bridge",
+            source_role="automation",
+            trusted=True,
+        )
+        assert msg.source_type == "bridge"
+        assert msg.source_role == "automation"
+        assert msg.trusted is True
 
     def test_post_with_kind(self):
         room = Room("kind-test")

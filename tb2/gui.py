@@ -1843,7 +1843,12 @@ GUI_HTML_TEMPLATE = r"""
         if (key) state.seen.add(key);
         state.lastMsgId = Math.max(state.lastMsgId, Number(event.id || 0));
         const box = $('stream-box');
-        box.textContent += '[' + (event.kind || 'chat') + '] ' + (event.author || '?') + ' | ' + (event.text || '') + '\n';
+        const source = event.source || {};
+        const role = String(source.role || event.source_role || '').trim();
+        const trusted = Boolean(source.trusted ?? event.trusted);
+        const label = role && role !== (event.author || '') ? (event.author || '?') + ' (' + role + ')' : (event.author || '?');
+        const trust = trusted ? ' [trusted]' : '';
+        box.textContent += '[' + (event.kind || 'chat') + '] ' + label + trust + ' | ' + (event.text || '') + '\n';
         box.scrollTop = box.scrollHeight;
       }
 

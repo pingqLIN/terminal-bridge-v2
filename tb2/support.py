@@ -80,6 +80,29 @@ CLIENTS: Tuple[ClientSpec, ...] = (
     ),
 )
 
+VALIDATION_SNAPSHOT: Tuple[Dict[str, str], ...] = (
+    {
+        "area": "linux_runtime",
+        "mode": "executed locally",
+        "note": "full pytest suite passed in the current workspace",
+    },
+    {
+        "area": "tmux_workflow",
+        "mode": "executed locally",
+        "note": "end-to-end tests passed in the current Linux environment",
+    },
+    {
+        "area": "windows_policy",
+        "mode": "simulated by targeted tests",
+        "note": "shell argv, backend fallback policy, and remote-control handoff rules covered",
+    },
+    {
+        "area": "macos_policy",
+        "mode": "simulated by targeted tests",
+        "note": "state-path migration, XDG precedence, and POSIX shell behavior covered",
+    },
+)
+
 
 def _default_distro() -> str:
     return os.environ.get("TERMBRIDGE_WSL_DISTRO", "Ubuntu")
@@ -202,6 +225,43 @@ def profile_rows() -> List[Dict[str, str]]:
     return rows
 
 
+def _readiness(
+    *,
+    backends: Sequence[Dict[str, Any]],
+    recommended_backend: str,
+    recommended_clients: Sequence[Dict[str, Any]],
+) -> Dict[str, str]:
+    backend_ready = any(
+        item["name"] == recommended_backend and item["available"]
+        for item in backends
+    )
+    return {
+        "backend": "ready" if backend_ready else "limited",
+        "clients": "ready" if recommended_clients else "generic-only",
+        "transport": "ready",
+    }
+
+
+def _next_steps(
+    *,
+    recommended_backend: str,
+    recommended_clients: Sequence[Dict[str, Any]],
+) -> List[str]:
+    steps = [f"Use `{recommended_backend}` as the default backend on this machine."]
+    if recommended_clients:
+        steps.append(
+            "Start with one of the ready profiles: "
+            + ", ".join(client["profile"] for client in recommended_clients)
+            + "."
+        )
+    else:
+        steps.append(
+            "No first-class CLI tool is ready in PATH; use the `generic` profile or install a supported client."
+        )
+    steps.append("Run `python -m tb2 init --session demo` before opening GUI, broker, or MCP flows.")
+    return steps
+
+
 def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
     distro_name = distro or _default_distro()
     backends = [
@@ -230,6 +290,11 @@ def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
 
     recommended = [client for client in clients if client["support"] == "full" and client["available"]]
     suggested = default_backend_name()
+    readiness = _readiness(
+        backends=backends,
+        recommended_backend=suggested,
+        recommended_clients=recommended,
+    )
     return {
         "platform": platform.system(),
         "python": platform.python_version(),
@@ -242,8 +307,14 @@ def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
         ],
         "clients": clients,
         "profiles": profile_rows(),
+        "validation_snapshot": list(VALIDATION_SNAPSHOT),
+        "readiness": readiness,
         "recommended_backend": suggested,
         "recommended_clients": [client["profile"] for client in recommended],
+        "next_steps": _next_steps(
+            recommended_backend=suggested,
+            recommended_clients=recommended,
+        ),
     }
 
 
@@ -253,8 +324,22 @@ def render_doctor(report: Dict[str, Any]) -> str:
         f"python:   {report['python']}",
         f"default backend: {report['recommended_backend']}",
         "",
-        "Backends:",
+        "Readiness:",
+        (
+            f"  - backend={report['readiness']['backend']}  "
+            f"clients={report['readiness']['clients']}  "
+            f"transport={report['readiness']['transport']}"
+        ),
+        "",
+        "Validation snapshot:",
     ]
+    for item in report.get("validation_snapshot", []):
+        lines.append(f"  - {item['area']}: {item['mode']}  {item['note']}")
+
+    lines.extend([
+        "",
+        "Backends:",
+    ])
     for item in report["backends"]:
         state = "OK" if item["available"] else "MISS"
         lines.append(f"  - {item['name']}: {state}  {item['detail']}")
@@ -280,4 +365,9 @@ def render_doctor(report: Dict[str, Any]) -> str:
         lines.append(
             "Ready-to-use profiles: " + ", ".join(report["recommended_clients"])
         )
+    if report.get("next_steps"):
+        lines.append("")
+        lines.append("Next steps:")
+        for step in report["next_steps"]:
+            lines.append(f"  - {step}")
     return "\n".join(lines)

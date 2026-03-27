@@ -48,11 +48,15 @@ class Bridge:
         self.poll_ms = poll_ms
         self.lines = lines
         self.auto_forward = auto_forward
+        self._intervention_default = intervention
         self.intervention_layer = InterventionLayer(active=intervention)
         self.stop = threading.Event()
         self.prev_a: list = []
         self.prev_b: list = []
         self.forwarded_recent = deque(maxlen=80)
+        self._auto_forward_times = deque(maxlen=64)
+        self._auto_forward_streak = 0
+        self._auto_forward_guard_reason = ""
         # Adaptive polling
         self._current_poll: float = float(poll_ms)
         self._min_poll: float = 100.0
@@ -96,12 +100,20 @@ class Bridge:
 
     def _process_new_lines(self, tag: str, from_pane: str, to_pane: str,
                            new_lines: list, profile: Any) -> None:
+        source_role = "pane_a" if tag == "A" else "pane_b"
         for ln in new_lines:
             if not ln.strip():
                 continue
             text = strip_ansi(ln) if profile.strip_ansi else ln
-            self.room.post(author=tag, text=text, kind="terminal",
-                           meta={"pane": from_pane, "bridge_id": self.bridge_id})
+            self.room.post(
+                author=tag,
+                text=text,
+                kind="terminal",
+                meta={"pane": from_pane, "bridge_id": self.bridge_id},
+                source_type="terminal",
+                source_role=source_role,
+                trusted=False,
+            )
             if self.auto_forward:
                 parsed = profile.parse_message(ln)
                 if parsed:
@@ -109,20 +121,34 @@ class Bridge:
                     if fp in self.forwarded_recent:
                         continue
                     self.forwarded_recent.append(fp)
+                    self._arm_auto_forward_guard(tag, from_pane, to_pane, parsed)
                     msg = self.intervention_layer.submit(from_pane, to_pane, parsed)
                     if msg.action == Action.AUTO:
                         try:
                             self.backend.send(to_pane, parsed, enter=True)
-                            self.room.post(author="bridge",
-                                           text=f"[forwarded {tag}->{to_pane}] {parsed}",
-                                           kind="system",
-                                           meta={"bridge_id": self.bridge_id, "to_pane": to_pane})
+                            self._record_auto_forward()
+                            self.room.post(
+                                author="bridge",
+                                text=f"[forwarded {tag}->{to_pane}] {parsed}",
+                                kind="system",
+                                meta={"bridge_id": self.bridge_id, "to_pane": to_pane},
+                                source_type="bridge",
+                                source_role="automation",
+                                trusted=True,
+                            )
                         except TmuxError as exc:
-                            self.room.post(author="bridge",
-                                           text=f"[forward failed {tag}->{to_pane}] {exc}",
-                                           kind="system",
-                                           meta={"bridge_id": self.bridge_id, "to_pane": to_pane})
+                            self._reset_auto_forward_guard()
+                            self.room.post(
+                                author="bridge",
+                                text=f"[forward failed {tag}->{to_pane}] {exc}",
+                                kind="system",
+                                meta={"bridge_id": self.bridge_id, "to_pane": to_pane},
+                                source_type="bridge",
+                                source_role="automation",
+                                trusted=True,
+                            )
                     else:
+                        self._reset_auto_forward_guard()
                         self.room.post(
                             author="bridge",
                             text=f"[pending #{msg.id} {tag}->{to_pane}] {parsed}",
@@ -133,7 +159,74 @@ class Bridge:
                                 "from_pane": from_pane,
                                 "to_pane": to_pane,
                             },
+                            source_type="bridge",
+                            source_role="intervention",
+                            trusted=True,
                         )
+
+    def _arm_auto_forward_guard(self, tag: str, from_pane: str, to_pane: str, text: str) -> None:
+        if self.intervention_layer.active:
+            return
+        reason = self._next_auto_forward_guard_reason()
+        if not reason:
+            return
+        self.intervention_layer.pause()
+        self._auto_forward_guard_reason = reason
+        self._reset_auto_forward_guard()
+        self.room.post(
+            author="bridge",
+            text=f"[auto-forward paused {tag}->{to_pane}] {reason}; intervention enabled",
+            kind="intervention",
+            meta={
+                "bridge_id": self.bridge_id,
+                "from_pane": from_pane,
+                "to_pane": to_pane,
+                "guard_reason": reason,
+                "guard_text": text,
+            },
+            source_type="bridge",
+            source_role="safety",
+            trusted=True,
+        )
+
+    def _next_auto_forward_guard_reason(self) -> str:
+        now = time.time()
+        while self._auto_forward_times and now - self._auto_forward_times[0] > _AUTO_FORWARD_WINDOW_SECONDS:
+            self._auto_forward_times.popleft()
+        if len(self._auto_forward_times) >= _AUTO_FORWARD_MAX_PER_WINDOW:
+            return (
+                f"rate limit exceeded: {len(self._auto_forward_times)} auto-forwards "
+                f"in {_AUTO_FORWARD_WINDOW_SECONDS:.1f}s"
+            )
+        if self._auto_forward_streak >= _AUTO_FORWARD_STREAK_LIMIT:
+            return f"circuit breaker tripped after {self._auto_forward_streak} consecutive auto-forwards"
+        return ""
+
+    def _record_auto_forward(self) -> None:
+        now = time.time()
+        while self._auto_forward_times and now - self._auto_forward_times[0] > _AUTO_FORWARD_WINDOW_SECONDS:
+            self._auto_forward_times.popleft()
+        self._auto_forward_times.append(now)
+        self._auto_forward_streak += 1
+
+    def _reset_auto_forward_guard(self) -> None:
+        self._auto_forward_times.clear()
+        self._auto_forward_streak = 0
+
+    def rearm_auto_forward_guard(self) -> None:
+        self._auto_forward_guard_reason = ""
+        self._reset_auto_forward_guard()
+        if not self._intervention_default:
+            self.intervention_layer.resume()
+
+    def auto_forward_guard(self) -> Dict[str, Any]:
+        return {
+            "blocked": self.intervention_layer.active and bool(self._auto_forward_guard_reason),
+            "guard_reason": self._auto_forward_guard_reason or None,
+            "rate_limit": _AUTO_FORWARD_MAX_PER_WINDOW,
+            "window_seconds": _AUTO_FORWARD_WINDOW_SECONDS,
+            "streak_limit": _AUTO_FORWARD_STREAK_LIMIT,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +248,9 @@ _MAX_CAPTURE_LINES = 5000
 _MAX_POLL_MS = 60000
 _LOCAL_ORIGIN_HOSTS = {"127.0.0.1", "localhost", "::1"}
 _BRIDGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+_AUTO_FORWARD_MAX_PER_WINDOW = 6
+_AUTO_FORWARD_WINDOW_SECONDS = 3.0
+_AUTO_FORWARD_STREAK_LIMIT = 20
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +367,7 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
         "auto_forward": bridge.auto_forward,
         "intervention": bridge.intervention_layer.active,
         "pending_count": len(bridge.intervention_layer.list_pending()),
+        "auto_forward_guard": bridge.auto_forward_guard(),
     }
 
 
@@ -342,6 +439,14 @@ def _room_message_payload(room: Room, msg: RoomMessage) -> Dict[str, Any]:
         "room_id": room.room_id,
         "bridge_id": bridge_id,
         "author": msg.author,
+        "source": {
+            "type": msg.source_type,
+            "role": msg.source_role,
+            "trusted": msg.trusted,
+        },
+        "source_type": msg.source_type,
+        "source_role": msg.source_role,
+        "trusted": msg.trusted,
         "text": msg.text,
         "kind": msg.kind,
         "meta": meta,
@@ -394,7 +499,18 @@ def _deliver_pending(bridge: Bridge, msg: Any) -> None:
         text=f"[approved #{msg.id} -> {msg.to_pane}] {text}",
         kind="intervention",
         meta={"bridge_id": bridge.bridge_id, "pending_id": msg.id, "to_pane": msg.to_pane},
+        source_type="bridge",
+        source_role="intervention",
+        trusted=True,
     )
+
+
+def _maybe_rearm_auto_forward_guard(bridge: Bridge) -> None:
+    if not bridge.auto_forward_guard()["blocked"]:
+        return
+    if bridge.intervention_layer.list_pending():
+        return
+    bridge.rearm_auto_forward_guard()
 
 
 def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -462,6 +578,9 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
         author=str(args.get("author", "user")),
         text=str(args["text"]),
         kind=str(args.get("kind", "chat")),
+        source_type="client",
+        source_role="external",
+        trusted=False,
     )
     # Optionally deliver to a bridge pane
     deliver = args.get("deliver")
@@ -623,6 +742,7 @@ def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
             delivered.append({"id": msg.id, "to_pane": msg.to_pane})
         except Exception as exc:
             errors.append({"id": msg.id, "error": str(exc)})
+    _maybe_rearm_auto_forward_guard(bridge)
 
     return {
         "bridge_id": bridge_id,
@@ -656,6 +776,9 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
             text=f"[rejected #{msg.id}] {msg.text}",
             kind="intervention",
             meta={"bridge_id": bridge.bridge_id, "pending_id": msg.id, "to_pane": msg.to_pane},
+            source_type="bridge",
+            source_role="intervention",
+            trusted=True,
         )
         rejected = 1
     if rejected and (mid == "all" or mid is None):
@@ -664,7 +787,11 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
             text=f"[rejected {rejected} pending message(s)]",
             kind="intervention",
             meta={"bridge_id": bridge.bridge_id},
+            source_type="bridge",
+            source_role="intervention",
+            trusted=True,
         )
+    _maybe_rearm_auto_forward_guard(bridge)
 
     return {
         "bridge_id": bridge_id,
@@ -701,6 +828,9 @@ def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
                 text=f"[interrupt -> {pane}] ^C",
                 kind="system",
                 meta={"bridge_id": bridge.bridge_id, "pane": pane},
+                source_type="bridge",
+                source_role="control",
+                trusted=True,
             )
             sent.append(pane)
         except Exception as exc:

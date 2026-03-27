@@ -24,9 +24,23 @@ python -m tb2 doctor
 
 請先看這幾個區塊：
 
+- `Readiness`：backend、transport、first-class client 是否真的達到可用狀態
+- `Validation snapshot`：哪些能力是 runtime 實跑驗證、哪些只是測試模擬
 - `Backends`：這台機器實際能跑哪些 backend
 - `Supported CLI tools`：哪些 first-class client 已存在於 `PATH`
 - `recommended_backend`：TB2 目前會自動選哪個預設 backend
+
+健康狀態下，輸出大致會像這樣：
+
+```text
+Readiness:
+  - backend=ready  clients=ready  transport=ready
+Validation snapshot:
+  - linux_runtime: executed locally  full pytest suite passed in the current workspace
+Next steps:
+  - Use `tmux` as the default backend on this machine.
+  - Run `python -m tb2 init --session demo` before opening GUI, broker, or MCP flows.
+```
 
 ## 3. 選對 backend 路徑
 

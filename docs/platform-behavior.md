@@ -8,7 +8,7 @@ Recorded on March 27, 2026.
 
 | Area | Validation mode | Current note |
 | --- | --- | --- |
-| Linux runtime | executed locally | full pytest suite passed: `277 passed` |
+| Linux runtime | executed locally | full pytest suite passed: `288 passed` |
 | `tmux` workflow | executed locally | end-to-end tests passed in the current Linux environment |
 | Windows backend and shell policy | simulated by targeted tests | shell argv, fallback backend policy, remote-control handoff rules covered |
 | macOS state-path and backend fallback policy | simulated by targeted tests | XDG precedence, legacy state preservation, POSIX shell behavior covered |

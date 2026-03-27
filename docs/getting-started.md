@@ -24,9 +24,23 @@ python -m tb2 doctor
 
 Check these sections first:
 
+- `Readiness`: whether backend, transport, and first-class client setup are actually ready
+- `Validation snapshot`: what TB2 behavior was runtime-validated vs simulated in tests
 - `Backends`: which backend can actually run on this machine
 - `Supported CLI tools`: which first-class clients are available in `PATH`
 - `recommended_backend`: what TB2 will choose by default
+
+Typical healthy output now looks like:
+
+```text
+Readiness:
+  - backend=ready  clients=ready  transport=ready
+Validation snapshot:
+  - linux_runtime: executed locally  full pytest suite passed in the current workspace
+Next steps:
+  - Use `tmux` as the default backend on this machine.
+  - Run `python -m tb2 init --session demo` before opening GUI, broker, or MCP flows.
+```
 
 ## 3. Pick the backend path
 

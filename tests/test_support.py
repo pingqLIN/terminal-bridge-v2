@@ -36,12 +36,25 @@ class TestDoctorReport:
         assert report["clients"]
         assert "profiles" in report
         assert "recommended_backend" in report
+        assert report["validation_snapshot"]
+        assert report["readiness"]["transport"] == "ready"
+        assert report["next_steps"]
 
     def test_render_doctor_contains_sections(self):
         text = render_doctor({
             "platform": "Windows",
             "python": "3.11.0",
             "recommended_backend": "process",
+            "validation_snapshot": [{
+                "area": "linux_runtime",
+                "mode": "executed locally",
+                "note": "full pytest suite passed",
+            }],
+            "readiness": {
+                "backend": "ready",
+                "clients": "ready",
+                "transport": "ready",
+            },
             "backends": [{"name": "process", "available": True, "detail": "ok"}],
             "clients": [{
                 "profile": "codex",
@@ -51,8 +64,12 @@ class TestDoctorReport:
                 "detail": "1.0.0",
             }],
             "recommended_clients": ["codex"],
+            "next_steps": ["Use `process`.", "Run `python -m tb2 init --session demo`."],
         })
+        assert "Readiness:" in text
+        assert "Validation snapshot:" in text
         assert "Backends:" in text
         assert "Transports:" in text
         assert "Supported CLI tools:" in text
         assert "Ready-to-use profiles: codex" in text
+        assert "Next steps:" in text

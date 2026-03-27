@@ -8,7 +8,7 @@
 
 | 範圍 | 驗證方式 | 目前說明 |
 | --- | --- | --- |
-| Linux runtime | 本機實際執行 | 完整 pytest suite 通過：`277 passed` |
+| Linux runtime | 本機實際執行 | 完整 pytest suite 通過：`288 passed` |
 | `tmux` workflow | 本機實際執行 | 目前 Linux 環境的 end-to-end tests 通過 |
 | Windows backend 與 shell policy | 針對性測試模擬 | 已涵蓋 shell argv、fallback backend policy、remote-control handoff 規則 |
 | macOS state path 與 backend fallback policy | 針對性測試模擬 | 已涵蓋 XDG precedence、legacy state 保留與 POSIX shell 行為 |
