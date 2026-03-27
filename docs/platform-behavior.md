@@ -4,11 +4,11 @@ This document records what TB2 behavior has been validated on real runtime, what
 
 ## Validation Snapshot
 
-Recorded on March 13, 2026.
+Recorded on March 27, 2026.
 
 | Area | Validation mode | Current note |
 | --- | --- | --- |
-| Linux runtime | executed locally | full pytest suite passed: `245 passed` |
+| Linux runtime | executed locally | full pytest suite passed: `277 passed` |
 | `tmux` workflow | executed locally | end-to-end tests passed in the current Linux environment |
 | Windows backend and shell policy | simulated by targeted tests | shell argv, fallback backend policy, remote-control handoff rules covered |
 | macOS state-path and backend fallback policy | simulated by targeted tests | XDG precedence, legacy state preservation, POSIX shell behavior covered |

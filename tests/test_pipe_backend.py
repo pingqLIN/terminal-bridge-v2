@@ -45,6 +45,7 @@ class TestPipeBackend:
     def test_init_session(self, mock_thread, mock_popen):
         mock_proc = MagicMock()
         mock_proc.stdout.__iter__ = MagicMock(return_value=iter([]))
+        mock_proc.poll.return_value = None
         mock_popen.return_value = mock_proc
         mock_thread.return_value = MagicMock()
 
@@ -56,8 +57,46 @@ class TestPipeBackend:
 
     @patch("tb2.pipe_backend.subprocess.Popen")
     @patch("tb2.pipe_backend.threading.Thread")
+    def test_init_session_is_idempotent(self, mock_thread, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.stdout.__iter__ = MagicMock(return_value=iter([]))
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        mock_thread.return_value = MagicMock()
+
+        backend = PipeBackend(shell="/bin/bash")
+        assert backend.init_session("demo") == ("demo:a", "demo:b")
+        assert backend.init_session("demo") == ("demo:a", "demo:b")
+        assert mock_popen.call_count == 2
+
+    @patch("tb2.pipe_backend.subprocess.Popen")
+    @patch("tb2.pipe_backend.threading.Thread")
+    def test_init_session_respawns_dead_process(self, mock_thread, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.stdout.__iter__ = MagicMock(return_value=iter([]))
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+        mock_thread.return_value = MagicMock()
+
+        backend = PipeBackend(shell="/bin/bash")
+        dead_proc = MagicMock()
+        dead_proc.poll.return_value = 0
+        backend._procs["demo:a"] = type("DeadProc", (), {
+            "target": "demo:a",
+            "proc": dead_proc,
+            "buf": _LineBuffer(),
+            "alive": False,
+        })()
+
+        assert backend.init_session("demo") == ("demo:a", "demo:b")
+        assert mock_popen.call_count == 2
+
+    @patch("tb2.pipe_backend.subprocess.Popen")
+    @patch("tb2.pipe_backend.threading.Thread")
     def test_has_session(self, mock_thread, mock_popen):
-        mock_popen.return_value = MagicMock()
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
         mock_thread.return_value = MagicMock()
 
         backend = PipeBackend(shell="/bin/bash")
@@ -65,16 +104,44 @@ class TestPipeBackend:
         assert backend.has_session("demo") is True
         assert backend.has_session("other") is False
 
+    def test_has_session_prunes_dead_process(self):
+        backend = PipeBackend(shell="/bin/bash")
+        dead = type("DeadProc", (), {
+            "target": "demo:a",
+            "proc": MagicMock(),
+            "buf": _LineBuffer(),
+            "alive": False,
+        })()
+        backend._procs["demo:a"] = dead
+
+        assert backend.has_session("demo") is False
+        assert "demo:a" not in backend._procs
+
     @patch("tb2.pipe_backend.subprocess.Popen")
     @patch("tb2.pipe_backend.threading.Thread")
     def test_list_panes(self, mock_thread, mock_popen):
-        mock_popen.return_value = MagicMock()
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
         mock_thread.return_value = MagicMock()
 
         backend = PipeBackend(shell="/bin/bash")
         backend.init_session("demo")
         panes = backend.list_panes("demo")
         assert len(panes) == 2
+
+    def test_list_panes_omits_dead_process(self):
+        backend = PipeBackend(shell="/bin/bash")
+        dead = type("DeadProc", (), {
+            "target": "demo:a",
+            "proc": MagicMock(),
+            "buf": _LineBuffer(),
+            "alive": False,
+        })()
+        backend._procs["demo:a"] = dead
+
+        assert backend.list_panes("demo") == []
+        assert "demo:a" not in backend._procs
 
     def test_capture_not_found(self):
         backend = PipeBackend(shell="/bin/bash")
@@ -88,6 +155,7 @@ class TestPipeBackend:
         mock_stdin = MagicMock()
         mock_proc = MagicMock()
         mock_proc.stdin = mock_stdin
+        mock_proc.poll.return_value = None
         mock_popen.return_value = mock_proc
         mock_thread.return_value = MagicMock()
 

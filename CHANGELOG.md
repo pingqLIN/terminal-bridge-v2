@@ -6,6 +6,15 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ## [Unreleased]
 
+### Added
+- Traditional Chinese review, release-objection, remediation, and external-review planning docs for the current hardening pass.
+- Regression coverage for dead-process pruning in `process` / `pipe` session views and duplicate `bridge_start` room reuse.
+
+### Changed
+- Local HTTP, SSE, and WebSocket control surfaces now enforce localhost-only `Origin` checks and safer request parsing.
+- `process` and `pipe` backends now prune dead child state from `has_session()` and `list_panes()` results.
+- Bridge startup and polling paths were tightened to avoid stale room creation and per-line latency amplification during burst output.
+
 ## [0.2.0] - 2026-03-26
 
 ### Added

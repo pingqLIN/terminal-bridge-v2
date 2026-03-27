@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import socket
 import struct
 import threading
@@ -25,7 +26,7 @@ from .osutils import default_backend_name
 from .profile import get_profile, list_profiles, strip_ansi
 from .support import doctor_report
 from .gui import build_gui_html
-from .room import Room, RoomMessage, RoomSubscription, cleanup_stale, create_room, delete_room, get_room, list_rooms
+from .room import Room, RoomMessage, RoomSubscription, cleanup_stale, create_room, delete_room, get_room, list_rooms, validate_room_id
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +91,8 @@ class Bridge:
 
             self._process_new_lines("A", self.pane_a, self.pane_b, new_a, profile)
             self._process_new_lines("B", self.pane_b, self.pane_a, new_b, profile)
+            if self.stop.wait(timeout=self._current_poll / 1000.0):
+                break
 
     def _process_new_lines(self, tag: str, from_pane: str, to_pane: str,
                            new_lines: list, profile: Any) -> None:
@@ -132,8 +135,6 @@ class Bridge:
                             },
                         )
 
-            time.sleep(max(0.05, self._current_poll / 1000.0))
-
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -146,6 +147,14 @@ _transport_lock = threading.Lock()
 _sse_subscribers: Dict[str, int] = {}
 _ws_subscribers: Dict[str, int] = {}
 _ws_clients = 0
+
+_MAX_BODY_BYTES = 4 * 1024 * 1024
+_HTTP_READ_TIMEOUT_SECONDS = 5.0
+_MAX_STREAM_LIMIT = 1000
+_MAX_CAPTURE_LINES = 5000
+_MAX_POLL_MS = 60000
+_LOCAL_ORIGIN_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_BRIDGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
 
 # ---------------------------------------------------------------------------
@@ -172,15 +181,60 @@ _cleanup_thread.start()
 # Tool handlers
 # ---------------------------------------------------------------------------
 
-_backend_cache: Dict[str, TerminalBackend] = {}
+_backend_cache: Dict[Tuple[str, str, str, str], TerminalBackend] = {}
 _backend_cache_lock = threading.Lock()
 
 
+def _parse_int(
+    raw: Any,
+    *,
+    name: str,
+    default: Optional[int] = None,
+    minimum: Optional[int] = None,
+    maximum: Optional[int] = None,
+) -> int:
+    if raw in (None, ""):
+        if default is not None:
+            value = default
+        else:
+            raise ValueError(f"{name} is required")
+    else:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{name} must be an integer") from exc
+    if minimum is not None and value < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    if maximum is not None and value > maximum:
+        raise ValueError(f"{name} must be <= {maximum}")
+    return value
+
+
+def _validate_bridge_id(raw: Any) -> str:
+    bridge_id = str(raw).strip()
+    if not _BRIDGE_ID_RE.fullmatch(bridge_id):
+        raise ValueError("invalid bridge_id")
+    return bridge_id
+
+
+def _origin_allowed(origin: str) -> bool:
+    text = origin.strip()
+    if not text:
+        return True
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").lower()
+    return host in _LOCAL_ORIGIN_HOSTS
+
+
 def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
-    """Get or create a backend instance. Cached by (kind, backend_id)."""
+    """Get or create a backend instance. Cached by backend configuration."""
     kind = str(args.get("backend") or default_backend_name())
     backend_id = str(args.get("backend_id", "default"))
-    key = f"{kind}:{backend_id}"
+    shell = str(args.get("shell", "")) if kind in {"process", "pipe"} else ""
+    distro = str(args.get("distro", "")) if kind == "tmux" else ""
+    key = (kind, backend_id, shell, distro)
 
     with _backend_cache_lock:
         if key in _backend_cache:
@@ -188,14 +242,14 @@ def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
 
         if kind == "process":
             from .process_backend import ProcessBackend
-            b: TerminalBackend = ProcessBackend(shell=str(args.get("shell", "")))
+            b: TerminalBackend = ProcessBackend(shell=shell)
         elif kind == "pipe":
             from .pipe_backend import PipeBackend
-            b = PipeBackend(shell=str(args.get("shell", "")))
+            b = PipeBackend(shell=shell)
         else:
             kwargs = {}
-            if "distro" in args:
-                kwargs["distro"] = args["distro"]
+            if distro:
+                kwargs["distro"] = distro
             b = TmuxBackend(**kwargs)
 
         _backend_cache[key] = b
@@ -223,12 +277,21 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
 def _resolve_bridge(args: Dict[str, Any]) -> Tuple[Optional[str], Optional[Bridge], Optional[Dict[str, Any]]]:
     requested_bridge_id = str(args.get("bridge_id", "") or "").strip()
     if requested_bridge_id:
+        try:
+            requested_bridge_id = _validate_bridge_id(requested_bridge_id)
+        except ValueError as exc:
+            return None, None, {"error": str(exc)}
         bridge = _get_bridge(requested_bridge_id)
         if bridge:
             return requested_bridge_id, bridge, None
         return None, None, {"error": "bridge not found"}
 
     requested_room_id = str(args.get("room_id", "") or "").strip()
+    if requested_room_id:
+        try:
+            requested_room_id = validate_room_id(requested_room_id)
+        except ValueError as exc:
+            return None, None, {"error": str(exc)}
     with _bridges_lock:
         items = list(_bridges.items())
 
@@ -344,7 +407,10 @@ def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
 def handle_terminal_capture(args: Dict[str, Any]) -> Dict[str, Any]:
     backend = _make_backend(args)
     target = str(args["target"])
-    lines = int(args.get("lines", 200))
+    try:
+        lines = _parse_int(args.get("lines"), name="lines", default=200, minimum=1, maximum=_MAX_CAPTURE_LINES)
+    except ValueError as exc:
+        return {"error": str(exc)}
     captured = backend.capture(target, lines)
     return {"lines": captured, "count": len(captured)}
 
@@ -360,19 +426,23 @@ def handle_terminal_send(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def handle_room_create(args: Dict[str, Any]) -> Dict[str, Any]:
     room_id = args.get("room_id")
-    room = create_room(room_id)
+    try:
+        room = create_room(str(room_id) if room_id is not None else None)
+    except ValueError as exc:
+        return {"error": str(exc)}
     return {"room_id": room.room_id}
 
 
 def handle_room_poll(args: Dict[str, Any]) -> Dict[str, Any]:
-    room = get_room(str(args["room_id"]))
+    try:
+        room_id = validate_room_id(str(args["room_id"]))
+        after_id = _parse_int(args.get("after_id"), name="after_id", default=0, minimum=0)
+        limit = _parse_int(args.get("limit"), name="limit", default=50, minimum=1, maximum=_MAX_STREAM_LIMIT)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    room = get_room(room_id)
     if not room:
         return {"error": "room not found"}
-    try:
-        after_id = int(args.get("after_id", 0))
-        limit = int(args.get("limit", 50))
-    except (ValueError, TypeError):
-        return {"error": "after_id and limit must be integers"}
     msgs = room.poll(after_id=after_id, limit=limit)
     return {
         "messages": [_room_message_payload(room, m) for m in msgs],
@@ -381,7 +451,11 @@ def handle_room_poll(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
-    room = get_room(str(args["room_id"]))
+    try:
+        room_id = validate_room_id(str(args["room_id"]))
+    except ValueError as exc:
+        return {"error": str(exc)}
+    room = get_room(room_id)
     if not room:
         return {"error": "room not found"}
     msg = room.post(
@@ -424,18 +498,31 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
     backend = _make_backend(args)
     pane_a = str(args["pane_a"])
     pane_b = str(args["pane_b"])
-    requested_room_id = str(args.get("room_id", "")).strip()
-    requested_bridge_id = str(args.get("bridge_id", "")).strip()
-    room = create_room(requested_room_id) if requested_room_id else create_room()
+    try:
+        requested_room_id = str(args.get("room_id", "")).strip()
+        if requested_room_id:
+            requested_room_id = validate_room_id(requested_room_id)
+        requested_bridge_id = str(args.get("bridge_id", "")).strip()
+        if requested_bridge_id:
+            requested_bridge_id = _validate_bridge_id(requested_bridge_id)
+        poll_ms = _parse_int(args.get("poll_ms"), name="poll_ms", default=400, minimum=10, maximum=_MAX_POLL_MS)
+        lines = _parse_int(args.get("lines"), name="lines", default=200, minimum=1, maximum=_MAX_CAPTURE_LINES)
+    except ValueError as exc:
+        return {"error": str(exc)}
     bridge_id = requested_bridge_id or uuid.uuid4().hex[:12]
     profile_name = str(args.get("profile", "generic"))
-    poll_ms = int(args.get("poll_ms", 400))
-    lines = int(args.get("lines", 200))
 
     with _bridges_lock:
         if requested_bridge_id and requested_bridge_id in _bridges:
             existing = _bridges[requested_bridge_id]
             if existing.backend is backend and existing.pane_a == pane_a and existing.pane_b == pane_b:
+                if requested_room_id and existing.room.room_id != requested_room_id:
+                    return {
+                        "error": (
+                            f"bridge_id {requested_bridge_id} already maps to room "
+                            f"{existing.room.room_id}, not {requested_room_id}"
+                        )
+                    }
                 return {"bridge_id": existing.bridge_id, "room_id": existing.room.room_id, "existing": True}
             return {"error": f"bridge_id already exists: {requested_bridge_id}"}
 
@@ -457,6 +544,7 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         backend.capture_both(pane_a, pane_b, lines)
     except Exception as exc:
         return {"error": f"bridge preflight failed: {exc}"}
+    room = create_room(requested_room_id) if requested_room_id else create_room()
 
     bridge = Bridge(
         bridge_id=bridge_id,
@@ -478,7 +566,10 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id = str(args["bridge_id"])
+    try:
+        bridge_id = _validate_bridge_id(args["bridge_id"])
+    except ValueError as exc:
+        return {"error": str(exc)}
     with _bridges_lock:
         bridge = _bridges.pop(bridge_id, None)
     if bridge:
@@ -814,14 +905,24 @@ def _json_bytes(payload: Any) -> bytes:
     return json.dumps(payload).encode("utf-8")
 
 
-def _parse_room_stream_request(path: str, query: str) -> Tuple[Optional[str], int, int]:
+def _parse_room_stream_request(path: str, query: str) -> Tuple[Optional[str], int, int, Optional[str]]:
     if not path.startswith("/rooms/") or not path.endswith("/stream"):
-        return None, 0, 0
-    room_id = unquote(path[len("/rooms/"):-len("/stream")]).strip("/")
+        return None, 0, 0, None
+    raw_room_id = unquote(path[len("/rooms/"):-len("/stream")]).strip("/")
     params = parse_qs(query)
-    after_id = int(params.get("after_id", ["0"])[0] or 0)
-    backlog_limit = int(params.get("limit", ["200"])[0] or 200)
-    return room_id, after_id, backlog_limit
+    try:
+        room_id = validate_room_id(raw_room_id)
+        after_id = _parse_int(params.get("after_id", ["0"])[0], name="after_id", default=0, minimum=0)
+        backlog_limit = _parse_int(
+            params.get("limit", ["200"])[0],
+            name="limit",
+            default=200,
+            minimum=1,
+            maximum=_MAX_STREAM_LIMIT,
+        )
+    except ValueError as exc:
+        return raw_room_id, 0, 0, str(exc)
+    return room_id, after_id, backlog_limit, None
 
 
 def _sse_bytes(event_name: str, payload: Dict[str, Any], *, event_id: Optional[str] = None) -> bytes:
@@ -922,11 +1023,20 @@ class MCPHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
-        room_id, after_id, backlog_limit = _parse_room_stream_request(path, parsed.query)
+        room_id, after_id, backlog_limit, stream_error = _parse_room_stream_request(path, parsed.query)
         if room_id is not None:
+            if not _origin_allowed(self.headers.get("Origin", "")):
+                self._reply(403, {"error": "forbidden origin"})
+                return
+            if stream_error:
+                self._reply(400, {"error": stream_error})
+                return
             self._serve_room_sse(room_id, after_id=after_id, backlog_limit=backlog_limit)
             return
         if path == "/ws":
+            if not _origin_allowed(self.headers.get("Origin", "")):
+                self._reply(403, {"error": "forbidden origin"})
+                return
             self._serve_websocket()
             return
         code, content_type, body = _handle_get_path(path)
@@ -937,9 +1047,31 @@ class MCPHandler(BaseHTTPRequestHandler):
         if path != "/mcp":
             self._reply(404, {"error": "not found", "path": path})
             return
+        if not _origin_allowed(self.headers.get("Origin", "")):
+            self._reply(403, {"error": "forbidden origin"})
+            return
 
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length)
+        raw_length = self.headers.get("Content-Length")
+        try:
+            length = _parse_int(raw_length, name="Content-Length", minimum=0)
+        except ValueError as exc:
+            self._reply(400, {"error": str(exc)})
+            return
+        if length > _MAX_BODY_BYTES:
+            self._reply(413, {"error": "request too large", "max_bytes": _MAX_BODY_BYTES})
+            return
+        try:
+            self.connection.settimeout(_HTTP_READ_TIMEOUT_SECONDS)
+            body = self.rfile.read(length)
+        except socket.timeout:
+            self._reply(408, {"error": "request body read timed out"})
+            return
+        except OSError:
+            self._reply(400, {"error": "failed to read request body"})
+            return
+        if len(body) != length:
+            self._reply(400, {"error": "incomplete request body"})
+            return
         try:
             req = json.loads(body)
         except json.JSONDecodeError:
@@ -1206,12 +1338,23 @@ class MCPHandler(BaseHTTPRequestHandler):
             if not room_id:
                 self._ws_send({"type": "error", "error": "room_id is required", "action": action})
                 return
+            try:
+                room_id = validate_room_id(room_id)
+                after_id = _parse_int(message.get("after_id"), name="after_id", default=0, minimum=0)
+                backlog_limit = _parse_int(
+                    message.get("limit"),
+                    name="limit",
+                    default=200,
+                    minimum=1,
+                    maximum=_MAX_STREAM_LIMIT,
+                )
+            except ValueError as exc:
+                self._ws_send({"type": "error", "error": str(exc), "action": action})
+                return
             room = get_room(room_id)
             if not room:
                 self._ws_send({"type": "error", "error": "room not found", "room_id": room_id, "action": action})
                 return
-            after_id = int(message.get("after_id", 0))
-            backlog_limit = int(message.get("limit", 200))
             existing = subscriptions.pop(room_id, None)
             if existing is not None:
                 existing.close()

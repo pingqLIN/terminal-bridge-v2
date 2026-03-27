@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import socket
 import subprocess
 import threading
 import time
@@ -16,6 +17,14 @@ pytestmark = pytest.mark.e2e
 
 TMUX_AVAILABLE = shutil.which("tmux") is not None
 skip_no_tmux = pytest.mark.skipif(not TMUX_AVAILABLE, reason="tmux not installed")
+
+
+def _free_port() -> int:
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = int(sock.getsockname()[1])
+    sock.close()
+    return port
 
 
 @pytest.fixture
@@ -79,13 +88,18 @@ class TestMCPServerE2E:
 
     def test_server_tools_list(self):
         from tb2.server import run_server
-        port = 13189
+        port = _free_port()
 
         server_thread = threading.Thread(
             target=run_server, args=("127.0.0.1", port), daemon=True
         )
         server_thread.start()
-        time.sleep(0.5)
+        for _ in range(10):
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=0.5):
+                    break
+            except Exception:
+                time.sleep(0.1)
 
         result = self._rpc(port, "tools/list", {})
         tools = result["result"]["tools"]

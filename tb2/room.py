@@ -10,7 +10,18 @@ import time
 from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field
+import re
 from typing import Any, Deque, Dict, List, Optional
+
+
+_ROOM_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
+def validate_room_id(room_id: str) -> str:
+    rid = str(room_id).strip()
+    if not _ROOM_ID_RE.fullmatch(rid):
+        raise ValueError("invalid room_id")
+    return rid
 
 
 @dataclass
@@ -171,7 +182,7 @@ _rooms: Dict[str, Room] = {}
 
 def create_room(room_id: Optional[str] = None, *, max_messages: int = 2000) -> Room:
     import uuid
-    rid = room_id or uuid.uuid4().hex[:12]
+    rid = validate_room_id(room_id) if room_id else uuid.uuid4().hex[:12]
     with _rooms_lock:
         if rid in _rooms:
             return _rooms[rid]

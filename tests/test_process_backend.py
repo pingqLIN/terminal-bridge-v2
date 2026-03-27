@@ -68,9 +68,11 @@ class TestAnsiRegex:
 def _make_managed_process(target="test:a"):
     """Helper to create a ManagedProcess without real subprocess."""
     buf = PaneBuffer()
+    proc = MagicMock()
+    proc.poll.return_value = None
     return ManagedProcess(
         name=target,
-        proc=MagicMock(),
+        proc=proc,
         buffer=buf,
         write_fn=MagicMock(),
     )
@@ -98,6 +100,36 @@ class TestProcessBackend:
         assert b == "test:b"
         assert backend._spawn.call_count == 2
 
+    def test_init_session_is_idempotent(self):
+        backend = ProcessBackend(shell="/bin/bash")
+
+        def mock_spawn(target, spec):
+            mp = _make_managed_process(target)
+            backend._procs[target] = mp
+            return mp
+
+        backend._spawn = MagicMock(side_effect=mock_spawn)
+        assert backend.init_session("demo") == ("demo:a", "demo:b")
+        assert backend.init_session("demo") == ("demo:a", "demo:b")
+        assert backend._spawn.call_count == 2
+
+    def test_init_session_respawns_dead_process(self):
+        backend = ProcessBackend(shell="/bin/bash")
+        dead = _make_managed_process("demo:a")
+        dead.alive = False
+        backend._procs["demo:a"] = dead
+        spawned = []
+
+        def mock_spawn(target, spec):
+            mp = _make_managed_process(target)
+            backend._procs[target] = mp
+            spawned.append(target)
+            return mp
+
+        backend._spawn = MagicMock(side_effect=mock_spawn)
+        assert backend.init_session("demo") == ("demo:a", "demo:b")
+        assert spawned == ["demo:a", "demo:b"]
+
     def test_has_session(self):
         backend = ProcessBackend(shell="/bin/bash")
         def mock_spawn(t, s):
@@ -109,6 +141,15 @@ class TestProcessBackend:
         assert backend.has_session("demo") is True
         assert backend.has_session("other") is False
 
+    def test_has_session_prunes_dead_process(self):
+        backend = ProcessBackend(shell="/bin/bash")
+        dead = _make_managed_process("demo:a")
+        dead.alive = False
+        backend._procs["demo:a"] = dead
+
+        assert backend.has_session("demo") is False
+        assert "demo:a" not in backend._procs
+
     def test_list_panes(self):
         backend = ProcessBackend(shell="/bin/bash")
         def mock_spawn(t, s):
@@ -119,6 +160,15 @@ class TestProcessBackend:
         backend.init_session("demo")
         panes = backend.list_panes("demo")
         assert len(panes) == 2
+
+    def test_list_panes_omits_dead_process(self):
+        backend = ProcessBackend(shell="/bin/bash")
+        dead = _make_managed_process("demo:a")
+        dead.alive = False
+        backend._procs["demo:a"] = dead
+
+        assert backend.list_panes("demo") == []
+        assert "demo:a" not in backend._procs
 
     def test_capture(self):
         backend = ProcessBackend(shell="/bin/bash")

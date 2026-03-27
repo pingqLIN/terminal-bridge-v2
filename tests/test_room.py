@@ -3,6 +3,8 @@
 import time
 from unittest.mock import patch
 
+import pytest
+
 from tb2.room import Room, create_room, delete_room, get_room, list_rooms, cleanup_stale
 
 
@@ -104,6 +106,10 @@ class TestRoomRegistry:
     def test_create_room_auto_id(self):
         room = create_room()
         assert len(room.room_id) == 12
+
+    def test_create_room_invalid_id_raises(self):
+        with pytest.raises(ValueError, match="invalid room_id"):
+            create_room("bad room id")
 
     def test_create_room_idempotent(self):
         r1 = create_room("same")

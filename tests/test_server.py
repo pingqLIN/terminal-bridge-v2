@@ -1,12 +1,14 @@
 """Tests for tb2.server — MCP handler functions."""
 
+import io
 import json
+import socket
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 import tb2.server as server_mod
-from tb2.room import create_room, get_room
+from tb2.room import create_room, get_room, list_rooms
 
 
 @pytest.fixture(autouse=True)
@@ -54,12 +56,31 @@ class TestMakeBackend:
         b2 = server_mod._make_backend({"backend": "tmux", "backend_id": "b"})
         assert b1 is not b2
 
+    def test_process_backend_cache_includes_shell(self):
+        b1 = server_mod._make_backend({"backend": "process", "backend_id": "same", "shell": "/bin/bash"})
+        b2 = server_mod._make_backend({"backend": "process", "backend_id": "same", "shell": "/bin/sh"})
+        assert b1 is not b2
+
+    def test_tmux_backend_cache_includes_distro(self):
+        b1 = server_mod._make_backend({"backend": "tmux", "backend_id": "same", "distro": "Ubuntu"})
+        b2 = server_mod._make_backend({"backend": "tmux", "backend_id": "same", "distro": "Debian"})
+        assert b1 is not b2
+
+    def test_backend_cache_avoids_colon_collision(self):
+        b1 = server_mod._make_backend({"backend": "process", "backend_id": "a:b", "shell": "c"})
+        b2 = server_mod._make_backend({"backend": "process", "backend_id": "a", "shell": "b:c"})
+        assert b1 is not b2
+
 
 class TestRoomHandlers:
     def test_room_create(self):
         result = server_mod.handle_room_create({"room_id": "test-r"})
         assert result["room_id"] == "test-r"
         assert get_room("test-r") is not None
+
+    def test_room_create_rejects_invalid_id(self):
+        result = server_mod.handle_room_create({"room_id": "bad room"})
+        assert result["error"] == "invalid room_id"
 
     def test_room_poll(self):
         room = create_room("poll-test")
@@ -75,7 +96,7 @@ class TestRoomHandlers:
     def test_room_poll_invalid_params(self):
         create_room("bad-params")
         result = server_mod.handle_room_poll({"room_id": "bad-params", "after_id": "abc"})
-        assert "error" in result
+        assert result["error"] == "after_id must be an integer"
 
     def test_room_post(self):
         create_room("post-test")
@@ -242,6 +263,32 @@ class TestBridgeHandlers:
         assert "error" in result
 
     @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_rejects_invalid_room_id(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        result = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "bad room",
+        })
+        assert result["error"] == "invalid room_id"
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_rejects_invalid_bridge_id(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        result = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "bridge_id": "bad bridge",
+        })
+        assert result["error"] == "invalid bridge_id"
+
+    @patch.object(server_mod, "_make_backend")
     def test_bridge_start_honors_requested_room_id(self, mock_factory):
         mock_backend = MagicMock()
         mock_backend.capture_both.return_value = ([], [])
@@ -283,6 +330,57 @@ class TestBridgeHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "br-first"})
 
     @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_same_panes_does_not_create_extra_room(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        first = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "same-room",
+            "bridge_id": "br-first",
+        })
+        before = sorted(room.room_id for room in list_rooms())
+
+        second = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+        })
+        after = sorted(room.room_id for room in list_rooms())
+
+        assert second["existing"] is True
+        assert second["bridge_id"] == first["bridge_id"]
+        assert after == before
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-first"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_same_panes_without_room_id_does_not_create_orphan_room(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        first = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "bridge_id": "br-auto-room",
+        })
+        before = {room.room_id for room in server_mod.list_rooms()}
+
+        second = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+        })
+        after = {room.room_id for room in server_mod.list_rooms()}
+
+        assert second["existing"] is True
+        assert second["bridge_id"] == first["bridge_id"]
+        assert after == before
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-auto-room"})
+
+    @patch.object(server_mod, "_make_backend")
     def test_bridge_start_same_panes_conflicting_room_errors(self, mock_factory):
         mock_backend = MagicMock()
         mock_backend.capture_both.return_value = ([], [])
@@ -304,6 +402,29 @@ class TestBridgeHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "br-conflict"})
 
     @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_existing_bridge_id_rejects_conflicting_room(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "room-a",
+            "bridge_id": "br-room-match",
+        })
+        result = server_mod.handle_bridge_start({
+            "pane_a": "test:a",
+            "pane_b": "test:b",
+            "room_id": "room-b",
+            "bridge_id": "br-room-match",
+        })
+
+        assert result["error"] == "bridge_id br-room-match already maps to room room-a, not room-b"
+
+        server_mod.handle_bridge_stop({"bridge_id": "br-room-match"})
+
+    @patch.object(server_mod, "_make_backend")
     def test_bridge_start_preflight_failure_returns_error(self, mock_factory):
         mock_backend = MagicMock()
         mock_backend.capture_both.side_effect = RuntimeError("capture failed")
@@ -315,6 +436,7 @@ class TestBridgeHandlers:
             "room_id": "broken-room",
         })
         assert result["error"] == "bridge preflight failed: capture failed"
+        assert get_room("broken-room") is None
 
     def test_bridge_process_new_lines_deduplicates_forwarded_messages(self):
         backend = MagicMock()
@@ -341,6 +463,53 @@ class TestBridgeHandlers:
         )
 
         backend.send.assert_called_once_with("test:b", "echo HELLO", enter=True)
+
+    def test_bridge_worker_waits_once_per_cycle(self):
+        backend = MagicMock()
+        backend.capture_both.side_effect = [
+            ([], []),
+            (["MSG:echo HELLO", "plain"], []),
+            server_mod.TmuxError("stop"),
+        ]
+        room = create_room("bridge-sleep")
+        bridge = server_mod.Bridge(
+            bridge_id="br-sleep",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=False,
+            poll_ms=400,
+        )
+        bridge.stop.wait = MagicMock(return_value=False)
+
+        bridge.worker()
+
+        bridge.stop.wait.assert_called_once_with(timeout=0.1)
+
+    def test_bridge_worker_backoff_when_idle(self):
+        backend = MagicMock()
+        backend.capture_both.side_effect = [
+            ([], []),
+            ([], []),
+            ([], []),
+        ]
+        room = create_room("bridge-backoff")
+        bridge = server_mod.Bridge(
+            bridge_id="br-backoff",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=False,
+            poll_ms=400,
+        )
+        bridge.stop.wait = MagicMock(side_effect=[False, True])
+
+        bridge.worker()
+
+        waits = [call.kwargs["timeout"] for call in bridge.stop.wait.call_args_list]
+        assert waits == [0.6, 0.9]
 
 
 class TestInterventionHandlers:
@@ -671,3 +840,104 @@ class TestHttpReplies:
         handler.send_header.assert_any_call("Content-Length", "2")
         handler.end_headers.assert_called_once_with()
         handler.wfile.write.assert_called_once_with(b"ok")
+
+
+class TestValidationHelpers:
+    def test_origin_allowed_accepts_localhost(self):
+        assert server_mod._origin_allowed("http://127.0.0.1:3189")
+        assert server_mod._origin_allowed("https://localhost")
+        assert server_mod._origin_allowed("")
+
+    def test_origin_allowed_rejects_non_local(self):
+        assert not server_mod._origin_allowed("https://evil.example")
+        assert not server_mod._origin_allowed("null")
+
+    def test_parse_room_stream_request_rejects_invalid_params(self):
+        room_id, after_id, limit, error = server_mod._parse_room_stream_request(
+            "/rooms/bad room/stream",
+            "after_id=abc&limit=200",
+        )
+        assert room_id == "bad room"
+        assert after_id == 0
+        assert limit == 0
+        assert error == "invalid room_id"
+
+    def test_parse_room_stream_request_accepts_valid_params(self):
+        room_id, after_id, limit, error = server_mod._parse_room_stream_request(
+            "/rooms/demo-room/stream",
+            "after_id=4&limit=20",
+        )
+        assert room_id == "demo-room"
+        assert after_id == 4
+        assert limit == 20
+        assert error is None
+
+
+class TestHttpRequestHandling:
+    def test_do_post_requires_content_length(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/mcp"
+        handler.headers = {}
+        handler.rfile = io.BytesIO(b"{}")
+        handler.connection = MagicMock()
+        handler._reply = MagicMock()
+
+        handler.do_POST()
+
+        handler._reply.assert_called_once_with(400, {"error": "Content-Length is required"})
+
+    def test_do_post_rejects_forbidden_origin(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/mcp"
+        handler.headers = {"Origin": "https://evil.example", "Content-Length": "2"}
+        handler.rfile = io.BytesIO(b"{}")
+        handler.connection = MagicMock()
+        handler._reply = MagicMock()
+
+        handler.do_POST()
+
+        handler._reply.assert_called_once_with(403, {"error": "forbidden origin"})
+
+    def test_do_post_rejects_large_body(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/mcp"
+        handler.headers = {"Content-Length": str(server_mod._MAX_BODY_BYTES + 1)}
+        handler.rfile = io.BytesIO(b"")
+        handler.connection = MagicMock()
+        handler._reply = MagicMock()
+
+        handler.do_POST()
+
+        handler._reply.assert_called_once_with(
+            413,
+            {"error": "request too large", "max_bytes": server_mod._MAX_BODY_BYTES},
+        )
+
+    def test_do_post_times_out_on_slow_body(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/mcp"
+        handler.headers = {"Content-Length": "2"}
+        handler.rfile = MagicMock()
+        handler.rfile.read.side_effect = socket.timeout()
+        handler.connection = MagicMock()
+        handler._reply = MagicMock()
+
+        handler.do_POST()
+
+        handler.connection.settimeout.assert_called_once_with(server_mod._HTTP_READ_TIMEOUT_SECONDS)
+        handler._reply.assert_called_once_with(408, {"error": "request body read timed out"})
+
+
+class TestWebsocketValidation:
+    def test_subscribe_rejects_invalid_after_id(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler._ws_send = MagicMock()
+
+        handler._handle_ws_message(
+            {"action": "subscribe", "room_id": "demo-room", "after_id": "abc"},
+            {},
+        )
+
+        handler._ws_send.assert_called_once_with(
+            {"type": "error", "error": "after_id must be an integer", "action": "subscribe"}
+        )

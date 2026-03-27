@@ -98,25 +98,34 @@ class ProcessBackend(TerminalBackend):
             self.shell_argv = shell_argv(shell)
         self.shell = self.shell_argv[0]
         self._procs: Dict[str, ManagedProcess] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     # -- TerminalBackend implementation ------------------------------------
 
     def init_session(self, session: str) -> Tuple[str, str]:
         target_a = f"{session}:a"
         target_b = f"{session}:b"
-        self._spawn(target_a, self._default_spawn_spec())
-        self._spawn(target_b, self._default_spawn_spec())
+        with self._lock:
+            if self._get_existing(target_a) is None:
+                self._spawn(target_a, self._default_spawn_spec())
+            if self._get_existing(target_b) is None:
+                self._spawn(target_b, self._default_spawn_spec())
         return target_a, target_b
 
     def has_session(self, session: str) -> bool:
         with self._lock:
-            return any(k.startswith(f"{session}:") for k in self._procs)
+            return any(
+                key.startswith(f"{session}:") and self._get_existing(key) is not None
+                for key in list(self._procs)
+            )
 
     def list_panes(self, session: Optional[str] = None) -> List[Tuple[str, str]]:
         with self._lock:
             result = []
-            for key, mp in self._procs.items():
+            for key in list(self._procs):
+                mp = self._get_existing(key)
+                if mp is None:
+                    continue
                 if session and not key.startswith(f"{session}:"):
                     continue
                 status = "alive" if mp.alive else "dead"
@@ -147,19 +156,45 @@ class ProcessBackend(TerminalBackend):
         if not spec.argv:
             raise ValueError("spawn spec argv must not be empty")
         with self._lock:
-            if target in self._procs:
+            if self._get_existing(target) is not None:
                 raise RuntimeError(f"target already exists: {target}")
-        self._spawn(target, spec)
+            self._spawn(target, spec)
         return target
 
     # -- internal ----------------------------------------------------------
 
     def _get(self, target: str) -> ManagedProcess:
-        with self._lock:
-            mp = self._procs.get(target)
+        mp = self._get_existing(target)
         if not mp:
             raise RuntimeError(f"process not found: {target}")
         return mp
+
+    def _get_existing(self, target: str) -> Optional[ManagedProcess]:
+        with self._lock:
+            mp = self._procs.get(target)
+            if not mp:
+                return None
+            if not self._is_active(mp):
+                self._procs.pop(target, None)
+                return None
+            return mp
+
+    @staticmethod
+    def _is_active(mp: ManagedProcess) -> bool:
+        if not mp.alive:
+            return False
+        proc = mp.proc
+        if hasattr(proc, "poll"):
+            try:
+                return proc.poll() is None
+            except Exception:
+                return mp.alive
+        if hasattr(proc, "isalive"):
+            try:
+                return bool(proc.isalive())
+            except Exception:
+                return mp.alive
+        return mp.alive
 
     def _default_spawn_spec(self) -> SpawnSpec:
         return SpawnSpec(argv=list(self.shell_argv))

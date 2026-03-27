@@ -6,9 +6,9 @@
 
 本次重寫使用的驗證快照：
 
-- 日期：`2026-03-13`
+- 日期：`2026-03-27`
 - 實機驗證環境：Linux、Python `3.12.3`
-- 驗證結果：完整 `pytest` suite 通過（`245 passed`）
+- 驗證結果：完整 `pytest` suite 通過（`277 passed`）
 - 自動化模擬覆蓋：Windows backend 選擇、Windows shell policy、macOS state-root 行為、WSL `tmux` 呼叫、PowerShell 與 `cmd.exe` shell 語義
 
 本文件使用以下驗證等級：

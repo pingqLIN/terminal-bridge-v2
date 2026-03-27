@@ -59,23 +59,32 @@ class PipeBackend(TerminalBackend):
             self.shell_argv = shell_argv(shell)
         self.shell = self.shell_argv[0]
         self._procs: Dict[str, _ManagedProc] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def init_session(self, session: str) -> Tuple[str, str]:
         a = f"{session}:a"
         b = f"{session}:b"
-        self._spawn(a)
-        self._spawn(b)
+        with self._lock:
+            if self._get_existing(a) is None:
+                self._spawn(a)
+            if self._get_existing(b) is None:
+                self._spawn(b)
         return a, b
 
     def has_session(self, session: str) -> bool:
         with self._lock:
-            return any(k.startswith(f"{session}:") for k in self._procs)
+            return any(
+                key.startswith(f"{session}:") and self._get_existing(key) is not None
+                for key in list(self._procs)
+            )
 
     def list_panes(self, session: Optional[str] = None) -> List[Tuple[str, str]]:
         with self._lock:
             result = []
-            for key, mp in self._procs.items():
+            for key in list(self._procs):
+                mp = self._get_existing(key)
+                if mp is None:
+                    continue
                 if session and not key.startswith(f"{session}:"):
                     continue
                 status = "alive" if mp.alive else "dead"
@@ -107,11 +116,29 @@ class PipeBackend(TerminalBackend):
                 mp.proc.terminate()
 
     def _get(self, target: str) -> _ManagedProc:
-        with self._lock:
-            mp = self._procs.get(target)
+        mp = self._get_existing(target)
         if not mp:
             raise RuntimeError(f"process not found: {target}")
         return mp
+
+    def _get_existing(self, target: str) -> Optional[_ManagedProc]:
+        with self._lock:
+            mp = self._procs.get(target)
+            if not mp:
+                return None
+            if not self._is_active(mp):
+                self._procs.pop(target, None)
+                return None
+            return mp
+
+    @staticmethod
+    def _is_active(mp: _ManagedProc) -> bool:
+        if not mp.alive:
+            return False
+        try:
+            return mp.proc.poll() is None
+        except Exception:
+            return mp.alive
 
     def _spawn(self, target: str) -> None:
         buf = _LineBuffer()
