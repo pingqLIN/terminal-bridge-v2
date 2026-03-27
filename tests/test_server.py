@@ -568,6 +568,46 @@ class TestBridgeHandlers:
         assert bridge.intervention_layer.active is True
         assert len(bridge.intervention_layer.list_pending()) == 2
 
+    def test_bridge_auto_forward_breaker_rearms_after_review(self):
+        backend = MagicMock()
+        room = create_room("bridge-breaker-rearm")
+        bridge = server_mod.Bridge(
+            bridge_id="br-breaker-rearm",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+        )
+        with server_mod._bridges_lock:
+            server_mod._bridges[bridge.bridge_id] = bridge
+
+        profile = server_mod.get_profile("generic")
+        with patch.object(server_mod.time, "time", return_value=100.0):
+            bridge._process_new_lines(
+                "A",
+                "test:a",
+                "test:b",
+                [f"MSG:echo {i}" for i in range(7)],
+                profile,
+            )
+
+        pending = bridge.intervention_layer.list_pending()
+        assert len(pending) == 1
+
+        result = server_mod.handle_intervention_approve({
+            "bridge_id": bridge.bridge_id,
+            "id": pending[0].id,
+        })
+
+        assert result["approved"] == 1
+        assert bridge.intervention_layer.active is False
+        assert bridge.auto_forward_guard()["blocked"] is False
+
+        bridge._process_new_lines("A", "test:a", "test:b", ["MSG:echo rearmed"], profile)
+
+        assert backend.send.call_count == server_mod._AUTO_FORWARD_MAX_PER_WINDOW + 2
+
     def test_bridge_auto_forward_streak_limit_switches_to_intervention(self):
         backend = MagicMock()
         room = create_room("bridge-streak")
