@@ -20,6 +20,10 @@
 
 不適合。建議預設只綁定 `127.0.0.1`。如果真的要暴露到 localhost 以外，應把它視為敏感控制面，另外加上明確的網路與存取防護。
 
+## approval gate 是強制性的安全邊界嗎？
+
+不是。approval preset 與 `intervention` 比較像受監督協作流程的控制手段，但 TB2 仍保留其他把內容送進 terminal 的路徑，因此不應把 approval gate 視為 authorization 保證。
+
 ## 預設協作模式是什麼？
 
 Host-mediated collaboration。由 host 管理 room 與 bridge 生命週期，guest 用簡短 `MSG:` 做 handoff，human operator 在需要時介入控制。

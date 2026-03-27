@@ -7,13 +7,17 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Added
-- Traditional Chinese review, release-objection, remediation, and external-review planning docs for the current hardening pass.
-- Regression coverage for dead-process pruning in `process` / `pipe` session views and duplicate `bridge_start` room reuse.
+- Traditional Chinese review artifacts covering release objections, devil's-advocate findings, remediation planning, and a P1 external review brief.
+- Regression coverage for dead-process pruning in `process` / `pipe` session views, duplicate `bridge_start` room reuse, forbidden-origin transport requests, and incomplete MCP POST bodies.
 
 ### Changed
+- README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
 - Local HTTP, SSE, and WebSocket control surfaces now enforce localhost-only `Origin` checks and safer request parsing.
-- `process` and `pipe` backends now prune dead child state from `has_session()` and `list_panes()` results.
-- Bridge startup and polling paths were tightened to avoid stale room creation and per-line latency amplification during burst output.
+
+### Fixed
+- HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.
+- Backend caching now distinguishes shell and distro configuration, while `process` and `pipe` backends prune dead child state and reuse live panes instead of respawning duplicates.
+- Bridge worker polling now waits once per capture cycle instead of once per output line, reducing burst-output latency.
 
 ## [0.2.0] - 2026-03-26
 

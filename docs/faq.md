@@ -20,6 +20,10 @@ Compatibility and fallback. `room_poll` stays useful for tests, degraded environ
 
 No. The recommended default is local-only binding on `127.0.0.1`. If you expose it beyond localhost, treat it as a sensitive control surface and put proper network controls in front of it.
 
+## Are approval gates a hard security boundary?
+
+No. Approval presets and `intervention` flows help supervised collaboration, but TB2 still has other terminal-delivery paths. Treat approval gates as workflow controls, not authorization guarantees.
+
 ## What is the default orchestration pattern?
 
 Host-mediated collaboration. The host owns the room and bridge lifecycle, guests emit short `MSG:` handoffs, and the human operator stays in the control loop when needed.

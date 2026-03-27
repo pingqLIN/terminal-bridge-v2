@@ -874,6 +874,30 @@ class TestValidationHelpers:
 
 
 class TestHttpRequestHandling:
+    def test_do_get_room_stream_rejects_forbidden_origin(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/rooms/demo-room/stream"
+        handler.headers = {"Origin": "https://evil.example"}
+        handler._reply = MagicMock()
+        handler._serve_room_sse = MagicMock()
+
+        handler.do_GET()
+
+        handler._reply.assert_called_once_with(403, {"error": "forbidden origin"})
+        handler._serve_room_sse.assert_not_called()
+
+    def test_do_get_websocket_rejects_forbidden_origin(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/ws"
+        handler.headers = {"Origin": "https://evil.example"}
+        handler._reply = MagicMock()
+        handler._serve_websocket = MagicMock()
+
+        handler.do_GET()
+
+        handler._reply.assert_called_once_with(403, {"error": "forbidden origin"})
+        handler._serve_websocket.assert_not_called()
+
     def test_do_post_requires_content_length(self):
         handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
         handler.path = "/mcp"
@@ -926,6 +950,19 @@ class TestHttpRequestHandling:
 
         handler.connection.settimeout.assert_called_once_with(server_mod._HTTP_READ_TIMEOUT_SECONDS)
         handler._reply.assert_called_once_with(408, {"error": "request body read timed out"})
+
+    def test_do_post_rejects_incomplete_body(self):
+        handler = server_mod.MCPHandler.__new__(server_mod.MCPHandler)
+        handler.path = "/mcp"
+        handler.headers = {"Content-Length": "2"}
+        handler.rfile = io.BytesIO(b"{")
+        handler.connection = MagicMock()
+        handler._reply = MagicMock()
+
+        handler.do_POST()
+
+        handler.connection.settimeout.assert_called_once_with(server_mod._HTTP_READ_TIMEOUT_SECONDS)
+        handler._reply.assert_called_once_with(400, {"error": "incomplete request body"})
 
 
 class TestWebsocketValidation:

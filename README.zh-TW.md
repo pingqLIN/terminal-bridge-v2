@@ -44,6 +44,18 @@ TB2 特別適合這類情境：
 - room 與 bridge 的觀測能力
 - 能適配 Windows、macOS、Linux、WSL 的 backend 策略
 
+## 定位
+
+目前比較適合把 TB2 視為：
+
+- local-first、high-trust 的 operator tooling
+- 給已熟悉 terminal-native AI workflow 團隊使用的實驗性控制面
+
+目前不適合把 TB2 視為：
+
+- 可對外公開暴露的 remote control plane
+- 具備強制 approval / authorization 邊界的系統
+
 ## 為什麼團隊會選 TB2
 
 | 決策問題 | TB2 的回答 |
@@ -200,8 +212,11 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 
 ## 安全提醒
 
+- 把 TB2 視為 local-first、high-trust、operator-grade 工具，不是可公開暴露的控制服務。
 - server binding 預設維持在 `127.0.0.1`。
+- Browser `Origin` 驗證只接受 localhost 類型來源，因此 GUI 與 MCP 存取應維持在 loopback。
 - MCP endpoint 與 browser console 都應視為敏感的本地控制面。
+- approval gate 與 `intervention` 比較像受監督 workflow 控制，不應視為安全邊界。
 - 驗證新 profile、新 client、新流程時，優先開 `intervention` mode。
 - 同一組 pane pair 只保留一個 active bridge。
 

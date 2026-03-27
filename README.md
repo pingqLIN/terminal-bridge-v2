@@ -42,6 +42,18 @@ TB2 is most useful when you want terminal-native agents to collaborate, but you 
 - room and bridge observability
 - a backend strategy that adapts to Windows, macOS, Linux, and WSL
 
+## Positioning
+
+TB2 is best treated today as:
+
+- local-first, high-trust operator tooling
+- an experimental control surface for teams that already understand terminal-native AI workflows
+
+TB2 is not designed to be:
+
+- a publicly exposed remote control plane
+- a hard-enforced approval or authorization boundary
+
 ## Why Teams Choose TB2
 
 | Decision point | TB2 answer |
@@ -198,8 +210,11 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 
 ## Safety Notes
 
+- Treat TB2 as local-first, high-trust, operator-grade tooling rather than a public control service.
 - Keep server binding on `127.0.0.1` unless you fully trust the network path.
+- Browser-origin checks are intentionally limited to localhost-style origins, so keep GUI and MCP access on loopback.
 - Treat the MCP endpoint and browser console as sensitive local control surfaces.
+- Approval gates and `intervention` flows support supervised delivery, but they are workflow controls rather than a security boundary.
 - Use `intervention` mode when you are validating a new profile, a new client, or a risky workflow.
 - Keep one active bridge per pane pair.
 
