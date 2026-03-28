@@ -110,9 +110,10 @@ python -m tb2 service audit --lines 20 --room-id demo-room
 
 What to verify:
 
-- `status` returns an `audit` object with `enabled`, `file`, and retention settings
-- `audit_recent` returns persisted entries for the active room or bridge
-- `tb2 service audit` can filter by `event`, `room_id`, and `bridge_id`
+- `status` returns an `audit` object with `enabled`, `file`, retention settings, and a `redaction` contract
+- `audit_recent` returns persisted entries for the active room or bridge, with text-bearing fields redacted
+- `tb2 service audit` can filter by `event`, `room_id`, and `bridge_id`, but it follows the same redaction contract
+- the default redaction mode is `mask`; use `TB2_AUDIT_TEXT_MODE=full|drop` only when your operator policy explicitly calls for it
 - retention defaults are 5 MiB per active file and 5 files total unless overridden by `TB2_AUDIT_MAX_BYTES` or `TB2_AUDIT_MAX_FILES`
 
 ## Host AI Tool Map
@@ -139,6 +140,7 @@ TB2 now supports a lighter control path for intervention tools:
 
 The `status` tool now also returns `bridge_details` so another AI client can map `bridge_id`, `room_id`, panes, profile, and pending count without guessing.
 It also returns an `audit` snapshot so the client can decide whether persisted incident data is available before it asks for `audit_recent`.
+That `audit` snapshot now also exposes the text-redaction mode so clients can distinguish durable metadata from live room content.
 It now also returns a machine-readable `runtime` contract so the client can see that live room / bridge / intervention state is memory-only and is lost across service restart.
 
 ## Human Operator Tool Map

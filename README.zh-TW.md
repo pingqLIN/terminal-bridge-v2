@@ -103,6 +103,7 @@ TB2 特別適合這類情境：
 - operator 可透過 `tb2 service audit` 或 MCP `audit_recent` 直接查看已落盤的事件
 - GUI 的 Diagnostics 卡現在也會顯示 audit 是否啟用，以及目前 room / bridge 的最近持久化事件
 - GUI audit 視窗現在也支援 event filter 與最近筆數限制，方便 incident triage
+- 持久化 audit entry 現在預設採 `mask` mode 來遮罩文字欄位；可用 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 調整要保留 raw text、遮罩 placeholder，或只留 metadata summary
 - 目前 live runtime state 仍是記憶體態，因此 `tb2 service stop` / `restart` 只會保留 audit history，不會保留 active rooms、bridges、pending interventions
 
 ## 快速安裝

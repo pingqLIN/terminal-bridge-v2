@@ -21,6 +21,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - GUI diagnostics now surface audit enablement and recent persisted entries for the active room / bridge scope.
 - Audit persistence now rotates by size with bounded file retention instead of growing a single unbounded JSONL forever.
 - GUI diagnostics audit view now supports event-level filtering and recent-entry limits for faster review.
+- Persisted audit entries now redact text-bearing fields and expose the active redaction mode through the audit status snapshot.
+- Audit text redaction now supports `mask`, `drop`, and explicit `full` modes so operators can choose between privacy and verbatim retention.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.

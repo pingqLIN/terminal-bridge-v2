@@ -207,6 +207,7 @@ bridge 建立後永遠可見。
 - interrupt 控制
 - audit 啟用狀態
 - 最近持久化 audit events
+- 進入 diagnostics panel 前，持久化 audit entry 會先遮罩文字欄位
 - audit event filter
 - audit entry limit
 - raw status JSON

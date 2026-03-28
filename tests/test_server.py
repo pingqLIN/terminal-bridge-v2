@@ -253,6 +253,8 @@ class TestStatusHandler:
         assert "audit" in result
         assert "runtime" in result
         assert result["audit"]["enabled"] is False
+        assert result["audit"]["redaction"]["mode"] == "mask"
+        assert "text" in result["audit"]["redaction"]["fields"]
         assert result["runtime"]["state_persistence"] == "memory_only"
         assert result["runtime"]["restart_behavior"] == "state_lost"
         assert result["runtime"]["recovery_source"] == "audit_history_only"
@@ -369,8 +371,71 @@ class TestAuditTrail:
 
         assert result["count"] == 1
         assert result["audit"]["enabled"] is True
+        assert result["audit"]["redaction"]["mode"] == "mask"
         assert result["events"][0]["event"] == "operator.room_post"
         assert result["events"][0]["message_id"] == 1
+
+    @patch.object(server_mod, "_make_backend")
+    def test_audit_recent_masks_room_terminal_and_intervention_text(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+        room_id = "audit-redaction-room"
+
+        server_mod.handle_room_create({"room_id": room_id})
+        server_mod.handle_room_post({
+            "room_id": room_id,
+            "author": "human-operator",
+            "text": "ship it now",
+        })
+        server_mod.handle_terminal_send({
+            "target": "audit:redaction",
+            "text": "TOKEN=12345",
+            "enter": True,
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "audit:a",
+            "pane_b": "audit:b",
+            "room_id": room_id,
+            "bridge_id": "audit-redaction-bridge",
+            "auto_forward": True,
+            "intervention": True,
+        })
+        bridge = server_mod._get_bridge("audit-redaction-bridge")
+        assert bridge is not None
+        profile = server_mod.get_profile("generic")
+        bridge._process_new_lines(
+            "A",
+            "audit:a",
+            "audit:b",
+            ["MSG:echo TOKEN=12345"],
+            profile,
+        )
+
+        result = server_mod.handle_audit_recent({"limit": 10})
+        raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+        room_event = next(item for item in result["events"] if item["event"] == "room.message")
+        posted_event = next(item for item in result["events"] if item["event"] == "room.message_posted")
+        sent_event = next(item for item in result["events"] if item["event"] == "terminal.sent")
+        submitted_event = next(item for item in result["events"] if item["event"] == "intervention.submitted")
+
+        assert "ship it now" not in raw
+        assert "TOKEN=12345" not in raw
+        assert result["audit"]["redaction"]["mode"] == "mask"
+        assert room_event["message"]["text"] == "[redacted]"
+        assert room_event["message"]["text_redacted"] is True
+        assert room_event["message"]["text_mode"] == "mask"
+        assert posted_event["payload"]["text"] == "[redacted]"
+        assert posted_event["payload"]["text_redacted"] is True
+        assert posted_event["payload"]["text_mode"] == "mask"
+        assert sent_event["text"] == "[redacted]"
+        assert sent_event["text_redacted"] is True
+        assert sent_event["text_mode"] == "mask"
+        assert submitted_event["text"] == "[redacted]"
+        assert submitted_event["text_redacted"] is True
+        assert submitted_event["text_mode"] == "mask"
 
     def test_audit_recent_covers_guard_and_reject_lifecycle_events(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
@@ -1213,6 +1278,7 @@ class TestGuiRouting:
         assert "$('audit-event').onchange = () => run(refreshAudit);" in html
         assert "$('audit-limit').onchange = () => run(refreshAudit);" in html
         assert "if (event) args.event = event;" in html
+        assert "cards.auditRedaction" in html
 
     def test_gui_html_refreshes_status_after_review_actions(self):
         html = server_mod.build_gui_html("/mcp")

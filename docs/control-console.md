@@ -207,6 +207,7 @@ Contains:
 - interrupt controls
 - audit enabled state
 - recent persisted audit events
+- persisted audit entries redact text-bearing fields before they reach the diagnostics panel
 - audit event filter
 - audit entry limit
 - raw status JSON

@@ -110,9 +110,10 @@ python -m tb2 service audit --lines 20 --room-id demo-room
 
 建議至少驗證：
 
-- `status` 會回 `audit` 物件，包含 `enabled`、`file` 與 retention 設定
-- `audit_recent` 能查到目前 room 或 bridge 的持久化事件
-- `tb2 service audit` 可用 `event`、`room_id`、`bridge_id` 過濾
+- `status` 會回 `audit` 物件，包含 `enabled`、`file`、retention 設定，以及 `redaction` contract
+- `audit_recent` 能查到目前 room 或 bridge 的持久化事件，但文字欄位會先做遮罩
+- `tb2 service audit` 可用 `event`、`room_id`、`bridge_id` 過濾，但同樣遵守這個 redaction 契約
+- 預設 redaction mode 是 `mask`；只有在 operator policy 明確要求時，才應改用 `TB2_AUDIT_TEXT_MODE=full|drop`
 - 若未另外指定，retention 預設是單一 active file 5 MiB、總共保留 5 個檔案；可用 `TB2_AUDIT_MAX_BYTES` 與 `TB2_AUDIT_MAX_FILES` 覆寫
 
 ## Host AI 工具地圖
@@ -139,6 +140,7 @@ TB2 現在對 intervention 類工具支援更輕量的解析路徑：
 
 `status` 現在也會回傳 `bridge_details`，讓其他 AI client 可以直接看到 `bridge_id`、`room_id`、pane、profile 與 pending count，而不是自己猜。
 它同時也會回傳 `audit` snapshot，讓 client 在呼叫 `audit_recent` 前先判斷目前是否真的有持久化事件可查。
+這個 `audit` snapshot 現在也會帶出 text redaction mode，讓 client 區分 durable metadata 與 live room content。
 它現在也會回傳 machine-readable `runtime` contract，讓 client 明確知道 live room / bridge / intervention state 目前仍是記憶體態，service restart 後會遺失。
 
 ## Human Operator 工具地圖

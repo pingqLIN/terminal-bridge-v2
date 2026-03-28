@@ -86,6 +86,9 @@ Priority:
 - the audit stream is off by default so test runs and casual local sessions do not silently write durable operator records
 - current persisted scope is intentionally narrow: room messages, bridge lifecycle, intervention decisions, and direct operator actions such as `terminal_send` / interrupt
 - `status` now includes an `audit` snapshot so operators can see whether persistence is enabled and where entries are being written
+- persisted audit entries now redact text-bearing fields such as `text`, `edited_text`, and `guard_text`; default `mask` mode keeps placeholders plus metadata, and `TB2_AUDIT_TEXT_MODE=full|mask|drop` can switch between raw, masked, or metadata-only persistence
+- `status.audit.redaction` exposes the active text-redaction contract so clients can reason about what was persisted
+- `TB2_AUDIT_TEXT_MODE=mask` is the default; use `full` only when you explicitly want raw text in the durable log, or `drop` when you want metadata without even the `[redacted]` placeholder
 - `status` now also includes a `runtime` contract that explicitly marks live control state as `memory_only` with `restart_behavior=state_lost`
 - operators can read recent entries through `tb2 service audit` locally or the MCP `audit_recent` tool remotely
 - the GUI Diagnostics card now mirrors that state and shows recent persisted events for the current room / bridge scope

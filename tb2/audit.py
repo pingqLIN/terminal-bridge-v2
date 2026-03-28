@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -18,6 +19,9 @@ _RECENT_SCAN_FACTOR = 20
 _MIN_RECENT_SCAN = 400
 _DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 _DEFAULT_MAX_FILES = 5
+_DEFAULT_TEXT_MODE = "mask"
+_TEXT_REDACTION_KEYS = ("edited_text", "guard_text", "text")
+_TEXT_REDACTION_MODES = ("full", "mask", "drop")
 AUDIT_EVENT_CATALOG = (
     "terminal.session_init",
     "terminal.sent",
@@ -94,6 +98,23 @@ def _positive_int(raw: Optional[str], *, default: int, minimum: int) -> int:
     return value
 
 
+def _text_mode(raw: Optional[str], *, default: str = _DEFAULT_TEXT_MODE) -> str:
+    value = str(raw or "").strip().lower()
+    if value in _TEXT_REDACTION_MODES:
+        return value
+    return default
+
+
+def _text_summary(value: str, *, text_mode: str) -> Dict[str, Any]:
+    return {
+        "redacted": text_mode != "full",
+        "mode": text_mode,
+        "length": len(value),
+        "lines": value.count("\n") + 1 if value else 0,
+        "sha256": hashlib.sha256(value.encode("utf-8")).hexdigest()[:16],
+    }
+
+
 class AuditTrail:
     def __init__(
         self,
@@ -101,11 +122,13 @@ class AuditTrail:
         *,
         max_bytes: int = _DEFAULT_MAX_BYTES,
         max_files: int = _DEFAULT_MAX_FILES,
+        text_mode: str = _DEFAULT_TEXT_MODE,
     ):
         self.root = root.expanduser().resolve() if root else None
         self.file = self.root / "events.jsonl" if self.root else None
         self.max_bytes = max(max_bytes, 1024)
         self.max_files = max(max_files, 1)
+        self.text_mode = _text_mode(text_mode)
         self._lock = threading.Lock()
         self._last_error = ""
 
@@ -113,7 +136,7 @@ class AuditTrail:
     def from_env(cls) -> "AuditTrail":
         env_root = os.environ.get("TB2_AUDIT_DIR")
         if env_root:
-            return cls(Path(env_root))
+            return cls(Path(env_root), text_mode=_text_mode(os.environ.get("TB2_AUDIT_TEXT_MODE")))
         raw_enabled = os.environ.get("TB2_AUDIT", "")
         if raw_enabled.strip().lower() in _FALSE_VALUES:
             return cls()
@@ -129,6 +152,7 @@ class AuditTrail:
                 default=_DEFAULT_MAX_FILES,
                 minimum=1,
             ),
+            text_mode=_text_mode(os.environ.get("TB2_AUDIT_TEXT_MODE")),
         )
 
     def enabled(self) -> bool:
@@ -141,6 +165,11 @@ class AuditTrail:
             "file": str(self.file) if self.file else None,
             "max_bytes": self.max_bytes if self.enabled() else None,
             "max_files": self.max_files if self.enabled() else None,
+            "redaction": {
+                "mode": self.text_mode,
+                "keys": list(_TEXT_REDACTION_KEYS),
+                "fields": list(_TEXT_REDACTION_KEYS),
+            },
             "last_error": self._last_error or None,
         }
 
@@ -150,7 +179,7 @@ class AuditTrail:
         entry = {
             "ts": time.time(),
             "event": event,
-            **payload,
+            **_sanitize_audit_value(payload, text_mode=self.text_mode),
         }
         try:
             text = json.dumps(entry, ensure_ascii=False, sort_keys=True)
@@ -244,6 +273,30 @@ class AuditTrail:
         return paths
 
 
+def _sanitize_audit_value(value: Any, *, text_mode: str) -> Any:
+    if isinstance(value, dict):
+        return _sanitize_audit_dict(value, text_mode=text_mode)
+    if isinstance(value, list):
+        return [_sanitize_audit_value(item, text_mode=text_mode) for item in value]
+    return value
+
+
+def _sanitize_audit_dict(payload: Dict[str, Any], *, text_mode: str) -> Dict[str, Any]:
+    sanitized: Dict[str, Any] = {}
+    for key, value in payload.items():
+        if key in _TEXT_REDACTION_KEYS and isinstance(value, str):
+            summary = _text_summary(value, text_mode=text_mode)
+            sanitized[key] = value if text_mode == "full" else ("[redacted]" if text_mode == "mask" else None)
+            sanitized[f"{key}_redacted"] = summary["redacted"]
+            sanitized[f"{key}_length"] = summary["length"]
+            sanitized[f"{key}_lines"] = summary["lines"]
+            sanitized[f"{key}_mode"] = summary["mode"]
+            sanitized[f"{key}_sha256"] = summary["sha256"]
+            continue
+        sanitized[key] = _sanitize_audit_value(value, text_mode=text_mode)
+    return sanitized
+
+
 def record_event(
     event: str,
     *,
@@ -275,14 +328,15 @@ def append_audit_event(
     payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     trail = AuditTrail.from_env()
+    clean_payload = _sanitize_audit_value(payload or {}, text_mode=trail.text_mode)
     entry: Dict[str, Any] = {
         "ts": time.time(),
         "event": str(event),
         "room_id": room_id,
         "bridge_id": bridge_id,
-        "payload": payload or {},
+        "payload": clean_payload,
     }
-    if trail.write(str(event), {"room_id": room_id, "bridge_id": bridge_id, "payload": payload or {}}):
+    if trail.write(str(event), {"room_id": room_id, "bridge_id": bridge_id, "payload": clean_payload}):
         return entry
     return entry
 

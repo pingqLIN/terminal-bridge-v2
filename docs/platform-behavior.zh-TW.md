@@ -86,6 +86,9 @@ TB2 現在依 capability 選預設。
 - 預設保持關閉，避免測試或一般本機使用默默留下持久化 operator 紀錄
 - 目前持久化範圍刻意收斂，只先涵蓋 room messages、bridge lifecycle、intervention decisions，以及 `terminal_send` / interrupt 這類直接 operator actions
 - `status` 現在會附帶 `audit` 狀態，方便 operator 確認是否啟用持久化與實際寫入位置
+- 持久化 audit entry 現在會先處理 `text`、`edited_text`、`guard_text` 這類文字欄位；預設 `mask` mode 會留下 placeholder 與 metadata，而 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 可切換成保留 raw text、遮罩或僅存 metadata
+- `status.audit.redaction` 會公開目前生效中的文字 redaction contract，方便 client 判斷 audit 實際保留了哪些資訊
+- `TB2_AUDIT_TEXT_MODE=mask` 是預設值；若你明確要把 raw text 寫進 durable log 才改用 `full`，若只想保留 metadata 而連 `[redacted]` placeholder 都不要，可改用 `drop`
 - `status` 現在也會附帶 `runtime` contract，明確標示 live control state 目前是 `memory_only`，且 `restart_behavior=state_lost`
 - operator 可在本機用 `tb2 service audit`，或透過 MCP `audit_recent` 讀最近的持久化事件
 - GUI 的 Diagnostics 卡現在也會同步顯示這個狀態，並帶出目前 room / bridge scope 的最近持久化事件
