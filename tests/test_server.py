@@ -1170,6 +1170,20 @@ class TestGuiRouting:
         html = server_mod.build_gui_html("/mcp")
         assert html.count("await refreshAudit();") >= 3
 
+    def test_gui_html_surfaces_pending_review_detail(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert 'id="pending-detail"' in html
+        assert "function renderPendingDetail()" in html
+        assert "state.pendingItems = Array.isArray(items) ? items : [];" in html
+        assert "$('pending-select').onchange = () => renderPendingDetail();" in html
+
+    def test_gui_html_surfaces_status_summary_badges(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert 'id="status-badges"' in html
+        assert "function renderStatusSummary(status)" in html
+        assert "format('cards.statusBadgePending'" in html
+        assert "renderStatusSummary(res);" in html
+
     @patch("tb2.gui.default_backend_name", return_value="tmux")
     def test_gui_html_marks_platform_default_backend(self, mock_default):
         html = server_mod.build_gui_html("/mcp")

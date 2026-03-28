@@ -58,6 +58,7 @@
 主要控制：
 
 - refresh pending
+- 所選 handoff 細節
 - approve selected
 - reject selected
 - approve all
@@ -188,6 +189,13 @@ bridge 建立後永遠可見。
 
 其他 preset 下除非已有 pending item，否則應該收起來。
 
+顯示：
+
+- pending list
+- 所選 handoff 細節
+- 核准時改寫文字
+- approve / reject controls
+
 ### 5. Diagnostics card
 
 除非 preset 是 `Diagnostics`，否則預設收起。
@@ -203,7 +211,15 @@ bridge 建立後永遠可見。
 - audit entry limit
 - raw status JSON
 
-### 6. Advanced details
+### 6. Status card
+
+顯示：
+
+- 結構化的 guard / pending / subscriber / audit 摘要
+- raw status JSON
+- activity log
+
+### 7. Advanced details
 
 永遠可用，但不應該是主畫面重點。
 

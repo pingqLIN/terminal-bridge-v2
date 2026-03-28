@@ -210,6 +210,7 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 - [AI 協作說明](docs/ai-orchestration.zh-TW.md)
 - [MCP 用戶端設定](docs/mcp-client-setup.zh-TW.md)
 - [使用場景與工作流索引](docs/use-cases.zh-TW.md)
+- [開發執行書](docs/development-execution-plan.zh-TW.md)
 
 ### 英文版
 
@@ -220,6 +221,7 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 - [docs/platform-behavior.md](docs/platform-behavior.md)
 - [docs/platforms/compatibility-matrix.md](docs/platforms/compatibility-matrix.md)
 - [docs/platforms/standard-operations.md](docs/platforms/standard-operations.md)
+- [docs/development-execution-plan.zh-TW.md](docs/development-execution-plan.zh-TW.md)
 
 ## 安全提醒
 

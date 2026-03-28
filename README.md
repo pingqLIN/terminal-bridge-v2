@@ -208,6 +208,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 - [AI Orchestration](docs/ai-orchestration.md)
 - [MCP Client Setup](docs/mcp-client-setup.md)
 - [Use Cases and Workflow Index](docs/use-cases.md)
+- [Development Execution Plan (zh-TW)](docs/development-execution-plan.zh-TW.md)
 
 ### Traditional Chinese
 
@@ -218,6 +219,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 - [docs/platform-behavior.zh-TW.md](docs/platform-behavior.zh-TW.md)
 - [docs/platforms/compatibility-matrix.zh-TW.md](docs/platforms/compatibility-matrix.zh-TW.md)
 - [docs/platforms/standard-operations.zh-TW.md](docs/platforms/standard-operations.zh-TW.md)
+- [docs/development-execution-plan.zh-TW.md](docs/development-execution-plan.zh-TW.md)
 
 ## Safety Notes
 

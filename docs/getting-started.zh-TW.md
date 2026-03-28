@@ -93,7 +93,19 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 3. `bridge_start`
 4. `room_poll` 或 room stream
 5. `room_post` / `terminal_send`
-6. `bridge_stop`
+6. `status`
+7. 需要 durable incident context 時，再用 `audit_recent`
+8. `bridge_stop`
+
+### 第一個 audit-enabled service session
+
+```bash
+TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+python -m tb2 service audit --lines 10
+```
+
+當你希望從第一輪就保留 durable operator 與 bridge events 時，請走這條路徑。
 
 ## 5. 先理解 handoff 契約
 
@@ -130,6 +142,12 @@ MSG: ready for review on the shell fallback patch
 - 先在 GUI 重連 transport
 - 或退回 `room_poll`
 - 只有排除 transport 後才重啟 bridge
+
+### Audit 看起來是空的
+
+- 先確認 service 是用 `TB2_AUDIT=1` 或 `TB2_AUDIT_DIR` 啟動
+- 再看 `python -m tb2 service status` 裡的 `audit.enabled` 與目前寫入路徑
+- 用 `python -m tb2 service audit --lines 20 --event bridge.started` 驗證事件是否真的有落盤
 
 ### 啟動了錯的 shell
 

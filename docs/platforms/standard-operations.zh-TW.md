@@ -52,6 +52,16 @@ python -m tb2 service start --host 127.0.0.1 --port 3189
 python -m tb2 service status
 ```
 
+### 啟用 audit 的背景 service
+
+```bash
+TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+python -m tb2 service audit --lines 10
+```
+
+若要寫到明確目錄，請改用 `TB2_AUDIT_DIR`。若這台 service 需要保留較長的 incident history，請再用 `TB2_AUDIT_MAX_BYTES` / `TB2_AUDIT_MAX_FILES` 確認 retention 邊界。
+
 ## 3. 標準健康檢查
 
 ### CLI 檢查
@@ -59,6 +69,7 @@ python -m tb2 service status
 ```bash
 python -m tb2 doctor
 python -m tb2 service status
+python -m tb2 service audit --lines 10
 ```
 
 ### HTTP 檢查
@@ -123,3 +134,4 @@ python -m tb2 service stop
 - 同一組 pane pair 只保留一個 active bridge。
 - 新 guest profile 或新 CLI client 先在 `intervention` 模式下驗證。
 - 只有在 client 不需要 TUI 時才用 `pipe`。
+- 若 audit 是 runbook 的一部分，請先確認 `audit.enabled`、目前寫入檔案路徑，以及一條可過濾的 `service audit` 查詢真的有資料，再把 incident history 當成可信訊號。

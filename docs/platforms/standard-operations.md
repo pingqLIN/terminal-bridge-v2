@@ -52,6 +52,16 @@ python -m tb2 service start --host 127.0.0.1 --port 3189
 python -m tb2 service status
 ```
 
+### Audit-enabled detached service
+
+```bash
+TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+python -m tb2 service audit --lines 10
+```
+
+Use `TB2_AUDIT_DIR` when you need an explicit destination, and verify retention with `TB2_AUDIT_MAX_BYTES` / `TB2_AUDIT_MAX_FILES` when the service is meant to keep longer incident history.
+
 ## 3. Standard Health Checks
 
 ### CLI checks
@@ -59,6 +69,7 @@ python -m tb2 service status
 ```bash
 python -m tb2 doctor
 python -m tb2 service status
+python -m tb2 service audit --lines 10
 ```
 
 ### HTTP checks
@@ -127,3 +138,4 @@ python -m tb2 service stop
 - Keep one active bridge per pane pair.
 - Prefer `intervention` mode when testing a new guest profile or a new CLI client.
 - Use `pipe` only when the client does not need TUI behavior.
+- If audit is part of your runbook, verify `audit.enabled`, the active file path, and a filtered `service audit` query before trusting incident history.

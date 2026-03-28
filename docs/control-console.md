@@ -58,6 +58,7 @@ Changes from Quick Pairing:
 Primary controls:
 
 - refresh pending
+- selected handoff detail
 - approve selected
 - reject selected
 - approve all
@@ -188,6 +189,13 @@ Visible by default only in `Approval Gate`.
 
 Collapsed in other presets unless pending items exist.
 
+Show:
+
+- pending list
+- selected handoff detail
+- edited approval text
+- approve / reject controls
+
 ### 5. Diagnostics card
 
 Collapsed by default unless the preset is `Diagnostics`.
@@ -203,7 +211,15 @@ Contains:
 - audit entry limit
 - raw status JSON
 
-### 6. Advanced details
+### 6. Status card
+
+Show:
+
+- structured guard / pending / subscriber / audit summary
+- raw status JSON
+- activity log
+
+### 7. Advanced details
 
 Always available, never primary.
 

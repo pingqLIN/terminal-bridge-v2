@@ -21,14 +21,16 @@
 - `list_profiles`
 - `doctor`
 - `status`
+- `audit_recent`
 
-可把它們看成三組能力：
+可把它們看成四組能力：
 
 | 能力群組 | 工具 |
 | --- | --- |
 | 啟動與 I/O | `terminal_init`、`terminal_send`、`terminal_capture`、`terminal_interrupt` |
 | 協作狀態 | `room_create`、`room_poll`、`room_post`、`status` |
 | 委派控制 | `bridge_start`、`bridge_stop`、`intervention_list`、`intervention_approve`、`intervention_reject` |
+| 持久化觀測 | `status`、`audit_recent`、`tb2 service audit` |
 
 ## Server 啟動方式
 
@@ -88,6 +90,31 @@ gemini mcp list
 - Claude 與 Gemini 顯示 `Connected`
 - Codex 顯示 `enabled`
 
+## Audit 與持久化檢查
+
+若你希望保留 durable operator records，請在啟動背景 service 前先打開 audit：
+
+```bash
+TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+python -m tb2 service audit --lines 10
+```
+
+若要把 audit 寫到明確目錄，改用 `TB2_AUDIT_DIR`：
+
+```bash
+TB2_AUDIT_DIR=/tmp/tb2-audit python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service audit --lines 20 --event bridge.started
+python -m tb2 service audit --lines 20 --room-id demo-room
+```
+
+建議至少驗證：
+
+- `status` 會回 `audit` 物件，包含 `enabled`、`file` 與 retention 設定
+- `audit_recent` 能查到目前 room 或 bridge 的持久化事件
+- `tb2 service audit` 可用 `event`、`room_id`、`bridge_id` 過濾
+- 若未另外指定，retention 預設是單一 active file 5 MiB、總共保留 5 個檔案；可用 `TB2_AUDIT_MAX_BYTES` 與 `TB2_AUDIT_MAX_FILES` 覆寫
+
 ## Host AI 工具地圖
 
 若 Host AI 是主要協作驅動者，最小可用順序是：
@@ -99,6 +126,7 @@ gemini mcp list
 5. `intervention_list`
 6. `intervention_approve` 或 `intervention_reject`
 7. `status`
+8. `audit_recent`
 
 ### bridge 解析捷徑
 
@@ -110,6 +138,7 @@ TB2 現在對 intervention 類工具支援更輕量的解析路徑：
 - 若同時存在多條 active bridge，TB2 會回傳明確錯誤與 `bridge_candidates`
 
 `status` 現在也會回傳 `bridge_details`，讓其他 AI client 可以直接看到 `bridge_id`、`room_id`、pane、profile 與 pending count，而不是自己猜。
+它同時也會回傳 `audit` snapshot，讓 client 在呼叫 `audit_recent` 前先判斷目前是否真的有持久化事件可查。
 
 ## Human Operator 工具地圖
 
@@ -120,6 +149,7 @@ TB2 現在對 intervention 類工具支援更輕量的解析路徑：
 3. `room_post`
 4. `terminal_capture`
 5. `terminal_interrupt`
+6. `audit_recent`
 
 ## 協定探測
 

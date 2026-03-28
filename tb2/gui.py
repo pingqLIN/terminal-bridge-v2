@@ -1043,6 +1043,10 @@ GUI_HTML_TEMPLATE = r"""
                     <select id="pending-select" size="8"></select>
                   </div>
                   <div style="margin-top: 10px;">
+                    <label for="pending-detail" data-i18n="fields.pendingDetail">selected pending detail</label>
+                    <pre id="pending-detail"></pre>
+                  </div>
+                  <div style="margin-top: 10px;">
                     <label for="pending-edit" data-i18n="fields.pendingEdit">edited approval text</label>
                     <textarea id="pending-edit" placeholder="Optional replacement text for the selected pending message" data-i18n-placeholder="placeholders.pendingEdit"></textarea>
                   </div>
@@ -1068,6 +1072,7 @@ GUI_HTML_TEMPLATE = r"""
             <div class="disclosure-body">
               <p class="disclosure-copy" data-i18n="cards.statusCopy">Status and log.</p>
               <div class="note" id="status-note" data-i18n="cards.statusNote">Presets hide complexity, but they do not remove it. Open raw status when pane IDs, bridge IDs, or transport state matter.</div>
+              <div class="badge-row" id="status-badges"></div>
               <div class="row">
                 <div>
                   <label for="status-box" data-i18n="fields.status">server status</label>
@@ -1224,6 +1229,7 @@ GUI_HTML_TEMPLATE = r"""
             paneHost: 'Host pane target',
             paneGuest: 'Guest pane target',
             pendingSelect: 'pending intervention items',
+            pendingDetail: 'selected pending detail',
             pendingEdit: 'edited approval text',
             captureHost: 'Host capture',
             captureGuest: 'Guest capture',
@@ -1275,6 +1281,13 @@ GUI_HTML_TEMPLATE = r"""
             reviewEmpty: 'No pending items.',
             reviewMetaIdle: 'Expand',
             reviewMetaPending: '{count} pending',
+            pendingDetailEmpty: 'Select a pending item to inspect the full review context.',
+            pendingDetailAction: 'Action',
+            pendingDetailCreated: 'Created',
+            pendingDetailRoute: 'Route',
+            pendingDetailOriginal: 'Original',
+            pendingDetailEdited: 'Edited',
+            pendingDetailEditedFallback: '(not edited)',
             diagnosticsTitle: 'Diagnostics',
             diagnosticsCopy: 'Capture and interrupt tools.',
             diagnosticsMeta: 'Tools',
@@ -1298,7 +1311,14 @@ GUI_HTML_TEMPLATE = r"""
             statusNote: 'Open to view details.',
             statusMetaIdle: 'Expand',
             statusMetaReady: 'Active',
-            statusMetaGuarded: 'Guarded'
+            statusMetaGuarded: 'Guarded',
+            statusBadgeReady: 'Delivery active',
+            statusBadgeGuarded: 'Guarded',
+            statusBadgePending: 'Pending {count}',
+            statusBadgeTransport: 'Subscribers {total} ({sse} SSE / {websocket} WS)',
+            statusBadgeTransportIdle: 'Subscribers idle',
+            statusBadgeAuditOn: 'Audit on',
+            statusBadgeAuditOff: 'Audit off'
           },
           auditEvents: {
             all: 'all events'
@@ -1434,6 +1454,7 @@ GUI_HTML_TEMPLATE = r"""
             paneHost: 'Host pane 目標',
             paneGuest: 'Guest pane 目標',
             pendingSelect: '待處理 intervention 項目',
+            pendingDetail: '目前待審細節',
             pendingEdit: '核准時改寫文字',
             captureHost: 'Host capture',
             captureGuest: 'Guest capture',
@@ -1485,6 +1506,13 @@ GUI_HTML_TEMPLATE = r"""
             reviewEmpty: '目前沒有待審項目。',
             reviewMetaIdle: '展開',
             reviewMetaPending: '{count} 筆待審',
+            pendingDetailEmpty: '先選一筆待審項目，再查看完整審核脈絡。',
+            pendingDetailAction: 'Action',
+            pendingDetailCreated: '建立時間',
+            pendingDetailRoute: '路徑',
+            pendingDetailOriginal: '原始內容',
+            pendingDetailEdited: '改寫內容',
+            pendingDetailEditedFallback: '（尚未改寫）',
             diagnosticsTitle: '診斷模式',
             diagnosticsCopy: '擷取與中斷工具。',
             diagnosticsMeta: '工具',
@@ -1508,7 +1536,14 @@ GUI_HTML_TEMPLATE = r"""
             statusNote: '展開查看詳細資訊。',
             statusMetaIdle: '展開',
             statusMetaReady: '運作中',
-            statusMetaGuarded: '受保護'
+            statusMetaGuarded: '受保護',
+            statusBadgeReady: '轉發中',
+            statusBadgeGuarded: '受保護',
+            statusBadgePending: '待審 {count}',
+            statusBadgeTransport: '訂閱 {total}（SSE {sse} / WS {websocket}）',
+            statusBadgeTransportIdle: '目前沒有訂閱',
+            statusBadgeAuditOn: 'Audit 已啟用',
+            statusBadgeAuditOff: 'Audit 未啟用'
           },
           auditEvents: {
             all: '全部事件'
@@ -1659,6 +1694,7 @@ GUI_HTML_TEMPLATE = r"""
         guard: null,
         audit: null,
         auditEvents: [],
+        pendingItems: [],
         seen: new Set()
       };
 
@@ -2028,17 +2064,51 @@ GUI_HTML_TEMPLATE = r"""
         ws.addEventListener('close', () => log(t('logs.wsClosed')));
       }
 
+      function formatPendingTimestamp(ts) {
+        const value = Number(ts || 0);
+        if (!value) return '?';
+        const date = new Date(value * 1000);
+        return Number.isNaN(date.getTime()) ? String(ts) : date.toLocaleString();
+      }
+
+      function selectedPendingItem() {
+        const id = $('pending-select').value;
+        if (!id) return null;
+        return state.pendingItems.find(item => String(item.id) === id) || null;
+      }
+
+      function renderPendingDetail() {
+        const item = selectedPendingItem();
+        const box = $('pending-detail');
+        const edit = $('pending-edit');
+        if (!item) {
+          box.textContent = t('cards.pendingDetailEmpty');
+          if (document.activeElement !== edit) edit.value = '';
+          return;
+        }
+        if (document.activeElement !== edit) edit.value = String(item.edited_text || '');
+        box.textContent = [
+          t('cards.pendingDetailAction') + ': ' + String(item.action || '?'),
+          t('cards.pendingDetailCreated') + ': ' + formatPendingTimestamp(item.created_at),
+          t('cards.pendingDetailRoute') + ': ' + String(item.from_pane || '?') + ' -> ' + String(item.to_pane || '?'),
+          t('cards.pendingDetailOriginal') + ': ' + String(item.text || ''),
+          t('cards.pendingDetailEdited') + ': ' + String(item.edited_text || t('cards.pendingDetailEditedFallback')),
+        ].join('\n');
+      }
+
       function fillPending(items) {
+        state.pendingItems = Array.isArray(items) ? items : [];
         const select = $('pending-select');
         select.innerHTML = '';
-        for (const item of items || []) {
+        for (const item of state.pendingItems) {
           const option = document.createElement('option');
           option.value = String(item.id);
-          option.textContent = '#' + item.id + ' ' + item.from_pane + ' -> ' + item.to_pane + ' | ' + item.text;
+          option.textContent = '#' + item.id + ' [' + item.action + '] ' + item.from_pane + ' -> ' + item.to_pane + ' | ' + item.text;
           select.appendChild(option);
         }
         if (select.options.length) select.selectedIndex = 0;
-        $('metric-pending').textContent = String((items || []).length);
+        $('metric-pending').textContent = String(state.pendingItems.length);
+        renderPendingDetail();
         syncPanels();
       }
 
@@ -2063,6 +2133,35 @@ GUI_HTML_TEMPLATE = r"""
         return message === 'bridge not found'
           || message === 'bridge_id required: no active bridges'
           || message.startsWith('no active bridge for room ');
+      }
+
+      function renderStatusSummary(status) {
+        const box = $('status-badges');
+        box.innerHTML = '';
+        const detail = inferBridgeDetail(status);
+        const guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
+        const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
+        const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
+        const room = rooms.find(item => item && item.id === roomId);
+        const subscribers = room && room.subscribers ? room.subscribers : null;
+        const labels = [
+          guard && guard.blocked ? t('cards.statusBadgeGuarded') : t('cards.statusBadgeReady'),
+          format('cards.statusBadgePending', { count: detail ? detail.pending_count : 0 }),
+          subscribers
+            ? format('cards.statusBadgeTransport', {
+                total: subscribers.total,
+                sse: subscribers.sse,
+                websocket: subscribers.websocket,
+              })
+            : t('cards.statusBadgeTransportIdle'),
+          status && status.audit && status.audit.enabled ? t('cards.statusBadgeAuditOn') : t('cards.statusBadgeAuditOff'),
+        ];
+        for (const label of labels) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = label;
+          box.appendChild(badge);
+        }
       }
 
       function inferBridgeId(status) {
@@ -2119,6 +2218,7 @@ GUI_HTML_TEMPLATE = r"""
         state.guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
         state.audit = res.audit || null;
         $('status-box').textContent = JSON.stringify(res, null, 2);
+        renderStatusSummary(res);
         renderAudit();
         syncMetrics();
         return res;
@@ -2303,9 +2403,7 @@ GUI_HTML_TEMPLATE = r"""
           syncMetrics();
           connectTransport();
         };
-        $('pending-select').onchange = () => {
-          $('pending-edit').value = '';
-        };
+        $('pending-select').onchange = () => renderPendingDetail();
       }
 
       async function boot() {

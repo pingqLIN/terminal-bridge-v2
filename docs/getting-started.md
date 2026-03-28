@@ -93,7 +93,19 @@ Register the MCP endpoint in your client, then use this sequence:
 3. `bridge_start`
 4. `room_poll` or room stream
 5. `room_post` / `terminal_send`
-6. `bridge_stop`
+6. `status`
+7. `audit_recent` when you need persisted incident context
+8. `bridge_stop`
+
+### First audit-enabled service session
+
+```bash
+TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+python -m tb2 service audit --lines 10
+```
+
+Use this path when you want durable operator and bridge events from the first run.
 
 ## 5. Understand the handoff contract
 
@@ -130,6 +142,12 @@ Rules:
 - reconnect transport in the GUI
 - or fall back to `room_poll`
 - only restart the bridge after transport has been ruled out
+
+### Audit looks empty
+
+- confirm the service was started with `TB2_AUDIT=1` or `TB2_AUDIT_DIR`
+- check `python -m tb2 service status` for `audit.enabled` and the active file path
+- use `python -m tb2 service audit --lines 20 --event bridge.started` to verify persisted writes
 
 ### Wrong shell starts
 

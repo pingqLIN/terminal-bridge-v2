@@ -21,14 +21,16 @@ Core tools:
 - `list_profiles`
 - `doctor`
 - `status`
+- `audit_recent`
 
-Use them as three capability groups:
+Use them as four capability groups:
 
 | Capability group | Tools |
 | --- | --- |
 | launch and I/O | `terminal_init`, `terminal_send`, `terminal_capture`, `terminal_interrupt` |
 | collaboration state | `room_create`, `room_poll`, `room_post`, `status` |
 | delegation control | `bridge_start`, `bridge_stop`, `intervention_list`, `intervention_approve`, `intervention_reject` |
+| persisted observability | `status`, `audit_recent`, `tb2 service audit` |
 
 ## Server Startup Options
 
@@ -88,6 +90,31 @@ Expected signs:
 - Claude and Gemini show `Connected`
 - Codex shows `enabled`
 
+## Audit And Persistence Checks
+
+Enable audit before you start the detached service when you want durable operator records:
+
+```bash
+TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service status
+python -m tb2 service audit --lines 10
+```
+
+Use `TB2_AUDIT_DIR` when you want an explicit destination instead of the default state root:
+
+```bash
+TB2_AUDIT_DIR=/tmp/tb2-audit python -m tb2 service start --host 127.0.0.1 --port 3189
+python -m tb2 service audit --lines 20 --event bridge.started
+python -m tb2 service audit --lines 20 --room-id demo-room
+```
+
+What to verify:
+
+- `status` returns an `audit` object with `enabled`, `file`, and retention settings
+- `audit_recent` returns persisted entries for the active room or bridge
+- `tb2 service audit` can filter by `event`, `room_id`, and `bridge_id`
+- retention defaults are 5 MiB per active file and 5 files total unless overridden by `TB2_AUDIT_MAX_BYTES` or `TB2_AUDIT_MAX_FILES`
+
 ## Host AI Tool Map
 
 If the Host AI is driving the workflow, this is the minimal useful sequence:
@@ -99,6 +126,7 @@ If the Host AI is driving the workflow, this is the minimal useful sequence:
 5. `intervention_list`
 6. `intervention_approve` or `intervention_reject`
 7. `status`
+8. `audit_recent`
 
 ### Bridge resolution shortcuts
 
@@ -110,6 +138,7 @@ TB2 now supports a lighter control path for intervention tools:
 - when multiple active bridges exist, TB2 returns an explicit error plus `bridge_candidates`
 
 The `status` tool now also returns `bridge_details` so another AI client can map `bridge_id`, `room_id`, panes, profile, and pending count without guessing.
+It also returns an `audit` snapshot so the client can decide whether persisted incident data is available before it asks for `audit_recent`.
 
 ## Human Operator Tool Map
 
@@ -120,6 +149,7 @@ When a human is supervising through an MCP-capable app instead of the browser UI
 3. `room_post`
 4. `terminal_capture`
 5. `terminal_interrupt`
+6. `audit_recent`
 
 ## Protocol Probes
 
