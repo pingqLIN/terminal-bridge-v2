@@ -102,8 +102,8 @@ MSG: ready for review on the backend fallback patch
 ### 建議入口
 
 - 先用 `python -m tb2 gui` 打開瀏覽器控制台。
-- 需要人工審核時，用 `Approval Queue` preset。
-- bridge 已存在，只要監看時，用 `Observe Room` preset。
+- 需要人工審核時，用 `Approval Gate` preset。
+- bridge 已存在，只要監看時，用 `MCP Operator` preset。
 - GUI 不可用時再退回 CLI 或直接 MCP。
 
 ### 核准檢查表

@@ -104,8 +104,8 @@ MSG: ready for review on the backend fallback patch
 ### Recommended Surface
 
 - Start with the browser console at `python -m tb2 gui`.
-- Use the `Approval Queue` preset when you need human review.
-- Use `Observe Room` when the bridge already exists and your job is oversight only.
+- Use the `Approval Gate` preset when you need human review.
+- Use `MCP Operator` when the bridge already exists and your job is oversight only.
 - Fall back to CLI or direct MCP calls only when the GUI is not available.
 
 ### Approval Checklist

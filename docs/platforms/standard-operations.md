@@ -70,10 +70,12 @@ curl -sS http://127.0.0.1:3189/mcp
 
 ### GUI checks
 
-- `Launch Pair` preset should show backend, profile, session, and bridge actions.
-- `Approval Queue` preset should show the pending list and approval actions.
-- `Observe Room` preset should keep the room stream and diagnostics visible.
-- `Diagnostics` preset should foreground capture, interrupt, and status.
+- `Quick Pairing` preset should show backend, profile, session, and bridge actions.
+- `Approval Gate` preset should show the pending list and approval actions.
+- `MCP Operator` preset should keep room and status monitoring visible for external MCP-driven control.
+- `Diagnostics` preset should foreground capture, interrupt, audit state, and status.
+- `Diagnostics` preset should let the operator inspect recent audit entries and narrow them by event and limit.
+- `Mission Control` preset should keep status, room, and diagnostics visible at the same time.
 
 ## 4. Standard Shutdown
 

@@ -70,10 +70,12 @@ curl -sS http://127.0.0.1:3189/mcp
 
 ### GUI 檢查
 
-- `Launch Pair` preset 應顯示 backend、profile、session 與 bridge 動作。
-- `Approval Queue` preset 應顯示 pending list 與 approve / reject 動作。
-- `Observe Room` preset 應保持 room stream 與 diagnostics 可見。
-- `Diagnostics` preset 應把 capture、interrupt、status 放在前景。
+- `Quick Pairing` preset 應顯示 backend、profile、session 與 bridge 動作。
+- `Approval Gate` preset 應顯示 pending list 與 approve / reject 動作。
+- `MCP Operator` preset 應保留 room 與 status 監看能力，供外部 MCP 驅動時使用。
+- `Diagnostics` preset 應把 capture、interrupt、audit 狀態、status 放在前景。
+- `Diagnostics` preset 應可檢視最近 audit entries，並用 event 與 limit 進一步縮小範圍。
+- `Mission Control` preset 應同時保留 status、room、diagnostics。
 
 ## 4. 標準停止流程
 

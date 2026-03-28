@@ -2051,6 +2051,20 @@ GUI_HTML_TEMPLATE = r"""
         return args;
       }
 
+      function clearBridgeState() {
+        $('bridge-id').value = '';
+        $('pending-edit').value = '';
+        state.guard = null;
+        fillPending([]);
+      }
+
+      function isInactiveBridgeError(message) {
+        if (!message) return false;
+        return message === 'bridge not found'
+          || message === 'bridge_id required: no active bridges'
+          || message.startsWith('no active bridge for room ');
+      }
+
       function inferBridgeId(status) {
         const detail = inferBridgeDetail(status);
         if (detail) return detail.bridge_id || '';
@@ -2081,7 +2095,17 @@ GUI_HTML_TEMPLATE = r"""
           fillPending([]);
           return {};
         }
-        const res = await tool('intervention_list', args);
+        let res;
+        try {
+          res = await tool('intervention_list', args);
+        } catch (err) {
+          if (isInactiveBridgeError(err.message || '')) {
+            clearBridgeState();
+            syncMetrics();
+            return { pending: [], count: 0 };
+          }
+          throw err;
+        }
         if (res.bridge_id) $('bridge-id').value = res.bridge_id;
         fillPending(res.pending || []);
         return res;
@@ -2117,6 +2141,7 @@ GUI_HTML_TEMPLATE = r"""
       async function refreshReviewState() {
         await refreshPending();
         await refreshStatus();
+        await refreshAudit();
       }
 
       async function initSession() {
@@ -2158,6 +2183,7 @@ GUI_HTML_TEMPLATE = r"""
         if (!bridgeId) throw new Error(t('errors.bridgeIdRequired'));
         const res = await tool('bridge_stop', { bridge_id: bridgeId });
         stopTransport();
+        clearBridgeState();
         await refreshReviewState();
         log(t('logs.bridgeStopped'));
         return res;
@@ -2172,6 +2198,7 @@ GUI_HTML_TEMPLATE = r"""
         if (deliver) Object.assign(args, bridgeArgs(), { deliver });
         const res = await tool('room_post', args);
         $('send-text').value = '';
+        await refreshAudit();
         log(format('logs.roomPosted', {
           target: deliver ? ' ' + (state.locale === 'zh-TW' ? '到 ' : 'to ') + deliver : (state.locale === 'zh-TW' ? '到 room' : ' to room')
         }));
@@ -2189,6 +2216,7 @@ GUI_HTML_TEMPLATE = r"""
 
       async function interrupt(target) {
         const res = await tool('terminal_interrupt', Object.assign({ target }, bridgeArgs()));
+        await refreshAudit();
         log(format('logs.interruptSent', { target }));
         return res;
       }

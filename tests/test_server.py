@@ -368,6 +368,63 @@ class TestAuditTrail:
         assert result["events"][0]["event"] == "operator.room_post"
         assert result["events"][0]["message_id"] == 1
 
+    def test_audit_recent_covers_guard_and_reject_lifecycle_events(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+        room = create_room("audit-guard-review")
+        bridge = server_mod.Bridge(
+            bridge_id="audit-guard-bridge",
+            backend=MagicMock(),
+            room=room,
+            pane_a="audit:a",
+            pane_b="audit:b",
+            auto_forward=True,
+        )
+        with server_mod._bridges_lock:
+            server_mod._bridges[bridge.bridge_id] = bridge
+
+        profile = server_mod.get_profile("generic")
+        with patch.object(server_mod.time, "time", return_value=100.0):
+            bridge._process_new_lines(
+                "A",
+                "audit:a",
+                "audit:b",
+                [f"MSG:echo {i}" for i in range(7)],
+                profile,
+            )
+
+        pending = bridge.intervention_layer.list_pending()
+        assert len(pending) == 1
+
+        result = server_mod.handle_intervention_reject({
+            "bridge_id": bridge.bridge_id,
+            "id": pending[0].id,
+        })
+
+        assert result["rejected"] == 1
+        guard_blocked = server_mod.handle_audit_recent({
+            "bridge_id": bridge.bridge_id,
+            "event": "bridge.guard_blocked",
+            "limit": 5,
+        })
+        guard_rearmed = server_mod.handle_audit_recent({
+            "bridge_id": bridge.bridge_id,
+            "event": "bridge.guard_rearmed",
+            "limit": 5,
+        })
+        rejected = server_mod.handle_audit_recent({
+            "bridge_id": bridge.bridge_id,
+            "event": "intervention.rejected",
+            "limit": 5,
+        })
+
+        assert guard_blocked["count"] == 1
+        assert "rate limit exceeded" in guard_blocked["events"][0]["reason"]
+        assert guard_rearmed["count"] == 1
+        assert rejected["count"] == 1
+        assert rejected["events"][0]["rejected"] == 1
+        assert rejected["events"][0]["remaining"] == 0
+
 
 class TestBridgeHandlers:
     @patch.object(server_mod, "_make_backend")
@@ -1096,7 +1153,22 @@ class TestGuiRouting:
         html = server_mod.build_gui_html("/mcp")
         assert "async function refreshReviewState()" in html
         assert "await refreshReviewState();" in html
+        assert "await refreshAudit();" in html
         assert ".then(() => refreshReviewState())" in html
+
+    def test_gui_html_clears_stale_bridge_state_after_stop(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert "function clearBridgeState()" in html
+        assert "$('bridge-id').value = '';" in html
+        assert "fillPending([]);" in html
+        assert "clearBridgeState();" in html
+        assert "function isInactiveBridgeError(message)" in html
+        assert "message === 'bridge not found'" in html
+        assert "message.startsWith('no active bridge for room ')" in html
+
+    def test_gui_html_refreshes_audit_after_operator_actions(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert html.count("await refreshAudit();") >= 3
 
     @patch("tb2.gui.default_backend_name", return_value="tmux")
     def test_gui_html_marks_platform_default_backend(self, mock_default):

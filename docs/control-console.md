@@ -89,7 +89,7 @@ Default for:
 
 - smoke tests
 - backend validation
-- capture and interrupt workflows
+- capture, interrupt, and audit triage workflows
 
 Primary controls:
 
@@ -97,6 +97,10 @@ Primary controls:
 - interrupt Host
 - interrupt Guest
 - interrupt both
+- audit status
+- recent audit entries
+- audit event filter
+- audit entry limit
 - raw status
 
 ### Handoff Radar
@@ -140,7 +144,7 @@ Primary controls:
 - raw status snapshot
 - live room
 - diagnostics
-- pending queue when it exists
+- review queue
 
 ## Information Hierarchy
 
@@ -193,6 +197,10 @@ Contains:
 - capture Host
 - capture Guest
 - interrupt controls
+- audit enabled state
+- recent persisted audit events
+- audit event filter
+- audit entry limit
 - raw status JSON
 
 ### 6. Advanced details
@@ -220,6 +228,7 @@ The simplified console still needs full reachability for:
 - `intervention_list`
 - `intervention_approve`
 - `intervention_reject`
+- `audit_recent`
 - `status`
 
 ## Recommended Defaults
