@@ -995,6 +995,7 @@ GUI_HTML_TEMPLATE = r"""
               <div class="stat"><b data-i18n="metrics.room">Room</b><span id="metric-room">not attached</span></div>
               <div class="stat"><b data-i18n="metrics.pending">Pending</b><span id="metric-pending">0</span></div>
             </div>
+            <div class="note hidden" id="guard-note" data-i18n="cards.guardNote">Auto-forward guard active. New handoffs now route to review.</div>
             <div class="note note--quiet" id="live-empty" data-i18n="cards.liveEmpty">Start a bridge to reveal room controls and the live stream.</div>
             <div id="live-shell" class="hidden">
               <div class="row" style="margin-top: 12px;">
@@ -1249,11 +1250,13 @@ GUI_HTML_TEMPLATE = r"""
             liveTitle: 'Live Collaboration',
             liveCopy: 'Watch room and send messages.',
             liveEmpty: 'Start bridge to show room tools.',
+            guardNote: 'Auto-forward guard active. New handoffs now route to review: {reason}',
             statusTitle: 'Status and Activity',
             statusCopy: 'Status and log.',
             statusNote: 'Open to view details.',
             statusMetaIdle: 'Expand',
-            statusMetaReady: 'Active'
+            statusMetaReady: 'Active',
+            statusMetaGuarded: 'Guarded'
           },
           metrics: {
             host: 'Host',
@@ -1441,11 +1444,13 @@ GUI_HTML_TEMPLATE = r"""
             liveTitle: '即時協作',
             liveCopy: '查看 room 並送出訊息。',
             liveEmpty: '啟動 Bridge 後顯示 room 工具。',
+            guardNote: 'Auto-forward guard 已啟用。新的 handoff 會改送 review：{reason}',
             statusTitle: '狀態與活動',
             statusCopy: '',
             statusNote: '展開查看詳細資訊。',
             statusMetaIdle: '展開',
-            statusMetaReady: '運作中'
+            statusMetaReady: '運作中',
+            statusMetaGuarded: '受保護'
           },
           metrics: {
             host: 'Host',
@@ -1590,6 +1595,7 @@ GUI_HTML_TEMPLATE = r"""
         poller: null,
         sse: null,
         ws: null,
+        guard: null,
         seen: new Set()
       };
 
@@ -1785,6 +1791,7 @@ GUI_HTML_TEMPLATE = r"""
         const hasRoom = Boolean($('room-id').value.trim());
         const liveActive = hasBridge && hasRoom;
         const pendingCount = Number($('metric-pending').textContent || '0') || 0;
+        const guardBlocked = Boolean(state.guard && state.guard.blocked);
         const preset = PRESETS[state.preset] || PRESETS.quick;
         const focus = preset.focus || 'launch';
         const showStatus = preset.showStatus !== false;
@@ -1797,6 +1804,7 @@ GUI_HTML_TEMPLATE = r"""
 
         setHidden('live-shell', !liveActive);
         setHidden('live-empty', liveActive);
+        setHidden('guard-note', !guardBlocked);
 
         setHidden('pending-card', !(preset.showPending || pendingCount > 0));
         setHidden('diagnostics-card', !preset.showDiagnostics);
@@ -1807,10 +1815,15 @@ GUI_HTML_TEMPLATE = r"""
         $('pending-summary-meta').textContent = pendingCount > 0
           ? format('cards.reviewMetaPending', { count: pendingCount })
           : t('cards.reviewMetaIdle');
-        $('status-summary-meta').textContent = hasBridge || hasRoom
-          ? t('cards.statusMetaReady')
-          : t('cards.statusMetaIdle');
+        $('status-summary-meta').textContent = guardBlocked
+          ? t('cards.statusMetaGuarded')
+          : (hasBridge || hasRoom ? t('cards.statusMetaReady') : t('cards.statusMetaIdle'));
         $('diagnostics-summary-meta').textContent = t('cards.diagnosticsMeta');
+        if (guardBlocked) {
+          $('guard-note').textContent = format('cards.guardNote', {
+            reason: state.guard.guard_reason || 'unspecified'
+          });
+        }
 
         $('pending-details').open = state.preset === 'approval' || pendingCount > 0;
         $('status-details').open = focus === 'status';
@@ -1941,16 +1954,27 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       function inferBridgeId(status) {
+        const detail = inferBridgeDetail(status);
+        if (detail) return detail.bridge_id || '';
+        return '';
+      }
+
+      function inferBridgeDetail(status) {
+        const bridgeId = $('bridge-id').value.trim();
         const roomId = $('room-id').value.trim();
         const details = Array.isArray(status && status.bridge_details) ? status.bridge_details : [];
-        if (!details.length) return '';
+        if (!details.length) return null;
+        if (bridgeId) {
+          const exact = details.find(item => item && item.bridge_id === bridgeId);
+          if (exact) return exact;
+        }
         if (roomId) {
           const matches = details.filter(item => item.room_id === roomId);
-          if (matches.length === 1) return matches[0].bridge_id || '';
-          return '';
+          if (matches.length === 1) return matches[0];
+          return null;
         }
-        if (details.length === 1) return details[0].bridge_id || '';
-        return '';
+        if (details.length === 1) return details[0];
+        return null;
       }
 
       async function refreshPending() {
@@ -1967,8 +1991,10 @@ GUI_HTML_TEMPLATE = r"""
 
       async function refreshStatus() {
         const res = await tool('status', {});
-        const inferred = inferBridgeId(res);
+        const detail = inferBridgeDetail(res);
+        const inferred = detail ? (detail.bridge_id || '') : '';
         if (!$('bridge-id').value.trim() && inferred) $('bridge-id').value = inferred;
+        state.guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
         $('status-box').textContent = JSON.stringify(res, null, 2);
         syncMetrics();
         return res;
