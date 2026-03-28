@@ -79,11 +79,14 @@ def test_audit_trail_mask_mode_redacts_nested_text_fields(tmp_path):
     assert item["text_length"] == 6
     assert item["text_lines"] == 1
     assert item["text_mode"] == "mask"
+    assert len(item["text_sha256"]) == 16
     assert item["nested"]["edited_text"] == "[redacted]"
     assert item["nested"]["edited_text_redacted"] is True
     assert item["nested"]["edited_text_mode"] == "mask"
+    assert len(item["nested"]["edited_text_sha256"]) == 16
     assert item["items"][0]["guard_text"] == "[redacted]"
     assert item["items"][0]["guard_text_mode"] == "mask"
+    assert len(item["items"][0]["guard_text_sha256"]) == 16
 
 
 def test_audit_trail_drop_mode_removes_text_content(tmp_path):
@@ -98,6 +101,7 @@ def test_audit_trail_drop_mode_removes_text_content(tmp_path):
     assert item["text_length"] == 13
     assert item["text_lines"] == 2
     assert item["text_mode"] == "drop"
+    assert len(item["text_sha256"]) == 16
 
 
 def test_audit_trail_full_mode_keeps_text_content(tmp_path):
@@ -112,6 +116,7 @@ def test_audit_trail_full_mode_keeps_text_content(tmp_path):
     assert item["text_length"] == 6
     assert item["text_lines"] == 1
     assert item["text_mode"] == "full"
+    assert len(item["text_sha256"]) == 16
 
 
 def test_audit_trail_from_env_honors_text_mode_for_custom_dir(tmp_path, monkeypatch):
@@ -178,8 +183,14 @@ def test_append_audit_event_returns_sanitized_payload(tmp_path, monkeypatch):
     assert entry["payload"]["text"] == "[redacted]"
     assert entry["payload"]["text_redacted"] is True
     assert entry["payload"]["text_mode"] == "mask"
+    assert len(entry["payload"]["text_sha256"]) == 16
     assert entry["payload"]["meta"]["guard_text"] == "[redacted]"
     assert entry["payload"]["meta"]["guard_text_redacted"] is True
+    assert len(entry["payload"]["meta"]["guard_text_sha256"]) == 16
+
+    raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "sensitive" not in raw
+    assert "hidden" not in raw
 
 
 def test_audit_trail_redacts_text_fields_recursively(tmp_path):
@@ -217,12 +228,17 @@ def test_audit_trail_redacts_text_fields_recursively(tmp_path):
     assert item["text_redacted"] is True
     assert item["text_length"] == len("root secret")
     assert item["text_mode"] == "mask"
+    assert len(item["text_sha256"]) == 16
     assert item["message"]["text"] == "[redacted]"
     assert item["message"]["text_redacted"] is True
     assert item["message"]["text_mode"] == "mask"
+    assert len(item["message"]["text_sha256"]) == 16
     assert item["message"]["meta"]["guard_text"] == "[redacted]"
     assert item["message"]["meta"]["guard_text_mode"] == "mask"
+    assert len(item["message"]["meta"]["guard_text_sha256"]) == 16
     assert item["payload"]["edited_text"] == "[redacted]"
     assert item["payload"]["edited_text_mode"] == "mask"
+    assert len(item["payload"]["edited_text_sha256"]) == 16
     assert item["items"][0]["text"] == "[redacted]"
     assert item["items"][0]["text_mode"] == "mask"
+    assert len(item["items"][0]["text_sha256"]) == 16
