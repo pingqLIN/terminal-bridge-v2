@@ -962,6 +962,12 @@ class TestGuiRouting:
         assert "Mission Control" in html
         assert "bridge_candidates" in html
 
+    def test_gui_html_refreshes_status_after_review_actions(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert "async function refreshReviewState()" in html
+        assert "await refreshReviewState();" in html
+        assert ".then(() => refreshReviewState())" in html
+
     @patch("tb2.gui.default_backend_name", return_value="tmux")
     def test_gui_html_marks_platform_default_backend(self, mock_default):
         html = server_mod.build_gui_html("/mcp")

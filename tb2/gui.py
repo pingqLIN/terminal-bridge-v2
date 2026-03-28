@@ -1250,6 +1250,7 @@ GUI_HTML_TEMPLATE = r"""
             liveTitle: 'Live Collaboration',
             liveCopy: 'Watch room and send messages.',
             liveEmpty: 'Start bridge to show room tools.',
+            guardReasonFallback: 'unspecified',
             guardNote: 'Auto-forward guard active. New handoffs now route to review: {reason}',
             statusTitle: 'Status and Activity',
             statusCopy: 'Status and log.',
@@ -1444,6 +1445,7 @@ GUI_HTML_TEMPLATE = r"""
             liveTitle: '即時協作',
             liveCopy: '查看 room 並送出訊息。',
             liveEmpty: '啟動 Bridge 後顯示 room 工具。',
+            guardReasonFallback: '未提供原因',
             guardNote: 'Auto-forward guard 已啟用。新的 handoff 會改送 review：{reason}',
             statusTitle: '狀態與活動',
             statusCopy: '',
@@ -1821,7 +1823,7 @@ GUI_HTML_TEMPLATE = r"""
         $('diagnostics-summary-meta').textContent = t('cards.diagnosticsMeta');
         if (guardBlocked) {
           $('guard-note').textContent = format('cards.guardNote', {
-            reason: state.guard.guard_reason || 'unspecified'
+            reason: state.guard.guard_reason || t('cards.guardReasonFallback')
           });
         }
 
@@ -2000,6 +2002,11 @@ GUI_HTML_TEMPLATE = r"""
         return res;
       }
 
+      async function refreshReviewState() {
+        await refreshPending();
+        await refreshStatus();
+      }
+
       async function initSession() {
         const res = await tool('terminal_init', Object.assign({
           session: $('session').value.trim() || 'tb2-ai-first'
@@ -2029,8 +2036,7 @@ GUI_HTML_TEMPLATE = r"""
         state.seen = new Set();
         $('stream-box').textContent = '';
         connectTransport();
-        await refreshPending();
-        await refreshStatus();
+        await refreshReviewState();
         log(format('logs.bridgeOnline', { bridgeId: res.bridge_id || '' }));
         return res;
       }
@@ -2040,8 +2046,7 @@ GUI_HTML_TEMPLATE = r"""
         if (!bridgeId) throw new Error(t('errors.bridgeIdRequired'));
         const res = await tool('bridge_stop', { bridge_id: bridgeId });
         stopTransport();
-        await refreshPending();
-        await refreshStatus();
+        await refreshReviewState();
         log(t('logs.bridgeStopped'));
         return res;
       }
@@ -2084,7 +2089,7 @@ GUI_HTML_TEMPLATE = r"""
         if (edited) args.edited_text = edited;
         const res = await tool('intervention_approve', args);
         if (res.bridge_id) $('bridge-id').value = res.bridge_id;
-        await refreshPending();
+        await refreshReviewState();
         log(t('logs.approved'));
         return res;
       }
@@ -2094,7 +2099,7 @@ GUI_HTML_TEMPLATE = r"""
         if (!id) throw new Error(t('errors.selectPendingFirst'));
         const res = await tool('intervention_reject', Object.assign({ id: Number(id) }, bridgeArgs()));
         if (res.bridge_id) $('bridge-id').value = res.bridge_id;
-        await refreshPending();
+        await refreshReviewState();
         log(t('logs.rejected'));
         return res;
       }
@@ -2147,10 +2152,10 @@ GUI_HTML_TEMPLATE = r"""
         $('reject-selected').onclick = () => run(rejectSelected);
         $('approve-all').onclick = () => run(() => tool('intervention_approve', Object.assign({
           id: 'all'
-        }, bridgeArgs())).then(refreshPending));
+        }, bridgeArgs())).then(() => refreshReviewState()));
         $('reject-all').onclick = () => run(() => tool('intervention_reject', Object.assign({
           id: 'all'
-        }, bridgeArgs())).then(refreshPending));
+        }, bridgeArgs())).then(() => refreshReviewState()));
         $('transport').onchange = () => {
           syncMetrics();
           connectTransport();
