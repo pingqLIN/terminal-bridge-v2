@@ -44,6 +44,178 @@ AUDIT_EVENT_CATALOG = (
     "intervention.rejected",
 )
 
+_AUDIT_ROOM_MESSAGE_META_SCHEMA: Dict[str, Any] = {
+    "bridge_id": True,
+    "pending_id": True,
+    "to_pane": True,
+    "from_pane": True,
+    "pane": True,
+    "guard_reason": True,
+    "guard_text": True,
+}
+
+_AUDIT_ROOM_MESSAGE_SCHEMA: Dict[str, Any] = {
+    "event_id": True,
+    "id": True,
+    "room_id": True,
+    "bridge_id": True,
+    "author": True,
+    "source": {
+        "type": True,
+        "role": True,
+        "trusted": True,
+    },
+    "source_type": True,
+    "source_role": True,
+    "trusted": True,
+    "text": True,
+    "kind": True,
+    "meta": _AUDIT_ROOM_MESSAGE_META_SCHEMA,
+    "created_at": True,
+    "ts": True,
+}
+
+_AUDIT_EVENT_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "terminal.session_init": {
+        "session": True,
+        "pane_a": True,
+        "pane_b": True,
+    },
+    "terminal.sent": {
+        "target": True,
+        "text": True,
+        "enter": True,
+    },
+    "room.created": {
+        "room_id": True,
+        "existing": True,
+    },
+    "room.deleted": {
+        "room_id": True,
+        "bridge_id": True,
+        "payload": {
+            "message_count": True,
+            "last_active": True,
+            "created_at": True,
+        },
+    },
+    "room.cleaned_up": {
+        "room_id": True,
+        "bridge_id": True,
+        "payload": {
+            "message_count": True,
+            "last_active": True,
+            "created_at": True,
+        },
+    },
+    "room.message": {
+        "room_id": True,
+        "message": _AUDIT_ROOM_MESSAGE_SCHEMA,
+    },
+    "room.message_posted": {
+        "room_id": True,
+        "bridge_id": True,
+        "payload": {
+            "id": True,
+            "author": True,
+            "text": True,
+            "kind": True,
+            "source_type": True,
+            "source_role": True,
+            "trusted": True,
+            "meta": _AUDIT_ROOM_MESSAGE_META_SCHEMA,
+            "created_at": True,
+        },
+    },
+    "operator.room_post": {
+        "room_id": True,
+        "message_id": True,
+        "author": True,
+        "kind": True,
+        "deliver": True,
+        "deliver_error": True,
+    },
+    "operator.interrupt": {
+        "bridge_id": True,
+        "room_id": True,
+        "target": True,
+        "sent": [True],
+        "errors": [{"pane": True, "error": True}],
+    },
+    "bridge.start_existing": {
+        "bridge_id": True,
+        "room_id": True,
+        "pane_a": True,
+        "pane_b": True,
+        "reason": True,
+    },
+    "bridge.start_conflict": {
+        "bridge_id": True,
+        "room_id": True,
+        "pane_a": True,
+        "pane_b": True,
+        "requested_room_id": True,
+        "reason": True,
+    },
+    "bridge.start_failed": {
+        "bridge_id": True,
+        "room_id": True,
+        "pane_a": True,
+        "pane_b": True,
+        "profile": True,
+        "reason": True,
+        "error": True,
+    },
+    "bridge.started": {
+        "bridge_id": True,
+        "room_id": True,
+        "pane_a": True,
+        "pane_b": True,
+        "profile": True,
+        "auto_forward": True,
+        "intervention": True,
+    },
+    "bridge.stopped": {
+        "bridge_id": True,
+        "room_id": True,
+    },
+    "bridge.guard_blocked": {
+        "bridge_id": True,
+        "room_id": True,
+        "from_pane": True,
+        "to_pane": True,
+        "reason": True,
+        "text": True,
+    },
+    "bridge.guard_rearmed": {
+        "bridge_id": True,
+        "room_id": True,
+    },
+    "intervention.submitted": {
+        "bridge_id": True,
+        "room_id": True,
+        "pending_id": True,
+        "from_pane": True,
+        "to_pane": True,
+        "text": True,
+        "action": True,
+    },
+    "intervention.approved": {
+        "bridge_id": True,
+        "room_id": True,
+        "approved": True,
+        "delivered": [{"id": True, "to_pane": True}],
+        "errors": [{"id": True, "error": True}],
+        "remaining": True,
+    },
+    "intervention.rejected": {
+        "bridge_id": True,
+        "room_id": True,
+        "rejected": True,
+        "remaining": True,
+    },
+}
+
 
 def _state_root() -> Path:
     env_root = os.environ.get("TB2_STATE_DIR")
@@ -180,10 +352,15 @@ class AuditTrail:
     def write(self, event: str, payload: Dict[str, Any]) -> bool:
         if not self.file or not event.strip():
             return False
+        schema = _AUDIT_EVENT_SCHEMAS.get(event)
         entry = {
             "ts": time.time(),
             "event": event,
-            **_sanitize_audit_value(payload, text_mode=self.text_mode),
+            **(
+                _sanitize_event_payload(payload, schema=schema, text_mode=self.text_mode)
+                if schema is not None
+                else _sanitize_audit_value(payload, text_mode=self.text_mode)
+            ),
         }
         try:
             text = json.dumps(entry, ensure_ascii=False, sort_keys=True)
@@ -285,20 +462,58 @@ def _sanitize_audit_value(value: Any, *, text_mode: str) -> Any:
     return value
 
 
+def _sanitize_event_payload(payload: Dict[str, Any], *, schema: Dict[str, Any], text_mode: str) -> Dict[str, Any]:
+    sanitized: Dict[str, Any] = {}
+    for key, subschema in schema.items():
+        if key not in payload:
+            continue
+        value = payload[key]
+        if key in _TEXT_REDACTION_KEYS and isinstance(value, str):
+            sanitized.update(_sanitize_scalar_text(key, value, text_mode=text_mode))
+            continue
+        if subschema is True:
+            sanitized[key] = _sanitize_audit_value(value, text_mode=text_mode)
+            continue
+        if isinstance(subschema, dict):
+            if isinstance(value, dict):
+                sanitized[key] = _sanitize_event_payload(value, schema=subschema, text_mode=text_mode)
+            continue
+        if isinstance(subschema, list) and len(subschema) == 1 and isinstance(value, list):
+            item_schema = subschema[0]
+            if item_schema is True:
+                sanitized[key] = [_sanitize_audit_value(item, text_mode=text_mode) for item in value]
+                continue
+            if isinstance(item_schema, dict):
+                sanitized[key] = [
+                    _sanitize_event_payload(item, schema=item_schema, text_mode=text_mode)
+                    for item in value
+                    if isinstance(item, dict)
+                ]
+                continue
+        sanitized[key] = _sanitize_audit_value(value, text_mode=text_mode)
+    return sanitized
+
+
 def _sanitize_audit_dict(payload: Dict[str, Any], *, text_mode: str) -> Dict[str, Any]:
     sanitized: Dict[str, Any] = {}
     for key, value in payload.items():
         if key in _TEXT_REDACTION_KEYS and isinstance(value, str):
-            summary = _text_summary(value, text_mode=text_mode)
-            sanitized[key] = value if text_mode == "full" else ("[redacted]" if text_mode == "mask" else None)
-            sanitized[f"{key}_redacted"] = summary["redacted"]
-            sanitized[f"{key}_length"] = summary["length"]
-            sanitized[f"{key}_lines"] = summary["lines"]
-            sanitized[f"{key}_mode"] = summary["mode"]
-            sanitized[f"{key}_sha256"] = summary["sha256"]
+            sanitized.update(_sanitize_scalar_text(key, value, text_mode=text_mode))
             continue
         sanitized[key] = _sanitize_audit_value(value, text_mode=text_mode)
     return sanitized
+
+
+def _sanitize_scalar_text(key: str, value: str, *, text_mode: str) -> Dict[str, Any]:
+    summary = _text_summary(value, text_mode=text_mode)
+    return {
+        key: value if text_mode == "full" else ("[redacted]" if text_mode == "mask" else None),
+        f"{key}_redacted": summary["redacted"],
+        f"{key}_length": summary["length"],
+        f"{key}_lines": summary["lines"],
+        f"{key}_mode": summary["mode"],
+        f"{key}_sha256": summary["sha256"],
+    }
 
 
 def record_event(
@@ -332,7 +547,12 @@ def append_audit_event(
     payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     trail = AuditTrail.from_env()
-    clean_payload = _sanitize_audit_value(payload or {}, text_mode=trail.text_mode)
+    schema = _AUDIT_EVENT_SCHEMAS.get(str(event))
+    clean_payload = (
+        _sanitize_event_payload(payload or {}, schema=schema, text_mode=trail.text_mode)
+        if schema is not None
+        else _sanitize_audit_value(payload or {}, text_mode=trail.text_mode)
+    )
     entry: Dict[str, Any] = {
         "ts": time.time(),
         "event": str(event),
@@ -340,7 +560,7 @@ def append_audit_event(
         "bridge_id": bridge_id,
         "payload": clean_payload,
     }
-    if trail.write(str(event), {"room_id": room_id, "bridge_id": bridge_id, "payload": clean_payload}):
+    if trail.write(str(event), {"room_id": room_id, "bridge_id": bridge_id, "payload": payload or {}}):
         return entry
     return entry
 
