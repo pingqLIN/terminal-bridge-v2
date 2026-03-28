@@ -1102,6 +1102,27 @@ GUI_HTML_TEMPLATE = r"""
               </div>
               <div style="margin-top: 14px;">
                 <label for="audit-box" data-i18n="fields.audit">audit trail</label>
+                <div class="row" style="margin-top: 8px;">
+                  <div>
+                    <label for="audit-event" data-i18n="fields.auditEvent">audit event</label>
+                    <select id="audit-event">
+                      <option value="" data-i18n="auditEvents.all">all events</option>
+                      <option value="room.message_posted">room.message_posted</option>
+                      <option value="operator.room_post">operator.room_post</option>
+                      <option value="operator.interrupt">operator.interrupt</option>
+                      <option value="intervention.approved">intervention.approved</option>
+                      <option value="intervention.rejected">intervention.rejected</option>
+                      <option value="bridge.started">bridge.started</option>
+                      <option value="bridge.stopped">bridge.stopped</option>
+                      <option value="bridge.guard_blocked">bridge.guard_blocked</option>
+                      <option value="bridge.guard_rearmed">bridge.guard_rearmed</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="audit-limit" data-i18n="fields.auditLimit">recent audit limit</label>
+                    <input id="audit-limit" type="number" min="1" max="50" value="12">
+                  </div>
+                </div>
                 <div class="actions" style="margin-top: 8px;">
                   <button id="refresh-audit" class="ghost" type="button" data-i18n="actions.refreshAudit">Refresh Audit</button>
                 </div>
@@ -1207,6 +1228,8 @@ GUI_HTML_TEMPLATE = r"""
             captureHost: 'Host capture',
             captureGuest: 'Guest capture',
             audit: 'audit trail',
+            auditEvent: 'audit event',
+            auditLimit: 'recent audit limit',
             sendText: 'human operator message',
             stream: 'live room stream',
             status: 'server status',
@@ -1268,12 +1291,17 @@ GUI_HTML_TEMPLATE = r"""
             auditDestinationFallback: 'configured destination',
             auditError: 'Audit trail error: {error}',
             auditEmpty: 'No recent audit entries for the current scope.',
+            auditScope: 'Scope: {scope}. Filter: {event}. Limit: {limit}.',
+            auditScopeFallback: 'global',
             statusTitle: 'Status and Activity',
             statusCopy: 'Status and log.',
             statusNote: 'Open to view details.',
             statusMetaIdle: 'Expand',
             statusMetaReady: 'Active',
             statusMetaGuarded: 'Guarded'
+          },
+          auditEvents: {
+            all: 'all events'
           },
           metrics: {
             host: 'Host',
@@ -1410,6 +1438,8 @@ GUI_HTML_TEMPLATE = r"""
             captureHost: 'Host capture',
             captureGuest: 'Guest capture',
             audit: 'audit trail',
+            auditEvent: 'audit event',
+            auditLimit: 'recent audit limit',
             sendText: 'human operator 訊息',
             stream: 'live room stream',
             status: 'server status',
@@ -1471,12 +1501,17 @@ GUI_HTML_TEMPLATE = r"""
             auditDestinationFallback: '已設定的目的地',
             auditError: 'Audit trail 錯誤：{error}',
             auditEmpty: '目前 scope 沒有最近的 audit entries。',
+            auditScope: '目前 scope：{scope}。Filter：{event}。Limit：{limit}。',
+            auditScopeFallback: '全域',
             statusTitle: '狀態與活動',
             statusCopy: '',
             statusNote: '展開查看詳細資訊。',
             statusMetaIdle: '展開',
             statusMetaReady: '運作中',
             statusMetaGuarded: '受保護'
+          },
+          auditEvents: {
+            all: '全部事件'
           },
           metrics: {
             host: 'Host',
@@ -1909,12 +1944,18 @@ GUI_HTML_TEMPLATE = r"""
         const audit = state.audit || {};
         const enabled = Boolean(audit.enabled);
         const destination = String(audit.file || audit.root || '').trim() || t('cards.auditDestinationFallback');
+        const bridgeId = $('bridge-id').value.trim();
+        const roomId = $('room-id').value.trim();
+        const scope = [bridgeId, roomId].filter(Boolean).join(' / ') || t('cards.auditScopeFallback');
+        const event = $('audit-event').value.trim() || t('auditEvents.all');
+        const limit = $('audit-limit').value.trim() || '12';
         let note = enabled
           ? format('cards.auditEnabled', { file: destination })
           : t('cards.auditDisabled');
         if (audit.last_error) {
           note += ' ' + format('cards.auditError', { error: audit.last_error });
         }
+        note += ' ' + format('cards.auditScope', { scope, event, limit });
         $('audit-note').textContent = note;
         $('refresh-audit').disabled = !enabled;
         $('audit-box').textContent = state.auditEvents.length
@@ -2060,7 +2101,12 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       async function refreshAudit() {
-        const res = await tool('audit_recent', Object.assign({ limit: 12 }, bridgeArgs()));
+        const args = Object.assign({}, bridgeArgs());
+        const rawLimit = Number($('audit-limit').value || '12');
+        args.limit = Math.max(1, Math.min(50, Number.isFinite(rawLimit) ? rawLimit : 12));
+        const event = $('audit-event').value.trim();
+        if (event) args.event = event;
+        const res = await tool('audit_recent', args);
         state.audit = res.audit || state.audit;
         state.auditEvents = Array.isArray(res.events) ? res.events : [];
         renderAudit();
@@ -2207,6 +2253,8 @@ GUI_HTML_TEMPLATE = r"""
         $('refresh-status').onclick = () => run(refreshStatus);
         $('refresh-pending').onclick = () => run(refreshPending);
         $('refresh-audit').onclick = () => run(refreshAudit);
+        $('audit-event').onchange = () => run(refreshAudit);
+        $('audit-limit').onchange = () => run(refreshAudit);
         $('send-host').onclick = () => run(() => sendRoom('a'));
         $('send-guest').onclick = () => run(() => sendRoom('b'));
         $('send-room').onclick = () => run(() => sendRoom($('deliver').value || ''));

@@ -102,6 +102,7 @@ TB2 特別適合這類情境：
 - 持久化 audit 檔案現在預設會在 5 MiB 時 rotation，最多保留 5 個檔案；可用 `TB2_AUDIT_MAX_BYTES` 與 `TB2_AUDIT_MAX_FILES` 覆寫
 - operator 可透過 `tb2 service audit` 或 MCP `audit_recent` 直接查看已落盤的事件
 - GUI 的 Diagnostics 卡現在也會顯示 audit 是否啟用，以及目前 room / bridge 的最近持久化事件
+- GUI audit 視窗現在也支援 event filter 與最近筆數限制，方便 incident triage
 
 ## 快速安裝
 

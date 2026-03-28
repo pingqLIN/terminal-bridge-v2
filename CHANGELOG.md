@@ -20,6 +20,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - `status` now reports audit-trail enablement and destination details so operators can verify persistence state from the active control surface.
 - GUI diagnostics now surface audit enablement and recent persisted entries for the active room / bridge scope.
 - Audit persistence now rotates by size with bounded file retention instead of growing a single unbounded JSONL forever.
+- GUI diagnostics audit view now supports event-level filtering and recent-entry limits for faster review.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.

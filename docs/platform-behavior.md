@@ -88,6 +88,7 @@ Priority:
 - `status` now includes an `audit` snapshot so operators can see whether persistence is enabled and where entries are being written
 - operators can read recent entries through `tb2 service audit` locally or the MCP `audit_recent` tool remotely
 - the GUI Diagnostics card now mirrors that state and shows recent persisted events for the current room / bridge scope
+- GUI operators can further narrow that view by event name and recent-entry limit without leaving the main console
 
 ## Service State Path Policy
 

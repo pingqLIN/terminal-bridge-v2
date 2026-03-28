@@ -1082,7 +1082,15 @@ class TestGuiRouting:
         assert 'id="refresh-audit"' in html
         assert 'id="audit-box"' in html
         assert 'id="audit-note"' in html
+        assert 'id="audit-event"' in html
+        assert 'id="audit-limit"' in html
         assert "audit_recent" in html
+
+    def test_gui_html_wires_audit_filters_to_refresh(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert "$('audit-event').onchange = () => run(refreshAudit);" in html
+        assert "$('audit-limit').onchange = () => run(refreshAudit);" in html
+        assert "if (event) args.event = event;" in html
 
     def test_gui_html_refreshes_status_after_review_actions(self):
         html = server_mod.build_gui_html("/mcp")
