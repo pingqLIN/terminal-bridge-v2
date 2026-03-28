@@ -16,6 +16,8 @@ _FALSE_VALUES = {"", "0", "false", "no", "off"}
 _MAX_RECENT_EVENTS = 200
 _RECENT_SCAN_FACTOR = 20
 _MIN_RECENT_SCAN = 400
+_DEFAULT_MAX_BYTES = 5 * 1024 * 1024
+_DEFAULT_MAX_FILES = 5
 
 
 def _state_root() -> Path:
@@ -59,10 +61,30 @@ def _runtime_dir(root: Path) -> None:
         os.chmod(root, 0o700)
 
 
+def _positive_int(raw: Optional[str], *, default: int, minimum: int) -> int:
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = int(str(raw).strip())
+    except ValueError:
+        return default
+    if value < minimum:
+        return default
+    return value
+
+
 class AuditTrail:
-    def __init__(self, root: Optional[Path] = None):
+    def __init__(
+        self,
+        root: Optional[Path] = None,
+        *,
+        max_bytes: int = _DEFAULT_MAX_BYTES,
+        max_files: int = _DEFAULT_MAX_FILES,
+    ):
         self.root = root.expanduser().resolve() if root else None
         self.file = self.root / "events.jsonl" if self.root else None
+        self.max_bytes = max(max_bytes, 1024)
+        self.max_files = max(max_files, 1)
         self._lock = threading.Lock()
         self._last_error = ""
 
@@ -74,7 +96,19 @@ class AuditTrail:
         raw_enabled = os.environ.get("TB2_AUDIT", "")
         if raw_enabled.strip().lower() in _FALSE_VALUES:
             return cls()
-        return cls(_state_root() / "audit")
+        return cls(
+            _state_root() / "audit",
+            max_bytes=_positive_int(
+                os.environ.get("TB2_AUDIT_MAX_BYTES"),
+                default=_DEFAULT_MAX_BYTES,
+                minimum=1024,
+            ),
+            max_files=_positive_int(
+                os.environ.get("TB2_AUDIT_MAX_FILES"),
+                default=_DEFAULT_MAX_FILES,
+                minimum=1,
+            ),
+        )
 
     def enabled(self) -> bool:
         return self.file is not None
@@ -84,6 +118,8 @@ class AuditTrail:
             "enabled": self.enabled(),
             "root": str(self.root) if self.root else None,
             "file": str(self.file) if self.file else None,
+            "max_bytes": self.max_bytes if self.enabled() else None,
+            "max_files": self.max_files if self.enabled() else None,
             "last_error": self._last_error or None,
         }
 
@@ -99,6 +135,7 @@ class AuditTrail:
             text = json.dumps(entry, ensure_ascii=False, sort_keys=True)
             with self._lock:
                 _runtime_dir(self.root)
+                self._rotate_if_needed_locked(len(text.encode("utf-8")) + 1)
                 with self.file.open("a", encoding="utf-8") as handle:
                     handle.write(text)
                     handle.write("\n")
@@ -124,29 +161,66 @@ class AuditTrail:
         cap = max(1, min(int(limit), _MAX_RECENT_EVENTS))
         scan = max(cap * _RECENT_SCAN_FACTOR, _MIN_RECENT_SCAN)
         with self._lock:
-            with self.file.open("r", encoding="utf-8", errors="replace") as handle:
-                lines: Deque[str] = deque(handle, maxlen=scan)
-
-        items: List[Dict[str, Any]] = []
-        for raw in reversed(list(lines)):
-            text = raw.strip()
-            if not text:
-                continue
-            try:
-                item = json.loads(text)
-            except json.JSONDecodeError:
-                continue
-            if room_id and item.get("room_id") != room_id:
-                continue
-            if bridge_id and item.get("bridge_id") != bridge_id:
-                continue
-            if event and item.get("event") != event:
-                continue
-            items.append(item)
-            if len(items) >= cap:
-                break
+            items: List[Dict[str, Any]] = []
+            for path in self._recent_paths_locked():
+                with path.open("r", encoding="utf-8", errors="replace") as handle:
+                    lines: Deque[str] = deque(handle, maxlen=scan)
+                for raw in reversed(list(lines)):
+                    text = raw.strip()
+                    if not text:
+                        continue
+                    try:
+                        item = json.loads(text)
+                    except json.JSONDecodeError:
+                        continue
+                    if room_id and item.get("room_id") != room_id:
+                        continue
+                    if bridge_id and item.get("bridge_id") != bridge_id:
+                        continue
+                    if event and item.get("event") != event:
+                        continue
+                    items.append(item)
+                    if len(items) >= cap:
+                        items.reverse()
+                        return items
         items.reverse()
         return items
+
+    def _rotate_if_needed_locked(self, next_bytes: int) -> None:
+        if not self.file or not self.file.exists():
+            return
+        if self.file.stat().st_size + next_bytes <= self.max_bytes:
+            return
+        self._rotate_locked()
+
+    def _rotate_locked(self) -> None:
+        if not self.file or not self.file.exists():
+            return
+        archive_count = max(self.max_files - 1, 0)
+        if archive_count == 0:
+            self.file.unlink()
+            return
+        oldest = self.file.with_name(self.file.name + f".{archive_count}")
+        if oldest.exists():
+            oldest.unlink()
+        for idx in range(archive_count - 1, 0, -1):
+            src = self.file.with_name(self.file.name + f".{idx}")
+            dst = self.file.with_name(self.file.name + f".{idx + 1}")
+            if src.exists():
+                src.replace(dst)
+        self.file.replace(self.file.with_name(self.file.name + ".1"))
+
+    def _recent_paths_locked(self) -> List[Path]:
+        if not self.file:
+            return []
+        paths: List[Path] = []
+        if self.file.exists():
+            paths.append(self.file)
+        for idx in range(1, self.max_files):
+            path = self.file.with_name(self.file.name + f".{idx}")
+            if path.exists():
+                paths.append(path)
+        return paths
 
 
 def record_event(

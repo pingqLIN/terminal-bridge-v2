@@ -82,6 +82,7 @@ TB2 現在依 capability 選預設。
 
 - `TB2_AUDIT=1` 會在 TB2 一般 state root 下啟用 append-only JSONL audit trail，路徑是 `audit/events.jsonl`
 - `TB2_AUDIT_DIR=/path/to/dir` 可改成寫到指定目錄
+- TB2 現在預設會在 5 MiB 時 rotate 目前 audit 檔案，總共最多保留 5 個檔案；可用 `TB2_AUDIT_MAX_BYTES` 與 `TB2_AUDIT_MAX_FILES` 調整
 - 預設保持關閉，避免測試或一般本機使用默默留下持久化 operator 紀錄
 - 目前持久化範圍刻意收斂，只先涵蓋 room messages、bridge lifecycle、intervention decisions，以及 `terminal_send` / interrupt 這類直接 operator actions
 - `status` 現在會附帶 `audit` 狀態，方便 operator 確認是否啟用持久化與實際寫入位置

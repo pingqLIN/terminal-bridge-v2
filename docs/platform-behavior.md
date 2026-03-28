@@ -82,6 +82,7 @@ Priority:
 
 - `TB2_AUDIT=1` enables an append-only JSONL audit trail under the normal TB2 state root at `audit/events.jsonl`
 - `TB2_AUDIT_DIR=/path/to/dir` writes the same stream to an explicit directory instead
+- by default TB2 rotates the active audit file at 5 MiB and keeps 5 files total; use `TB2_AUDIT_MAX_BYTES` and `TB2_AUDIT_MAX_FILES` to tune that boundary
 - the audit stream is off by default so test runs and casual local sessions do not silently write durable operator records
 - current persisted scope is intentionally narrow: room messages, bridge lifecycle, intervention decisions, and direct operator actions such as `terminal_send` / interrupt
 - `status` now includes an `audit` snapshot so operators can see whether persistence is enabled and where entries are being written

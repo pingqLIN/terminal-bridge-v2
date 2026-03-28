@@ -97,6 +97,7 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - bridge status exposes `auto_forward_guard` so the GUI can show blocked delivery states
 - runaway auto-forward protection switches delivery into review instead of silently continuing
 - opt-in JSONL audit trail can persist room, bridge, intervention, and operator actions via `TB2_AUDIT=1` or `TB2_AUDIT_DIR`
+- persisted audit files now rotate by default at 5 MiB and keep up to 5 files total; override with `TB2_AUDIT_MAX_BYTES` and `TB2_AUDIT_MAX_FILES`
 - operators can inspect persisted entries through `tb2 service audit` or the MCP `audit_recent` tool
 - the GUI Diagnostics card now shows audit enablement plus recent persisted events for the active room or bridge
 

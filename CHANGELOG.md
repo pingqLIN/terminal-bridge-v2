@@ -19,6 +19,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Bridge status now reports auto-forward guard state, and runaway auto-forward flows now switch into intervention until pending review is resolved.
 - `status` now reports audit-trail enablement and destination details so operators can verify persistence state from the active control surface.
 - GUI diagnostics now surface audit enablement and recent persisted entries for the active room / bridge scope.
+- Audit persistence now rotates by size with bounded file retention instead of growing a single unbounded JSONL forever.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.
