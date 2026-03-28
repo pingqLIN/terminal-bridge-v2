@@ -2,7 +2,9 @@
 
 import io
 import json
+import shutil
 import socket
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +12,65 @@ import pytest
 import tb2.server as server_mod
 from tb2.audit import AuditTrail
 from tb2.room import create_room, get_room, list_rooms
+
+
+def _extract_gui_function(html: str, name: str) -> str:
+    marker = f"function {name}("
+    start = html.find(marker)
+    if start < 0:
+        raise AssertionError(f"missing gui function: {name}")
+    body_start = html.find("{", start)
+    if body_start < 0:
+        raise AssertionError(f"missing gui function body: {name}")
+    depth = 0
+    for idx in range(body_start, len(html)):
+        char = html[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return html[start : idx + 1]
+    raise AssertionError(f"unterminated gui function: {name}")
+
+
+def _run_gui_function(html: str, name: str, expression: str):
+    function_src = _extract_gui_function(html, name)
+    script = """
+const messages = {
+  'cards.auditEnabled': 'Audit trail is writing to {file}.',
+  'cards.auditDisabled': 'Audit trail is disabled.',
+  'cards.auditRedaction': 'Persisted text fields are redacted ({mode}).',
+  'cards.auditRedactionRequested': 'Requested redaction mode is {requested}; effective mode is {mode}.',
+  'cards.auditRedactionFullWarning': 'Warning: full mode stores raw text in durable audit entries.',
+  'cards.auditRedactionFullBlocked': 'Full mode was requested but is blocked until {env}=1 is set.',
+  'cards.auditError': 'Audit trail error: {error}',
+  'cards.auditScope': 'Scope: {scope} · event: {event} · limit: {limit}',
+  'cards.auditDestinationFallback': 'configured destination',
+  'cards.statusBadgeGuarded': 'Guard blocked',
+  'cards.statusBadgeReady': 'Bridge ready',
+  'cards.statusBadgePending': 'Pending {count}',
+  'cards.statusBadgeTransport': 'Subs {total} (sse {sse} / ws {websocket})',
+  'cards.statusBadgeTransportIdle': 'Subscribers idle',
+  'cards.statusBadgeAuditOn': 'Audit on',
+  'cards.statusBadgeAuditOff': 'Audit off',
+  'cards.statusBadgeAuditRaw': 'Audit raw text',
+  'cards.statusBadgeAuditRawBlocked': 'Audit raw blocked'
+};
+function t(path) {
+  return messages[path] || path;
+}
+function format(path, values) {
+  return t(path).replace(/\\{(\\w+)\\}/g, (_, key) => String((values && values[key]) ?? ''));
+}
+""" + function_src + "\nconst result = " + expression + ";\nconsole.log(JSON.stringify(result));\n"
+    done = subprocess.run(
+        ["node", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(done.stdout)
 
 
 @pytest.fixture(autouse=True)
@@ -508,7 +569,9 @@ class TestAuditTrail:
         })
 
         assert guard_blocked["count"] == 1
-        assert "rate limit exceeded" in guard_blocked["events"][0]["reason"]
+        assert guard_blocked["events"][0]["reason"] == "[redacted]"
+        assert guard_blocked["events"][0]["reason_redacted"] is True
+        assert guard_blocked["events"][0]["reason_mode"] == "mask"
         assert guard_rearmed["count"] == 1
         assert rejected["count"] == 1
         assert rejected["events"][0]["rejected"] == 1
@@ -571,7 +634,9 @@ class TestAuditTrail:
         assert conflict_events["events"][0]["reason"] == "pane_pair_room_conflict"
         assert failed_events["count"] == 1
         assert failed_events["events"][0]["reason"] == "preflight_failed"
-        assert failed_events["events"][0]["error"] == "capture failed"
+        assert failed_events["events"][0]["reason_mode"] == "code"
+        assert failed_events["events"][0]["error"] == "[redacted]"
+        assert failed_events["events"][0]["error_redacted"] is True
 
 
 class TestBridgeHandlers:
@@ -1299,10 +1364,12 @@ class TestGuiRouting:
         assert "$('audit-limit').onchange = () => run(refreshAudit);" in html
         assert "if (event) args.event = event;" in html
         assert "cards.auditRedaction" in html
+        assert "cards.auditRedactionRequested" in html
         assert "cards.auditRedactionFullWarning" in html
         assert "cards.auditRedactionFullBlocked" in html
         assert "audit.redaction && audit.redaction.stores_raw_text" in html
         assert "audit.redaction && audit.redaction.raw_text_opt_in_blocked" in html
+        assert "audit.redaction.requested_mode !== audit.redaction.mode" in html
 
     def test_gui_html_refreshes_status_after_review_actions(self):
         html = server_mod.build_gui_html("/mcp")
@@ -1336,12 +1403,81 @@ class TestGuiRouting:
         html = server_mod.build_gui_html("/mcp")
         assert 'id="status-badges"' in html
         assert "function renderStatusSummary(status)" in html
+        assert "function statusSummaryLabels(status, detail, subscribers)" in html
         assert "cards.statusBadgeAuditRaw" in html
         assert "cards.statusBadgeAuditRawBlocked" in html
         assert "status.audit.redaction && status.audit.redaction.raw_text_opt_in_blocked" in html
         assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html
         assert "renderStatusSummary(res);" in html
+
+    @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for GUI behavior tests")
+    def test_gui_behavior_formats_blocked_audit_note(self):
+        html = server_mod.build_gui_html("/mcp")
+
+        note = _run_gui_function(
+            html,
+            "auditNoteText",
+            """auditNoteText(
+              {
+                enabled: true,
+                file: '/tmp/events.jsonl',
+                redaction: {
+                  mode: 'mask',
+                  requested_mode: 'full',
+                  raw_text_opt_in_blocked: true,
+                  raw_text_opt_in_env: 'TB2_AUDIT_ALLOW_FULL_TEXT',
+                  stores_raw_text: false
+                }
+              },
+              'room-a',
+              'all events',
+              '12'
+            )""",
+        )
+
+        assert "Audit trail is writing to /tmp/events.jsonl." in note
+        assert "Persisted text fields are redacted (mask)." in note
+        assert "Requested redaction mode is full; effective mode is mask." in note
+        assert "Full mode was requested but is blocked until TB2_AUDIT_ALLOW_FULL_TEXT=1 is set." in note
+        assert "Warning: full mode stores raw text in durable audit entries." not in note
+        assert "Scope: room-a" in note
+
+    @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for GUI behavior tests")
+    def test_gui_behavior_formats_blocked_audit_status_badges(self):
+        html = server_mod.build_gui_html("/mcp")
+
+        labels = _run_gui_function(
+            html,
+            "statusSummaryLabels",
+            """statusSummaryLabels(
+              {
+                audit: {
+                  enabled: true,
+                  redaction: {
+                    raw_text_opt_in_blocked: true,
+                    stores_raw_text: false
+                  }
+                }
+              },
+              {
+                pending_count: 2,
+                auto_forward_guard: { blocked: true }
+              },
+              {
+                total: 1,
+                sse: 0,
+                websocket: 1
+              }
+            )""",
+        )
+
+        assert "Guard blocked" in labels
+        assert "Pending 2" in labels
+        assert "Subs 1 (sse 0 / ws 1)" in labels
+        assert "Audit on" in labels
+        assert "Audit raw blocked" in labels
+        assert "Audit raw text" not in labels
 
     @patch("tb2.gui.default_backend_name", return_value="tmux")
     def test_gui_html_marks_platform_default_backend(self, mock_default):

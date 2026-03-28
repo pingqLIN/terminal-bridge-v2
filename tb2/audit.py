@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import threading
 import time
 from collections import deque
@@ -21,8 +22,11 @@ _DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 _DEFAULT_MAX_FILES = 5
 _DEFAULT_TEXT_MODE = "mask"
 _FULL_TEXT_OPT_IN_ENV = "TB2_AUDIT_ALLOW_FULL_TEXT"
-_TEXT_REDACTION_KEYS = ("edited_text", "guard_text", "text")
+_FREEFORM_REDACTION_KEYS = ("deliver_error", "edited_text", "error", "guard_text", "text")
+_CODE_OR_TEXT_KEYS = ("reason",)
+_TEXT_REDACTION_KEYS = _FREEFORM_REDACTION_KEYS + _CODE_OR_TEXT_KEYS
 _TEXT_REDACTION_MODES = ("full", "mask", "drop")
+_SAFE_AUDIT_CODE_RE = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)*$")
 AUDIT_EVENT_CATALOG = (
     "terminal.session_init",
     "terminal.sent",
@@ -293,6 +297,10 @@ def _text_summary(value: str, *, text_mode: str) -> Dict[str, Any]:
     }
 
 
+def _is_safe_audit_code(value: str) -> bool:
+    return bool(_SAFE_AUDIT_CODE_RE.fullmatch(value.strip()))
+
+
 class AuditTrail:
     def __init__(
         self,
@@ -491,8 +499,14 @@ def _sanitize_event_payload(payload: Dict[str, Any], *, schema: Dict[str, Any], 
         if key not in payload:
             continue
         value = payload[key]
-        if key in _TEXT_REDACTION_KEYS and isinstance(value, str):
+        if key in _FREEFORM_REDACTION_KEYS and isinstance(value, str):
             sanitized.update(_sanitize_scalar_text(key, value, text_mode=text_mode))
+            continue
+        if key in _CODE_OR_TEXT_KEYS and isinstance(value, str):
+            if _is_safe_audit_code(value):
+                sanitized.update(_sanitize_scalar_code(key, value))
+            else:
+                sanitized.update(_sanitize_scalar_text(key, value, text_mode=text_mode))
             continue
         if subschema is True:
             sanitized[key] = _sanitize_audit_value(value, text_mode=text_mode)
@@ -530,8 +544,14 @@ def _sanitize_append_payload(event: str, payload: Dict[str, Any], *, text_mode: 
 def _sanitize_audit_dict(payload: Dict[str, Any], *, text_mode: str) -> Dict[str, Any]:
     sanitized: Dict[str, Any] = {}
     for key, value in payload.items():
-        if key in _TEXT_REDACTION_KEYS and isinstance(value, str):
+        if key in _FREEFORM_REDACTION_KEYS and isinstance(value, str):
             sanitized.update(_sanitize_scalar_text(key, value, text_mode=text_mode))
+            continue
+        if key in _CODE_OR_TEXT_KEYS and isinstance(value, str):
+            if _is_safe_audit_code(value):
+                sanitized.update(_sanitize_scalar_code(key, value))
+            else:
+                sanitized.update(_sanitize_scalar_text(key, value, text_mode=text_mode))
             continue
         sanitized[key] = _sanitize_audit_value(value, text_mode=text_mode)
     return sanitized
@@ -545,6 +565,18 @@ def _sanitize_scalar_text(key: str, value: str, *, text_mode: str) -> Dict[str, 
         f"{key}_length": summary["length"],
         f"{key}_lines": summary["lines"],
         f"{key}_mode": summary["mode"],
+        f"{key}_sha256": summary["sha256"],
+    }
+
+
+def _sanitize_scalar_code(key: str, value: str) -> Dict[str, Any]:
+    summary = _text_summary(value, text_mode="full")
+    return {
+        key: value,
+        f"{key}_redacted": False,
+        f"{key}_length": summary["length"],
+        f"{key}_lines": summary["lines"],
+        f"{key}_mode": "code",
         f"{key}_sha256": summary["sha256"],
     }
 

@@ -1295,6 +1295,7 @@ GUI_HTML_TEMPLATE = r"""
             auditDisabled: 'Audit trail is off. Set TB2_AUDIT=1 or TB2_AUDIT_DIR and restart the server to persist events.',
             auditEnabled: 'Audit trail is writing to {file}.',
             auditRedaction: 'Persisted text fields are redacted ({mode}).',
+            auditRedactionRequested: 'Requested redaction mode is {requested}; effective mode is {mode}.',
             auditRedactionFullWarning: 'Warning: full mode stores raw text in durable audit entries.',
             auditRedactionFullBlocked: 'Full mode was requested but is blocked until {env}=1 is set.',
             auditDestinationFallback: 'configured destination',
@@ -1525,6 +1526,7 @@ GUI_HTML_TEMPLATE = r"""
             auditDisabled: 'Audit trail 目前未啟用。請設定 TB2_AUDIT=1 或 TB2_AUDIT_DIR，並重新啟動 server 才會持久化事件。',
             auditEnabled: 'Audit trail 正在寫入 {file}。',
             auditRedaction: '持久化文字欄位會先做遮罩（{mode}）。',
+            auditRedactionRequested: '要求的 redaction mode 是 {requested}；目前實際生效的是 {mode}。',
             auditRedactionFullWarning: '警告：full mode 會把 raw text 寫進 durable audit entry。',
             auditRedactionFullBlocked: '目前雖然要求 full mode，但在設定 {env}=1 前都會被阻擋。',
             auditDestinationFallback: '已設定的目的地',
@@ -1979,35 +1981,51 @@ GUI_HTML_TEMPLATE = r"""
         return '[' + ts + '] ' + event + (scope ? ' | ' + scope : '') + '\n' + JSON.stringify(item, null, 2);
       }
 
+      function auditNoteText(audit, scope, event, limit) {
+        const enabled = Boolean(audit && audit.enabled);
+        const destination = String((audit && (audit.file || audit.root)) || '').trim() || t('cards.auditDestinationFallback');
+        let note = enabled
+          ? format('cards.auditEnabled', { file: destination })
+          : t('cards.auditDisabled');
+        if (audit && audit.redaction && audit.redaction.mode) {
+          note += ' ' + format('cards.auditRedaction', { mode: String(audit.redaction.mode) });
+        }
+        if (
+          audit
+          && audit.redaction
+          && audit.redaction.requested_mode
+          && audit.redaction.requested_mode !== audit.redaction.mode
+        ) {
+          note += ' ' + format('cards.auditRedactionRequested', {
+            requested: String(audit.redaction.requested_mode),
+            mode: String(audit.redaction.mode)
+          });
+        }
+        if (audit && audit.redaction && audit.redaction.raw_text_opt_in_blocked) {
+          note += ' ' + format('cards.auditRedactionFullBlocked', {
+            env: String(audit.redaction.raw_text_opt_in_env || 'TB2_AUDIT_ALLOW_FULL_TEXT')
+          });
+        }
+        if (audit && audit.redaction && audit.redaction.stores_raw_text) {
+          note += ' ' + t('cards.auditRedactionFullWarning');
+        }
+        if (audit && audit.last_error) {
+          note += ' ' + format('cards.auditError', { error: audit.last_error });
+        }
+        note += ' ' + format('cards.auditScope', { scope, event, limit });
+        return note;
+      }
+
       function renderAudit() {
         const audit = state.audit || {};
-        const enabled = Boolean(audit.enabled);
-        const destination = String(audit.file || audit.root || '').trim() || t('cards.auditDestinationFallback');
         const bridgeId = $('bridge-id').value.trim();
         const roomId = $('room-id').value.trim();
         const scope = [bridgeId, roomId].filter(Boolean).join(' / ') || t('cards.auditScopeFallback');
         const event = $('audit-event').value.trim() || t('auditEvents.all');
         const limit = $('audit-limit').value.trim() || '12';
-        let note = enabled
-          ? format('cards.auditEnabled', { file: destination })
-          : t('cards.auditDisabled');
-        if (audit.redaction && audit.redaction.mode) {
-          note += ' ' + format('cards.auditRedaction', { mode: String(audit.redaction.mode) });
-        }
-        if (audit.redaction && audit.redaction.raw_text_opt_in_blocked) {
-          note += ' ' + format('cards.auditRedactionFullBlocked', {
-            env: String(audit.redaction.raw_text_opt_in_env || 'TB2_AUDIT_ALLOW_FULL_TEXT')
-          });
-        }
-        if (audit.redaction && audit.redaction.stores_raw_text) {
-          note += ' ' + t('cards.auditRedactionFullWarning');
-        }
-        if (audit.last_error) {
-          note += ' ' + format('cards.auditError', { error: audit.last_error });
-        }
-        note += ' ' + format('cards.auditScope', { scope, event, limit });
+        const note = auditNoteText(audit, scope, event, limit);
         $('audit-note').textContent = note;
-        $('refresh-audit').disabled = !enabled;
+        $('refresh-audit').disabled = !audit.enabled;
         $('audit-box').textContent = state.auditEvents.length
           ? state.auditEvents.map(formatAuditEntry).join('\n\n')
           : t('cards.auditEmpty');
@@ -2149,15 +2167,8 @@ GUI_HTML_TEMPLATE = r"""
           || message.startsWith('no active bridge for room ');
       }
 
-      function renderStatusSummary(status) {
-        const box = $('status-badges');
-        box.innerHTML = '';
-        const detail = inferBridgeDetail(status);
+      function statusSummaryLabels(status, detail, subscribers) {
         const guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
-        const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
-        const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
-        const room = rooms.find(item => item && item.id === roomId);
-        const subscribers = room && room.subscribers ? room.subscribers : null;
         const labels = [
           guard && guard.blocked ? t('cards.statusBadgeGuarded') : t('cards.statusBadgeReady'),
           format('cards.statusBadgePending', { count: detail ? detail.pending_count : 0 }),
@@ -2176,6 +2187,18 @@ GUI_HTML_TEMPLATE = r"""
         if (status && status.audit && status.audit.enabled && status.audit.redaction && status.audit.redaction.stores_raw_text) {
           labels.push(t('cards.statusBadgeAuditRaw'));
         }
+        return labels;
+      }
+
+      function renderStatusSummary(status) {
+        const box = $('status-badges');
+        box.innerHTML = '';
+        const detail = inferBridgeDetail(status);
+        const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
+        const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
+        const room = rooms.find(item => item && item.id === roomId);
+        const subscribers = room && room.subscribers ? room.subscribers : null;
+        const labels = statusSummaryLabels(status, detail, subscribers);
         for (const label of labels) {
           const badge = document.createElement('span');
           badge.className = 'badge';

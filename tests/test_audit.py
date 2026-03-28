@@ -42,6 +42,8 @@ def test_audit_trail_describe_includes_retention_settings(tmp_path):
     assert desc["redaction"]["mode"] == "mask"
     assert "text" in desc["redaction"]["fields"]
     assert "text" in desc["redaction"]["keys"]
+    assert "error" in desc["redaction"]["fields"]
+    assert "reason" in desc["redaction"]["fields"]
     assert desc["redaction"]["stores_raw_text"] is False
     assert desc["redaction"]["stores_masked_placeholders"] is True
     assert desc["redaction"]["stores_hash_fingerprint"] is True
@@ -205,6 +207,71 @@ def test_known_event_schema_drops_unknown_text_fields(tmp_path):
     assert item["text"] == "[redacted]"
     assert "notes" not in item
     assert "never persist this free text" not in raw
+
+
+def test_known_event_schema_redacts_error_fields_and_preserves_reason_codes(tmp_path):
+    trail = AuditTrail(tmp_path)
+
+    trail.write(
+        "bridge.start_failed",
+        {
+            "bridge_id": "bridge-a",
+            "pane_a": "pane-a",
+            "pane_b": "pane-b",
+            "profile": "generic",
+            "reason": "preflight_failed",
+            "error": "capture failed",
+        },
+    )
+    trail.write(
+        "operator.room_post",
+        {
+            "room_id": "room-a",
+            "message_id": 7,
+            "author": "operator",
+            "kind": "chat",
+            "deliver": "a",
+            "deliver_error": "pane missing",
+        },
+    )
+
+    failed, posted = trail.recent(limit=2)
+    raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+
+    assert failed["reason"] == "preflight_failed"
+    assert failed["reason_redacted"] is False
+    assert failed["reason_mode"] == "code"
+    assert failed["error"] == "[redacted]"
+    assert failed["error_redacted"] is True
+    assert posted["deliver_error"] == "[redacted]"
+    assert posted["deliver_error_redacted"] is True
+    assert "capture failed" not in raw
+    assert "pane missing" not in raw
+
+
+def test_known_event_schema_redacts_freeform_reason_fields(tmp_path):
+    trail = AuditTrail(tmp_path)
+
+    trail.write(
+        "bridge.guard_blocked",
+        {
+            "bridge_id": "bridge-a",
+            "room_id": "room-a",
+            "from_pane": "pane-a",
+            "to_pane": "pane-b",
+            "reason": "rate limit exceeded: 12",
+            "text": "secret",
+        },
+    )
+
+    [item] = trail.recent(limit=1)
+    raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+
+    assert item["reason"] == "[redacted]"
+    assert item["reason_redacted"] is True
+    assert item["reason_mode"] == "mask"
+    assert len(item["reason_sha256"]) == 16
+    assert "rate limit exceeded" not in raw
 
 
 def test_audit_trail_redacts_top_level_and_nested_text_fields(tmp_path):

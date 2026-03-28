@@ -104,10 +104,10 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 
 ### 4. GUI 與 QA 的 contract 仍可再收斂
 
-本輪已補 operator 決策上下文與 status summary，但還有兩個後續缺口：
+本輪已補 operator 決策上下文與 status summary，而且：
 
-- Diagnostics audit event filter 仍是 GUI 硬編碼 taxonomy
-- GUI regression 多半仍是 HTML / JS string contract，缺少更接近行為的測試層
+- Diagnostics audit event filter 已改成讀單一 event catalog，不再是 GUI 硬編碼 taxonomy
+- GUI regression 已補上 Node 驅動的 behavior probe，但仍缺 browser-level interaction test 與更完整的 DOM state 驗證
 
 涉及路徑：
 
