@@ -209,23 +209,41 @@ class TestRemoteControlMcp:
         status = _tool(base_url, "status", {})
 
         assert status["audit"]["redaction"]["mode"] == "mask"
+        assert status["audit"]["redaction"]["requested_mode"] == "mask"
         assert status["audit"]["redaction"]["stores_raw_text"] is False
         assert status["audit"]["redaction"]["stores_masked_placeholders"] is True
         assert status["audit"]["redaction"]["stores_hash_fingerprint"] is True
+        assert status["audit"]["redaction"]["raw_text_opt_in_blocked"] is False
         assert status["runtime"]["state_persistence"] == "memory_only"
         assert status["runtime"]["restart_behavior"] == "state_lost"
         assert status["runtime"]["recovery_source"] == "audit_history_only"
 
     def test_status_reports_full_text_audit_contract(self, mcp_server, tmp_path, monkeypatch):
-        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path, text_mode="full"))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path, text_mode="full", allow_full_text=True))
         base_url = mcp_server["base_url"]
 
         status = _tool(base_url, "status", {})
 
         assert status["audit"]["redaction"]["mode"] == "full"
+        assert status["audit"]["redaction"]["requested_mode"] == "full"
         assert status["audit"]["redaction"]["stores_raw_text"] is True
         assert status["audit"]["redaction"]["stores_masked_placeholders"] is False
         assert status["audit"]["redaction"]["stores_hash_fingerprint"] is True
+        assert status["audit"]["redaction"]["raw_text_opt_in_acknowledged"] is True
+        assert status["audit"]["redaction"]["raw_text_opt_in_blocked"] is False
+
+    def test_status_reports_blocked_full_text_audit_contract(self, mcp_server, tmp_path, monkeypatch):
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path, text_mode="full"))
+        base_url = mcp_server["base_url"]
+
+        status = _tool(base_url, "status", {})
+
+        assert status["audit"]["redaction"]["mode"] == "mask"
+        assert status["audit"]["redaction"]["requested_mode"] == "full"
+        assert status["audit"]["redaction"]["stores_raw_text"] is False
+        assert status["audit"]["redaction"]["raw_text_opt_in_acknowledged"] is False
+        assert status["audit"]["redaction"]["raw_text_opt_in_blocked"] is True
+        assert status["audit"]["redaction"]["raw_text_opt_in_env"] == "TB2_AUDIT_ALLOW_FULL_TEXT"
 
     def test_room_binding_and_duplicate_bridge_detection(self, mcp_server):
         base_url = mcp_server["base_url"]

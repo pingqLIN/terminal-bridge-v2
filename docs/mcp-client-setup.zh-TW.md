@@ -113,7 +113,8 @@ python -m tb2 service audit --lines 20 --room-id demo-room
 - `status` 會回 `audit` 物件，包含 `enabled`、`file`、retention 設定，以及 `redaction` contract
 - `audit_recent` 能查到目前 room 或 bridge 的持久化事件，但文字欄位會先做遮罩
 - `tb2 service audit` 可用 `event`、`room_id`、`bridge_id` 過濾，但同樣遵守這個 redaction 契約
-- 預設 redaction mode 是 `mask`；只有在 operator policy 明確要求時，才應改用 `TB2_AUDIT_TEXT_MODE=full|drop`
+- 預設 redaction mode 是 `mask`；現在若設成 `TB2_AUDIT_TEXT_MODE=full`，還必須再加上 `TB2_AUDIT_ALLOW_FULL_TEXT=1`，否則 client 應預期 `requested_mode=full` 但實際 `mode=mask`
+- client 應把 `requested_mode != mode` 且 `raw_text_opt_in_blocked=true` 視為 policy boundary，而不是暫時性錯誤
 - 若未另外指定，retention 預設是單一 active file 5 MiB、總共保留 5 個檔案；可用 `TB2_AUDIT_MAX_BYTES` 與 `TB2_AUDIT_MAX_FILES` 覆寫
 
 ## Host AI 工具地圖

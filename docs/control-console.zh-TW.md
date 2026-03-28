@@ -211,6 +211,7 @@ bridge 建立後永遠可見。
 - 進入 diagnostics panel 前，持久化 audit entry 會先遮罩文字欄位
 - Diagnostics audit 輸出是拿來做 correlation 與 operator review，不是 verbatim transcript recovery
 - 當 redaction mode 是 `full` 時，面板應明確顯示 raw-text warning，避免 operator 把 durable audit 誤當成安全預設
+- 當 `requested_mode=full` 但實際 `mode=mask` 時，面板也應明確顯示 raw text 仍被 policy 阻擋，直到設定 `TB2_AUDIT_ALLOW_FULL_TEXT=1`
 - audit event filter
 - audit entry limit
 - raw status JSON

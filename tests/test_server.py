@@ -255,9 +255,11 @@ class TestStatusHandler:
         assert result["audit"]["enabled"] is False
         assert result["audit"]["redaction"]["mode"] == "mask"
         assert "text" in result["audit"]["redaction"]["fields"]
+        assert result["audit"]["redaction"]["requested_mode"] == "mask"
         assert result["audit"]["redaction"]["stores_raw_text"] is False
         assert result["audit"]["redaction"]["stores_masked_placeholders"] is True
         assert result["audit"]["redaction"]["stores_hash_fingerprint"] is True
+        assert result["audit"]["redaction"]["raw_text_opt_in_blocked"] is False
         assert result["runtime"]["state_persistence"] == "memory_only"
         assert result["runtime"]["restart_behavior"] == "state_lost"
         assert result["runtime"]["recovery_source"] == "audit_history_only"
@@ -267,6 +269,20 @@ class TestStatusHandler:
         assert result["bridge_details"][0]["room_id"] == "status-test"
         assert result["bridge_details"][0]["profile"] == "codex"
         server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
+
+    def test_status_reports_blocked_full_text_opt_in(self, tmp_path, monkeypatch):
+        trail = AuditTrail(tmp_path, text_mode="full")
+        monkeypatch.setattr(server_mod, "_audit_trail", trail)
+
+        result = server_mod.handle_status({})
+
+        assert result["audit"]["redaction"]["mode"] == "mask"
+        assert result["audit"]["redaction"]["requested_mode"] == "full"
+        assert result["audit"]["redaction"]["stores_raw_text"] is False
+        assert result["audit"]["redaction"]["raw_text_opt_in_required"] is True
+        assert result["audit"]["redaction"]["raw_text_opt_in_acknowledged"] is False
+        assert result["audit"]["redaction"]["raw_text_opt_in_blocked"] is True
+        assert result["audit"]["redaction"]["raw_text_opt_in_env"] == "TB2_AUDIT_ALLOW_FULL_TEXT"
 
 
 class TestAuditTrail:
@@ -1284,7 +1300,9 @@ class TestGuiRouting:
         assert "if (event) args.event = event;" in html
         assert "cards.auditRedaction" in html
         assert "cards.auditRedactionFullWarning" in html
+        assert "cards.auditRedactionFullBlocked" in html
         assert "audit.redaction && audit.redaction.stores_raw_text" in html
+        assert "audit.redaction && audit.redaction.raw_text_opt_in_blocked" in html
 
     def test_gui_html_refreshes_status_after_review_actions(self):
         html = server_mod.build_gui_html("/mcp")
@@ -1319,6 +1337,8 @@ class TestGuiRouting:
         assert 'id="status-badges"' in html
         assert "function renderStatusSummary(status)" in html
         assert "cards.statusBadgeAuditRaw" in html
+        assert "cards.statusBadgeAuditRawBlocked" in html
+        assert "status.audit.redaction && status.audit.redaction.raw_text_opt_in_blocked" in html
         assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html
         assert "renderStatusSummary(res);" in html

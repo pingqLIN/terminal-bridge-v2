@@ -211,6 +211,7 @@ Contains:
 - persisted audit entries redact text-bearing fields before they reach the diagnostics panel
 - diagnostics audit output is for correlation and operator review, not verbatim transcript recovery
 - when redaction mode is `full`, the panel should surface an explicit raw-text warning so operators do not mistake the durable audit for a safe default
+- when `requested_mode=full` but `mode=mask`, the panel should explicitly show that raw text remains blocked until the opt-in env is acknowledged
 - audit event filter
 - audit entry limit
 - raw status JSON

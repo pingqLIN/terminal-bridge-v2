@@ -46,6 +46,10 @@ def test_audit_trail_describe_includes_retention_settings(tmp_path):
     assert desc["redaction"]["stores_masked_placeholders"] is True
     assert desc["redaction"]["stores_hash_fingerprint"] is True
     assert desc["redaction"]["stores_text_metadata"] is True
+    assert desc["redaction"]["requested_mode"] == "mask"
+    assert desc["redaction"]["raw_text_opt_in_required"] is False
+    assert desc["redaction"]["raw_text_opt_in_acknowledged"] is False
+    assert desc["redaction"]["raw_text_opt_in_blocked"] is False
 
 
 def test_audit_trail_rotation_keeps_newest_entries(tmp_path):
@@ -109,7 +113,7 @@ def test_audit_trail_drop_mode_removes_text_content(tmp_path):
 
 
 def test_audit_trail_full_mode_keeps_text_content(tmp_path):
-    trail = AuditTrail(tmp_path, text_mode="full")
+    trail = AuditTrail(tmp_path, text_mode="full", allow_full_text=True)
 
     trail.write("event", {"text": "secret"})
 
@@ -123,6 +127,22 @@ def test_audit_trail_full_mode_keeps_text_content(tmp_path):
     assert len(item["text_sha256"]) == 16
 
 
+def test_audit_trail_direct_full_without_ack_blocks_raw_text(tmp_path):
+    trail = AuditTrail(tmp_path, text_mode="full")
+
+    trail.write("event", {"text": "secret"})
+    [item] = trail.recent(limit=1)
+    desc = trail.describe()
+
+    assert item["text"] == "[redacted]"
+    assert item["text_redacted"] is True
+    assert item["text_mode"] == "mask"
+    assert desc["redaction"]["mode"] == "mask"
+    assert desc["redaction"]["requested_mode"] == "full"
+    assert desc["redaction"]["raw_text_opt_in_acknowledged"] is False
+    assert desc["redaction"]["raw_text_opt_in_blocked"] is True
+
+
 def test_audit_trail_from_env_honors_text_mode_for_custom_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
     monkeypatch.setenv("TB2_AUDIT_TEXT_MODE", "drop")
@@ -130,6 +150,40 @@ def test_audit_trail_from_env_honors_text_mode_for_custom_dir(tmp_path, monkeypa
     trail = AuditTrail.from_env()
 
     assert trail.text_mode == "drop"
+
+
+def test_audit_trail_from_env_blocks_full_without_ack(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+    monkeypatch.setenv("TB2_AUDIT_TEXT_MODE", "full")
+    monkeypatch.delenv("TB2_AUDIT_ALLOW_FULL_TEXT", raising=False)
+
+    trail = AuditTrail.from_env()
+    desc = trail.describe()
+
+    assert trail.text_mode == "mask"
+    assert trail.requested_text_mode == "full"
+    assert desc["redaction"]["requested_mode"] == "full"
+    assert desc["redaction"]["stores_raw_text"] is False
+    assert desc["redaction"]["raw_text_opt_in_required"] is True
+    assert desc["redaction"]["raw_text_opt_in_acknowledged"] is False
+    assert desc["redaction"]["raw_text_opt_in_blocked"] is True
+    assert desc["redaction"]["raw_text_opt_in_env"] == "TB2_AUDIT_ALLOW_FULL_TEXT"
+
+
+def test_audit_trail_from_env_allows_full_with_ack(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+    monkeypatch.setenv("TB2_AUDIT_TEXT_MODE", "full")
+    monkeypatch.setenv("TB2_AUDIT_ALLOW_FULL_TEXT", "1")
+
+    trail = AuditTrail.from_env()
+    desc = trail.describe()
+
+    assert trail.text_mode == "full"
+    assert trail.requested_text_mode == "full"
+    assert desc["redaction"]["stores_raw_text"] is True
+    assert desc["redaction"]["raw_text_opt_in_required"] is True
+    assert desc["redaction"]["raw_text_opt_in_acknowledged"] is True
+    assert desc["redaction"]["raw_text_opt_in_blocked"] is False
 
 
 def test_known_event_schema_drops_unknown_text_fields(tmp_path):
@@ -216,6 +270,25 @@ def test_append_audit_event_returns_sanitized_payload(tmp_path, monkeypatch):
     raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
     assert "sensitive" not in raw
     assert "hidden" not in raw
+
+
+def test_append_audit_event_blocks_full_without_ack(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+    monkeypatch.setenv("TB2_AUDIT_TEXT_MODE", "full")
+    monkeypatch.delenv("TB2_AUDIT_ALLOW_FULL_TEXT", raising=False)
+
+    entry = append_audit_event(
+        "room.message_posted",
+        room_id="room-a",
+        payload={"text": "sensitive"},
+    )
+
+    assert entry["payload"]["text"] == "[redacted]"
+    assert entry["payload"]["text_redacted"] is True
+    assert entry["payload"]["text_mode"] == "mask"
+
+    raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+    assert "sensitive" not in raw
 
 
 def test_audit_trail_redacts_text_fields_recursively(tmp_path):

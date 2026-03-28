@@ -20,6 +20,7 @@ _MIN_RECENT_SCAN = 400
 _DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 _DEFAULT_MAX_FILES = 5
 _DEFAULT_TEXT_MODE = "mask"
+_FULL_TEXT_OPT_IN_ENV = "TB2_AUDIT_ALLOW_FULL_TEXT"
 _TEXT_REDACTION_KEYS = ("edited_text", "guard_text", "text")
 _TEXT_REDACTION_MODES = ("full", "mask", "drop")
 AUDIT_EVENT_CATALOG = (
@@ -277,6 +278,11 @@ def _text_mode(raw: Optional[str], *, default: str = _DEFAULT_TEXT_MODE) -> str:
     return default
 
 
+def _flag_enabled(raw: Optional[str]) -> bool:
+    value = str(raw or "").strip().lower()
+    return bool(value) and value not in _FALSE_VALUES
+
+
 def _text_summary(value: str, *, text_mode: str) -> Dict[str, Any]:
     return {
         "redacted": text_mode != "full",
@@ -295,20 +301,31 @@ class AuditTrail:
         max_bytes: int = _DEFAULT_MAX_BYTES,
         max_files: int = _DEFAULT_MAX_FILES,
         text_mode: str = _DEFAULT_TEXT_MODE,
+        allow_full_text: bool = False,
     ):
         self.root = root.expanduser().resolve() if root else None
         self.file = self.root / "events.jsonl" if self.root else None
         self.max_bytes = max(max_bytes, 1024)
         self.max_files = max(max_files, 1)
-        self.text_mode = _text_mode(text_mode)
+        self.requested_text_mode = _text_mode(text_mode)
+        self.raw_text_opt_in_acknowledged = bool(allow_full_text)
+        self.text_mode = self.requested_text_mode
+        if self.requested_text_mode == "full" and not self.raw_text_opt_in_acknowledged:
+            self.text_mode = "mask"
         self._lock = threading.Lock()
         self._last_error = ""
 
     @classmethod
     def from_env(cls) -> "AuditTrail":
         env_root = os.environ.get("TB2_AUDIT_DIR")
+        requested_text_mode = _text_mode(os.environ.get("TB2_AUDIT_TEXT_MODE"))
+        allow_full_text = _flag_enabled(os.environ.get(_FULL_TEXT_OPT_IN_ENV))
         if env_root:
-            return cls(Path(env_root), text_mode=_text_mode(os.environ.get("TB2_AUDIT_TEXT_MODE")))
+            return cls(
+                Path(env_root),
+                text_mode=requested_text_mode,
+                allow_full_text=allow_full_text,
+            )
         raw_enabled = os.environ.get("TB2_AUDIT", "")
         if raw_enabled.strip().lower() in _FALSE_VALUES:
             return cls()
@@ -324,7 +341,8 @@ class AuditTrail:
                 default=_DEFAULT_MAX_FILES,
                 minimum=1,
             ),
-            text_mode=_text_mode(os.environ.get("TB2_AUDIT_TEXT_MODE")),
+            text_mode=requested_text_mode,
+            allow_full_text=allow_full_text,
         )
 
     def enabled(self) -> bool:
@@ -339,12 +357,17 @@ class AuditTrail:
             "max_files": self.max_files if self.enabled() else None,
             "redaction": {
                 "mode": self.text_mode,
+                "requested_mode": self.requested_text_mode,
                 "keys": list(_TEXT_REDACTION_KEYS),
                 "fields": list(_TEXT_REDACTION_KEYS),
                 "stores_raw_text": self.text_mode == "full",
                 "stores_masked_placeholders": self.text_mode == "mask",
                 "stores_hash_fingerprint": True,
                 "stores_text_metadata": True,
+                "raw_text_opt_in_required": self.requested_text_mode == "full",
+                "raw_text_opt_in_acknowledged": self.raw_text_opt_in_acknowledged,
+                "raw_text_opt_in_blocked": self.requested_text_mode == "full" and not self.raw_text_opt_in_acknowledged,
+                "raw_text_opt_in_env": _FULL_TEXT_OPT_IN_ENV,
             },
             "last_error": self._last_error or None,
         }
@@ -494,6 +517,16 @@ def _sanitize_event_payload(payload: Dict[str, Any], *, schema: Dict[str, Any], 
     return sanitized
 
 
+def _sanitize_append_payload(event: str, payload: Dict[str, Any], *, text_mode: str) -> Dict[str, Any]:
+    schema = _AUDIT_EVENT_SCHEMAS.get(event)
+    if schema is None:
+        return _sanitize_audit_value(payload, text_mode=text_mode)
+    payload_schema = schema.get("payload")
+    if isinstance(payload_schema, dict):
+        return _sanitize_event_payload(payload, schema=payload_schema, text_mode=text_mode)
+    return _sanitize_audit_value(payload, text_mode=text_mode)
+
+
 def _sanitize_audit_dict(payload: Dict[str, Any], *, text_mode: str) -> Dict[str, Any]:
     sanitized: Dict[str, Any] = {}
     for key, value in payload.items():
@@ -547,12 +580,7 @@ def append_audit_event(
     payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     trail = AuditTrail.from_env()
-    schema = _AUDIT_EVENT_SCHEMAS.get(str(event))
-    clean_payload = (
-        _sanitize_event_payload(payload or {}, schema=schema, text_mode=trail.text_mode)
-        if schema is not None
-        else _sanitize_audit_value(payload or {}, text_mode=trail.text_mode)
-    )
+    clean_payload = _sanitize_append_payload(str(event), payload or {}, text_mode=trail.text_mode)
     entry: Dict[str, Any] = {
         "ts": time.time(),
         "event": str(event),

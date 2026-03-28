@@ -86,9 +86,10 @@ Priority:
 - the audit stream is off by default so test runs and casual local sessions do not silently write durable operator records
 - current persisted scope is intentionally narrow: room messages, bridge lifecycle, intervention decisions, and direct operator actions such as `terminal_send` / interrupt
 - `status` now includes an `audit` snapshot so operators can see whether persistence is enabled and where entries are being written
-- persisted audit entries now redact text-bearing fields such as `text`, `edited_text`, and `guard_text`; default `mask` mode keeps placeholders plus metadata, and `TB2_AUDIT_TEXT_MODE=full|mask|drop` can switch between raw, masked, or metadata-only persistence
+- persisted audit entries now redact text-bearing fields such as `text`, `edited_text`, and `guard_text`; default `mask` mode keeps placeholders plus metadata, and `TB2_AUDIT_TEXT_MODE=full|mask|drop` controls the requested policy
 - `status.audit.redaction` exposes the active text-redaction contract plus machine-readable flags such as `stores_raw_text`, `stores_masked_placeholders`, `stores_hash_fingerprint`, and `stores_text_metadata`
-- `TB2_AUDIT_TEXT_MODE=mask` is the default; use `full` only when you explicitly want raw text in the durable log, or `drop` when you want metadata without even the `[redacted]` placeholder
+- `TB2_AUDIT_TEXT_MODE=mask` is the default; in service/config-driven flows, `full` requires an extra explicit opt-in acknowledgement via `TB2_AUDIT_ALLOW_FULL_TEXT=1`, otherwise TB2 reports `requested_mode=full` but keeps the effective mode at `mask`
+- treat `requested_mode`, effective `mode`, `raw_text_opt_in_acknowledged`, and `raw_text_opt_in_blocked` as a policy boundary contract, not just descriptive metadata
 - `status` now also includes a `runtime` contract that explicitly marks live control state as `memory_only` with `restart_behavior=state_lost`
 - operators can read recent entries through `tb2 service audit` locally or the MCP `audit_recent` tool remotely
 - the GUI Diagnostics card now mirrors that state and shows recent persisted events for the current room / bridge scope

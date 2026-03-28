@@ -113,7 +113,8 @@ What to verify:
 - `status` returns an `audit` object with `enabled`, `file`, retention settings, and a `redaction` contract
 - `audit_recent` returns persisted entries for the active room or bridge, with text-bearing fields redacted
 - `tb2 service audit` can filter by `event`, `room_id`, and `bridge_id`, but it follows the same redaction contract
-- the default redaction mode is `mask`; use `TB2_AUDIT_TEXT_MODE=full|drop` only when your operator policy explicitly calls for it
+- the default redaction mode is `mask`; `TB2_AUDIT_TEXT_MODE=full` now also requires `TB2_AUDIT_ALLOW_FULL_TEXT=1`, otherwise clients should expect `requested_mode=full` but effective `mode=mask`
+- clients should treat `requested_mode != mode` together with `raw_text_opt_in_blocked=true` as a policy boundary, not a transient error
 - retention defaults are 5 MiB per active file and 5 files total unless overridden by `TB2_AUDIT_MAX_BYTES` or `TB2_AUDIT_MAX_FILES`
 
 ## Host AI Tool Map
