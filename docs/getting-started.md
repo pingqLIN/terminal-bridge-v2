@@ -78,6 +78,7 @@ Open `http://127.0.0.1:3189/`, then:
 2. Click `Init Session`.
 3. Click `Start Collaboration`.
 4. Switch to `Approval Gate` if you want human review before delivery.
+5. If the status card shows the auto-forward guard as blocked, clear the pending queue through review to re-arm delivery.
 
 ### First MCP session
 
@@ -110,6 +111,7 @@ Rules:
 - one actionable request per `MSG:` line
 - no multi-paragraph payloads
 - use `intervention` when a forwarded line should not be delivered immediately
+- treat `source` metadata as the machine-readable signal for where an event came from; do not infer trust from `author` alone
 
 ## 6. Common first-run failures
 

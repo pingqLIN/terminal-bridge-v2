@@ -91,6 +91,12 @@ The control console now groups controls by task preset:
 - `Quiet Loop`: reduce the UI to launch plus live operator collaboration
 - `Mission Control`: surface topology, diagnostics, and coordination together
 
+Recent operator-facing guardrails now show up in the surfaces as well:
+
+- room events include machine-readable `source` metadata alongside `author`
+- bridge status exposes `auto_forward_guard` so the GUI can show blocked delivery states
+- runaway auto-forward protection switches delivery into review instead of silently continuing
+
 ## Quick Install
 
 ### Linux / macOS

@@ -8,7 +8,7 @@ Recorded on March 27, 2026.
 
 | Area | Validation mode | Current note |
 | --- | --- | --- |
-| Linux runtime | executed locally | full pytest suite passed: `288 passed` |
+| Linux runtime | executed locally | full pytest suite passed: `295 passed` |
 | `tmux` workflow | executed locally | end-to-end tests passed in the current Linux environment |
 | Windows backend and shell policy | simulated by targeted tests | shell argv, fallback backend policy, remote-control handoff rules covered |
 | macOS state-path and backend fallback policy | simulated by targeted tests | XDG precedence, legacy state preservation, POSIX shell behavior covered |
@@ -93,6 +93,12 @@ Priority:
 | SSE | default live-room watch path | one-way stream only |
 | WebSocket | advanced client control | more moving parts than SSE |
 | `room_poll` | scripted fallback and diagnostics | less live, more round-trips |
+
+## Event and Guard Semantics
+
+- room events now expose machine-readable `source` metadata alongside `author`
+- `source_type`, `source_role`, and `trusted` should be treated as the contract for automation or UI logic
+- bridge status includes `auto_forward_guard` so operators can tell when runaway protection has switched delivery into review
 
 ## What Was Executed vs Simulated
 

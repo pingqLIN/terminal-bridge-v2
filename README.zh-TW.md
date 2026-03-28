@@ -93,6 +93,12 @@ TB2 特別適合這類情境：
 - `Quiet Loop`：把 UI 收斂成啟動與即時協作主線，降低操作噪音
 - `Mission Control`：把拓樸、診斷與協調同時打開，適合 Host 主導的總控視角
 
+最近新增的 operator guardrail 也已經露到使用面：
+
+- room event 除了 `author` 之外，還會帶 machine-readable `source` metadata
+- bridge status 會公開 `auto_forward_guard`，讓 GUI 能明確顯示阻擋中的 delivery 狀態
+- runaway auto-forward 保護一旦觸發，TB2 會改把 delivery 切進 review，而不是繼續默默送出
+
 ## 快速安裝
 
 ### Linux / macOS

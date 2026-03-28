@@ -78,6 +78,7 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 2. 點 `Init Session`。
 3. 點 `Start Collaboration`。
 4. 若需要人工審核，再切到 `Approval Gate`。
+5. 如果 status 卡片顯示 auto-forward guard 已阻擋，請先把待審佇列 review 完，讓 delivery re-arm。
 
 ### 第一個 MCP session
 
@@ -110,6 +111,7 @@ MSG: ready for review on the shell fallback patch
 - 一行 `MSG:` 只放一個可執行請求
 - 不要塞多段長文
 - 當轉發不應該立刻送出時，請啟用 `intervention`
+- 要判斷事件來源時請優先看 machine-readable `source` metadata，不要只靠 `author` 文字推斷
 
 ## 6. 常見首次啟動失敗
 

@@ -8,7 +8,7 @@
 
 | 範圍 | 驗證方式 | 目前說明 |
 | --- | --- | --- |
-| Linux runtime | 本機實際執行 | 完整 pytest suite 通過：`288 passed` |
+| Linux runtime | 本機實際執行 | 完整 pytest suite 通過：`295 passed` |
 | `tmux` workflow | 本機實際執行 | 目前 Linux 環境的 end-to-end tests 通過 |
 | Windows backend 與 shell policy | 針對性測試模擬 | 已涵蓋 shell argv、fallback backend policy、remote-control handoff 規則 |
 | macOS state path 與 backend fallback policy | 針對性測試模擬 | 已涵蓋 XDG precedence、legacy state 保留與 POSIX shell 行為 |
@@ -93,6 +93,12 @@ TB2 現在依 capability 選預設。
 | SSE | 預設 live-room 監看路徑 | 只有單向 stream |
 | WebSocket | 進階 client control | 比 SSE 更複雜 |
 | `room_poll` | script fallback 與 diagnostics | 即時性較低、round-trip 較多 |
+
+## Event 與 Guard 語義
+
+- room event 現在除了 `author` 之外，也會公開 machine-readable `source` metadata
+- `source_type`、`source_role`、`trusted` 應被視為 automation 與 UI 判斷的正式契約
+- bridge status 會附帶 `auto_forward_guard`，方便 operator 看見 runaway 保護何時把 delivery 切進 review
 
 ## 哪些是實跑，哪些是模擬
 
