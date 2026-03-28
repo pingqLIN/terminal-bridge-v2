@@ -707,13 +707,38 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
             existing = _bridges[requested_bridge_id]
             if existing.backend is backend and existing.pane_a == pane_a and existing.pane_b == pane_b:
                 if requested_room_id and existing.room.room_id != requested_room_id:
+                    _audit(
+                        "bridge.start_conflict",
+                        bridge_id=requested_bridge_id,
+                        room_id=existing.room.room_id,
+                        pane_a=pane_a,
+                        pane_b=pane_b,
+                        requested_room_id=requested_room_id,
+                        reason="bridge_id_room_mismatch",
+                    )
                     return {
                         "error": (
                             f"bridge_id {requested_bridge_id} already maps to room "
                             f"{existing.room.room_id}, not {requested_room_id}"
                         )
                     }
+                _audit(
+                    "bridge.start_existing",
+                    bridge_id=existing.bridge_id,
+                    room_id=existing.room.room_id,
+                    pane_a=pane_a,
+                    pane_b=pane_b,
+                    reason="bridge_id_reused",
+                )
                 return {"bridge_id": existing.bridge_id, "room_id": existing.room.room_id, "existing": True}
+            _audit(
+                "bridge.start_conflict",
+                bridge_id=requested_bridge_id,
+                room_id=existing.room.room_id,
+                pane_a=pane_a,
+                pane_b=pane_b,
+                reason="bridge_id_exists",
+            )
             return {"error": f"bridge_id already exists: {requested_bridge_id}"}
 
         for existing in _bridges.values():
@@ -722,17 +747,44 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
             if existing.pane_a != pane_a or existing.pane_b != pane_b:
                 continue
             if requested_room_id and existing.room.room_id != requested_room_id:
+                _audit(
+                    "bridge.start_conflict",
+                    bridge_id=existing.bridge_id,
+                    room_id=existing.room.room_id,
+                    pane_a=pane_a,
+                    pane_b=pane_b,
+                    requested_room_id=requested_room_id,
+                    reason="pane_pair_room_conflict",
+                )
                 return {
                     "error": (
                         f"pane pair already bridged by {existing.bridge_id} "
                         f"in room {existing.room.room_id}; stop it first"
                     )
                 }
+            _audit(
+                "bridge.start_existing",
+                bridge_id=existing.bridge_id,
+                room_id=existing.room.room_id,
+                pane_a=pane_a,
+                pane_b=pane_b,
+                reason="pane_pair_existing",
+            )
             return {"bridge_id": existing.bridge_id, "room_id": existing.room.room_id, "existing": True}
 
     try:
         backend.capture_both(pane_a, pane_b, lines)
     except Exception as exc:
+        _audit(
+            "bridge.start_failed",
+            bridge_id=bridge_id,
+            room_id=requested_room_id or None,
+            pane_a=pane_a,
+            pane_b=pane_b,
+            profile=profile_name,
+            reason="preflight_failed",
+            error=str(exc),
+        )
         return {"error": f"bridge preflight failed: {exc}"}
     room = create_room(requested_room_id) if requested_room_id else create_room()
 

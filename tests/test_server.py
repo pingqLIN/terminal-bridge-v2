@@ -425,6 +425,65 @@ class TestAuditTrail:
         assert rejected["events"][0]["rejected"] == 1
         assert rejected["events"][0]["remaining"] == 0
 
+    @patch.object(server_mod, "_make_backend")
+    def test_audit_recent_covers_bridge_start_existing_conflict_and_failure(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        first = server_mod.handle_bridge_start({
+            "pane_a": "audit:a",
+            "pane_b": "audit:b",
+            "room_id": "audit-room-a",
+            "bridge_id": "audit-bridge-a",
+        })
+        assert first["bridge_id"] == "audit-bridge-a"
+
+        existing = server_mod.handle_bridge_start({
+            "pane_a": "audit:a",
+            "pane_b": "audit:b",
+            "room_id": "audit-room-a",
+        })
+        assert existing["existing"] is True
+
+        conflict = server_mod.handle_bridge_start({
+            "pane_a": "audit:a",
+            "pane_b": "audit:b",
+            "room_id": "audit-room-b",
+        })
+        assert "pane pair already bridged" in conflict["error"]
+
+        mock_backend.capture_both.side_effect = RuntimeError("capture failed")
+        failed = server_mod.handle_bridge_start({
+            "pane_a": "audit:c",
+            "pane_b": "audit:d",
+            "room_id": "audit-room-c",
+        })
+        assert failed["error"] == "bridge preflight failed: capture failed"
+
+        existing_events = server_mod.handle_audit_recent({
+            "event": "bridge.start_existing",
+            "limit": 5,
+        })
+        conflict_events = server_mod.handle_audit_recent({
+            "event": "bridge.start_conflict",
+            "limit": 5,
+        })
+        failed_events = server_mod.handle_audit_recent({
+            "event": "bridge.start_failed",
+            "limit": 5,
+        })
+
+        assert existing_events["count"] == 1
+        assert existing_events["events"][0]["reason"] == "pane_pair_existing"
+        assert conflict_events["count"] == 1
+        assert conflict_events["events"][0]["reason"] == "pane_pair_room_conflict"
+        assert failed_events["count"] == 1
+        assert failed_events["events"][0]["reason"] == "preflight_failed"
+        assert failed_events["events"][0]["error"] == "capture failed"
+
 
 class TestBridgeHandlers:
     @patch.object(server_mod, "_make_backend")
@@ -1142,6 +1201,8 @@ class TestGuiRouting:
         assert 'id="audit-event"' in html
         assert 'id="audit-limit"' in html
         assert "audit_recent" in html
+        assert "bridge.start_conflict" in html
+        assert "bridge.start_failed" in html
 
     def test_gui_html_wires_audit_filters_to_refresh(self):
         html = server_mod.build_gui_html("/mcp")

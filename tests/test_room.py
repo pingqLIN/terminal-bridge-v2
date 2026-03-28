@@ -1,5 +1,6 @@
 """Tests for tb2.room — Room, RoomMessage, registry."""
 
+import json
 import time
 from unittest.mock import patch
 
@@ -152,6 +153,20 @@ class TestRoomRegistry:
         assert delete_room("to-delete") is True
         assert get_room("to-delete") is None
 
+    def test_delete_room_records_audit_event(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        create_room("to-delete-audit")
+
+        assert delete_room("to-delete-audit") is True
+
+        lines = [
+            json.loads(line)
+            for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        deleted = [item for item in lines if item["event"] == "room.deleted"]
+        assert deleted
+        assert deleted[-1]["room_id"] == "to-delete-audit"
+
     def test_delete_nonexistent(self):
         assert delete_room("nope") is False
 
@@ -161,6 +176,22 @@ class TestRoomRegistry:
         removed = cleanup_stale(ttl_seconds=3600)
         assert removed == 1
         assert get_room("stale") is None
+
+    def test_cleanup_stale_records_audit_event(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        room = create_room("stale-audit")
+        room.last_active = time.time() - 7200
+
+        removed = cleanup_stale(ttl_seconds=3600)
+
+        assert removed == 1
+        lines = [
+            json.loads(line)
+            for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        cleaned = [item for item in lines if item["event"] == "room.cleaned_up"]
+        assert cleaned
+        assert cleaned[-1]["room_id"] == "stale-audit"
 
     def test_cleanup_keeps_active(self):
         create_room("active")

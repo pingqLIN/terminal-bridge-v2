@@ -239,7 +239,17 @@ def cleanup_stale(ttl_seconds: float = 3600) -> int:
     with _rooms_lock:
         stale = [rid for rid, r in _rooms.items() if now - r.last_active > ttl_seconds]
         for rid in stale:
-            _rooms.pop(rid).close()
+            room = _rooms.pop(rid)
+            record_event(
+                "room.cleaned_up",
+                room_id=rid,
+                payload={
+                    "message_count": room.message_count,
+                    "last_active": room.last_active,
+                    "created_at": room.created_at,
+                },
+            )
+            room.close()
         return len(stale)
 
 
@@ -248,5 +258,14 @@ def delete_room(room_id: str) -> bool:
         room = _rooms.pop(room_id, None)
     if room is None:
         return False
+    record_event(
+        "room.deleted",
+        room_id=room_id,
+        payload={
+            "message_count": room.message_count,
+            "last_active": room.last_active,
+            "created_at": room.created_at,
+        },
+    )
     room.close()
     return True

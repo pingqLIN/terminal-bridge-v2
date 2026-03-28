@@ -18,6 +18,27 @@ _RECENT_SCAN_FACTOR = 20
 _MIN_RECENT_SCAN = 400
 _DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 _DEFAULT_MAX_FILES = 5
+AUDIT_EVENT_CATALOG = (
+    "terminal.session_init",
+    "terminal.sent",
+    "room.created",
+    "room.deleted",
+    "room.cleaned_up",
+    "room.message",
+    "room.message_posted",
+    "operator.room_post",
+    "operator.interrupt",
+    "bridge.start_existing",
+    "bridge.start_conflict",
+    "bridge.start_failed",
+    "bridge.started",
+    "bridge.stopped",
+    "bridge.guard_blocked",
+    "bridge.guard_rearmed",
+    "intervention.submitted",
+    "intervention.approved",
+    "intervention.rejected",
+)
 
 
 def _state_root() -> Path:

@@ -36,6 +36,7 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 - GUI status card 新增結構化摘要 badges，把 guard、pending、subscriber、audit 狀態前景化
 - audit / MCP onboarding 文件補上 `audit_recent`、`tb2 service audit`、audit-enabled service flow
 - 多份 release-facing 文件的驗證快照已更新到目前主線狀態
+- `Batch A` 第一段已落地：`bridge.start_existing`、`bridge.start_conflict`、`bridge.start_failed`、`room.deleted`、`room.cleaned_up` 現在都有 durable event，GUI audit filter 也已改讀單一 event catalog
 
 本輪審查後，接下來的高價值缺口已收斂成 4 大主題：
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .audit import AUDIT_EVENT_CATALOG
 from .osutils import default_backend_name
 
 GUI_HTML_TEMPLATE = r"""
@@ -1112,15 +1113,7 @@ GUI_HTML_TEMPLATE = r"""
                     <label for="audit-event" data-i18n="fields.auditEvent">audit event</label>
                     <select id="audit-event">
                       <option value="" data-i18n="auditEvents.all">all events</option>
-                      <option value="room.message_posted">room.message_posted</option>
-                      <option value="operator.room_post">operator.room_post</option>
-                      <option value="operator.interrupt">operator.interrupt</option>
-                      <option value="intervention.approved">intervention.approved</option>
-                      <option value="intervention.rejected">intervention.rejected</option>
-                      <option value="bridge.started">bridge.started</option>
-                      <option value="bridge.stopped">bridge.stopped</option>
-                      <option value="bridge.guard_blocked">bridge.guard_blocked</option>
-                      <option value="bridge.guard_rearmed">bridge.guard_rearmed</option>
+                      __AUDIT_EVENT_OPTIONS__
                     </select>
                   </div>
                   <div>
@@ -2448,9 +2441,17 @@ def _backend_options() -> str:
     return "".join(options)
 
 
+def _audit_event_options() -> str:
+    options = []
+    for event in AUDIT_EVENT_CATALOG:
+        options.append(f'<option value="{event}">{event}</option>')
+    return "".join(options)
+
+
 def build_gui_html(mcp_endpoint: str = "/mcp") -> str:
     return (
         GUI_HTML_TEMPLATE
         .replace("__MCP_ENDPOINT__", mcp_endpoint)
         .replace("__BACKEND_OPTIONS__", _backend_options())
+        .replace("__AUDIT_EVENT_OPTIONS__", _audit_event_options())
     )
