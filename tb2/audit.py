@@ -169,6 +169,10 @@ class AuditTrail:
                 "mode": self.text_mode,
                 "keys": list(_TEXT_REDACTION_KEYS),
                 "fields": list(_TEXT_REDACTION_KEYS),
+                "stores_raw_text": self.text_mode == "full",
+                "stores_masked_placeholders": self.text_mode == "mask",
+                "stores_hash_fingerprint": True,
+                "stores_text_metadata": True,
             },
             "last_error": self._last_error or None,
         }

@@ -42,6 +42,10 @@ def test_audit_trail_describe_includes_retention_settings(tmp_path):
     assert desc["redaction"]["mode"] == "mask"
     assert "text" in desc["redaction"]["fields"]
     assert "text" in desc["redaction"]["keys"]
+    assert desc["redaction"]["stores_raw_text"] is False
+    assert desc["redaction"]["stores_masked_placeholders"] is True
+    assert desc["redaction"]["stores_hash_fingerprint"] is True
+    assert desc["redaction"]["stores_text_metadata"] is True
 
 
 def test_audit_trail_rotation_keeps_newest_entries(tmp_path):

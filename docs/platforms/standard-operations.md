@@ -151,4 +151,4 @@ Current contract:
 - Keep one active bridge per pane pair.
 - Prefer `intervention` mode when testing a new guest profile or a new CLI client.
 - Use `pipe` only when the client does not need TUI behavior.
-- If audit is part of your runbook, verify `audit.enabled`, the active file path, and a filtered `service audit` query before trusting incident history.
+- If audit is part of your runbook, verify `audit.enabled`, the active file path, the active redaction mode, and a filtered `service audit` query before trusting incident history.

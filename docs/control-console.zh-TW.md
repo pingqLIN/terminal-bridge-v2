@@ -206,8 +206,10 @@ bridge 建立後永遠可見。
 - capture Guest
 - interrupt 控制
 - audit 啟用狀態
+- 目前 audit redaction mode
 - 最近持久化 audit events
 - 進入 diagnostics panel 前，持久化 audit entry 會先遮罩文字欄位
+- Diagnostics audit 輸出是拿來做 correlation 與 operator review，不是 verbatim transcript recovery
 - audit event filter
 - audit entry limit
 - raw status JSON

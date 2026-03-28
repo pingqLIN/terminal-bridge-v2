@@ -147,4 +147,4 @@ python -m tb2 service status
 - 同一組 pane pair 只保留一個 active bridge。
 - 新 guest profile 或新 CLI client 先在 `intervention` 模式下驗證。
 - 只有在 client 不需要 TUI 時才用 `pipe`。
-- 若 audit 是 runbook 的一部分，請先確認 `audit.enabled`、目前寫入檔案路徑，以及一條可過濾的 `service audit` 查詢真的有資料，再把 incident history 當成可信訊號。
+- 若 audit 是 runbook 的一部分，請先確認 `audit.enabled`、目前寫入檔案路徑、正在生效的 redaction mode，以及一條可過濾的 `service audit` 查詢真的有資料，再把 incident history 當成可信訊號。

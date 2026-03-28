@@ -207,6 +207,10 @@ class TestRemoteControlMcp:
 
         status = _tool(base_url, "status", {})
 
+        assert status["audit"]["redaction"]["mode"] == "mask"
+        assert status["audit"]["redaction"]["stores_raw_text"] is False
+        assert status["audit"]["redaction"]["stores_masked_placeholders"] is True
+        assert status["audit"]["redaction"]["stores_hash_fingerprint"] is True
         assert status["runtime"]["state_persistence"] == "memory_only"
         assert status["runtime"]["restart_behavior"] == "state_lost"
         assert status["runtime"]["recovery_source"] == "audit_history_only"

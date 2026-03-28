@@ -206,8 +206,10 @@ Contains:
 - capture Guest
 - interrupt controls
 - audit enabled state
+- current audit redaction mode
 - recent persisted audit events
 - persisted audit entries redact text-bearing fields before they reach the diagnostics panel
+- diagnostics audit output is for correlation and operator review, not verbatim transcript recovery
 - audit event filter
 - audit entry limit
 - raw status JSON

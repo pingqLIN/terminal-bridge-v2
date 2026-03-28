@@ -255,6 +255,9 @@ class TestStatusHandler:
         assert result["audit"]["enabled"] is False
         assert result["audit"]["redaction"]["mode"] == "mask"
         assert "text" in result["audit"]["redaction"]["fields"]
+        assert result["audit"]["redaction"]["stores_raw_text"] is False
+        assert result["audit"]["redaction"]["stores_masked_placeholders"] is True
+        assert result["audit"]["redaction"]["stores_hash_fingerprint"] is True
         assert result["runtime"]["state_persistence"] == "memory_only"
         assert result["runtime"]["restart_behavior"] == "state_lost"
         assert result["runtime"]["recovery_source"] == "audit_history_only"
@@ -372,6 +375,7 @@ class TestAuditTrail:
         assert result["count"] == 1
         assert result["audit"]["enabled"] is True
         assert result["audit"]["redaction"]["mode"] == "mask"
+        assert result["audit"]["redaction"]["stores_raw_text"] is False
         assert result["events"][0]["event"] == "operator.room_post"
         assert result["events"][0]["message_id"] == 1
 

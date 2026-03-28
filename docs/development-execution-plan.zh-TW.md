@@ -38,6 +38,7 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 - 多份 release-facing 文件的驗證快照已更新到目前主線狀態
 - `Batch A` 第一段已落地：`bridge.start_existing`、`bridge.start_conflict`、`bridge.start_failed`、`room.deleted`、`room.cleaned_up` 現在都有 durable event，GUI audit filter 也已改讀單一 event catalog
 - `Batch B` 第一段已落地：`status` 現在會回 machine-readable `runtime` contract，正式標示目前 restart 行為為 `state_lost`
+- `Batch C` 第一段已落地：audit 文字欄位現在有 `full` / `mask` / `drop` 策略，`status.audit.redaction`、`audit_recent`、`tb2 service audit` 都已對齊同一個 contract
 - audit privacy boundary 第一段已落地：持久化 audit 透過 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 統一處理 `text` / `edited_text` / `guard_text`，預設 `mask`，並把 contract 暴露到 `status.audit.redaction`
 
 本輪審查後，接下來的高價值缺口已收斂成 4 大主題：
@@ -86,14 +87,14 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 - `tb2/audit.py`
 - `tests/test_server.py`
 
-### 3. Audit 還沒有 redaction / sanitization boundary
+### 3. Audit redaction contract 已初步落地，但 policy 還可再收斂
 
-目前 text-bearing events 仍可能把 raw operator text、handoff text、terminal text 直接持久化。
+目前 text-bearing events 已不再無條件落 raw text，但 rollout policy 與哪些場景該允許 `full` 仍需收斂。
 
 風險：
 
-- token / secret / 敏感 shell 指令落盤
-- prompt / private context 被長期保存
+- 不同 operator policy 若沒先對齊，可能誤用 `full` 導致敏感內容落盤
+- incident review 若忽略 redaction mode，可能誤把 masked audit 當成完整 transcript
 
 涉及路徑：
 
@@ -170,6 +171,7 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 - text-bearing events 可依策略被完整保留、遮罩或移除
 - 預設策略明確且文件一致
 - regression tests 覆蓋各策略輸出
+- `full` mode 被標示為 exception-only，需由 operator policy 明確授權後才可啟用
 
 ## Batch D：GUI / QA Contract Hardening
 
