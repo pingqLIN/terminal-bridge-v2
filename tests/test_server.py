@@ -1283,6 +1283,8 @@ class TestGuiRouting:
         assert "$('audit-limit').onchange = () => run(refreshAudit);" in html
         assert "if (event) args.event = event;" in html
         assert "cards.auditRedaction" in html
+        assert "cards.auditRedactionFullWarning" in html
+        assert "audit.redaction && audit.redaction.stores_raw_text" in html
 
     def test_gui_html_refreshes_status_after_review_actions(self):
         html = server_mod.build_gui_html("/mcp")
@@ -1316,6 +1318,8 @@ class TestGuiRouting:
         html = server_mod.build_gui_html("/mcp")
         assert 'id="status-badges"' in html
         assert "function renderStatusSummary(status)" in html
+        assert "cards.statusBadgeAuditRaw" in html
+        assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html
         assert "renderStatusSummary(res);" in html
 

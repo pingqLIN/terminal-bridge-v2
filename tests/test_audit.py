@@ -132,6 +132,27 @@ def test_audit_trail_from_env_honors_text_mode_for_custom_dir(tmp_path, monkeypa
     assert trail.text_mode == "drop"
 
 
+def test_known_event_schema_drops_unknown_text_fields(tmp_path):
+    trail = AuditTrail(tmp_path)
+
+    trail.write(
+        "terminal.sent",
+        {
+            "target": "pane-a",
+            "text": "secret",
+            "notes": "never persist this free text",
+        },
+    )
+
+    [item] = trail.recent(limit=1)
+    raw = (tmp_path / "events.jsonl").read_text(encoding="utf-8")
+
+    assert item["target"] == "pane-a"
+    assert item["text"] == "[redacted]"
+    assert "notes" not in item
+    assert "never persist this free text" not in raw
+
+
 def test_audit_trail_redacts_top_level_and_nested_text_fields(tmp_path):
     trail = AuditTrail(tmp_path)
 

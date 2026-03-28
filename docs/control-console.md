@@ -210,6 +210,7 @@ Contains:
 - recent persisted audit events
 - persisted audit entries redact text-bearing fields before they reach the diagnostics panel
 - diagnostics audit output is for correlation and operator review, not verbatim transcript recovery
+- when redaction mode is `full`, the panel should surface an explicit raw-text warning so operators do not mistake the durable audit for a safe default
 - audit event filter
 - audit entry limit
 - raw status JSON

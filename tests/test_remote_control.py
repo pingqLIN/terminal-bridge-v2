@@ -16,6 +16,7 @@ from http.server import ThreadingHTTPServer
 import pytest
 
 import tb2.server as server_mod
+from tb2.audit import AuditTrail
 from tb2.osutils import default_shell
 
 
@@ -214,6 +215,17 @@ class TestRemoteControlMcp:
         assert status["runtime"]["state_persistence"] == "memory_only"
         assert status["runtime"]["restart_behavior"] == "state_lost"
         assert status["runtime"]["recovery_source"] == "audit_history_only"
+
+    def test_status_reports_full_text_audit_contract(self, mcp_server, tmp_path, monkeypatch):
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path, text_mode="full"))
+        base_url = mcp_server["base_url"]
+
+        status = _tool(base_url, "status", {})
+
+        assert status["audit"]["redaction"]["mode"] == "full"
+        assert status["audit"]["redaction"]["stores_raw_text"] is True
+        assert status["audit"]["redaction"]["stores_masked_placeholders"] is False
+        assert status["audit"]["redaction"]["stores_hash_fingerprint"] is True
 
     def test_room_binding_and_duplicate_bridge_detection(self, mcp_server):
         base_url = mcp_server["base_url"]

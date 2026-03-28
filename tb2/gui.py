@@ -1295,6 +1295,7 @@ GUI_HTML_TEMPLATE = r"""
             auditDisabled: 'Audit trail is off. Set TB2_AUDIT=1 or TB2_AUDIT_DIR and restart the server to persist events.',
             auditEnabled: 'Audit trail is writing to {file}.',
             auditRedaction: 'Persisted text fields are redacted ({mode}).',
+            auditRedactionFullWarning: 'Warning: full mode stores raw text in durable audit entries.',
             auditDestinationFallback: 'configured destination',
             auditError: 'Audit trail error: {error}',
             auditEmpty: 'No recent audit entries for the current scope.',
@@ -1312,7 +1313,8 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeTransport: 'Subscribers {total} ({sse} SSE / {websocket} WS)',
             statusBadgeTransportIdle: 'Subscribers idle',
             statusBadgeAuditOn: 'Audit on',
-            statusBadgeAuditOff: 'Audit off'
+            statusBadgeAuditOff: 'Audit off',
+            statusBadgeAuditRaw: 'Audit raw text'
           },
           auditEvents: {
             all: 'all events'
@@ -1521,6 +1523,7 @@ GUI_HTML_TEMPLATE = r"""
             auditDisabled: 'Audit trail 目前未啟用。請設定 TB2_AUDIT=1 或 TB2_AUDIT_DIR，並重新啟動 server 才會持久化事件。',
             auditEnabled: 'Audit trail 正在寫入 {file}。',
             auditRedaction: '持久化文字欄位會先做遮罩（{mode}）。',
+            auditRedactionFullWarning: '警告：full mode 會把 raw text 寫進 durable audit entry。',
             auditDestinationFallback: '已設定的目的地',
             auditError: 'Audit trail 錯誤：{error}',
             auditEmpty: '目前 scope 沒有最近的 audit entries。',
@@ -1538,7 +1541,8 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeTransport: '訂閱 {total}（SSE {sse} / WS {websocket}）',
             statusBadgeTransportIdle: '目前沒有訂閱',
             statusBadgeAuditOn: 'Audit 已啟用',
-            statusBadgeAuditOff: 'Audit 未啟用'
+            statusBadgeAuditOff: 'Audit 未啟用',
+            statusBadgeAuditRaw: 'Audit 含 raw text'
           },
           auditEvents: {
             all: '全部事件'
@@ -1986,6 +1990,9 @@ GUI_HTML_TEMPLATE = r"""
         if (audit.redaction && audit.redaction.mode) {
           note += ' ' + format('cards.auditRedaction', { mode: String(audit.redaction.mode) });
         }
+        if (audit.redaction && audit.redaction.stores_raw_text) {
+          note += ' ' + t('cards.auditRedactionFullWarning');
+        }
         if (audit.last_error) {
           note += ' ' + format('cards.auditError', { error: audit.last_error });
         }
@@ -2154,6 +2161,9 @@ GUI_HTML_TEMPLATE = r"""
             : t('cards.statusBadgeTransportIdle'),
           status && status.audit && status.audit.enabled ? t('cards.statusBadgeAuditOn') : t('cards.statusBadgeAuditOff'),
         ];
+        if (status && status.audit && status.audit.enabled && status.audit.redaction && status.audit.redaction.stores_raw_text) {
+          labels.push(t('cards.statusBadgeAuditRaw'));
+        }
         for (const label of labels) {
           const badge = document.createElement('span');
           badge.className = 'badge';
