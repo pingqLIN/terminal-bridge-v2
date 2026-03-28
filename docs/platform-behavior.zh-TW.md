@@ -86,6 +86,7 @@ TB2 現在依 capability 選預設。
 - 預設保持關閉，避免測試或一般本機使用默默留下持久化 operator 紀錄
 - 目前持久化範圍刻意收斂，只先涵蓋 room messages、bridge lifecycle、intervention decisions，以及 `terminal_send` / interrupt 這類直接 operator actions
 - `status` 現在會附帶 `audit` 狀態，方便 operator 確認是否啟用持久化與實際寫入位置
+- `status` 現在也會附帶 `runtime` contract，明確標示 live control state 目前是 `memory_only`，且 `restart_behavior=state_lost`
 - operator 可在本機用 `tb2 service audit`，或透過 MCP `audit_recent` 讀最近的持久化事件
 - GUI 的 Diagnostics 卡現在也會同步顯示這個狀態，並帶出目前 room / bridge scope 的最近持久化事件
 - GUI operator 還可以直接在主控台用 event 名稱與最近筆數限制縮小這個視窗
@@ -97,6 +98,13 @@ TB2 現在依 capability 選預設。
 | Windows | `%LOCALAPPDATA%/tb2` | 若缺少則退到 `~/AppData/Local/tb2` |
 | macOS | `~/Library/Application Support/tb2` | 同時尊重 `XDG_STATE_HOME`，並在存在 state 檔時保留 `~/.local/state/tb2` |
 | Linux | `$XDG_STATE_HOME/tb2` 或 `~/.local/state/tb2` | 標準 XDG fallback |
+
+## Restart-State 契約
+
+- 背景 service 目前只會持久化 process-manager metadata，例如 PID、host、port、log path 與 audit destination
+- live room、bridge、pending intervention state 仍只存在於正在執行的 server 記憶體中
+- 執行 `tb2 service stop` 或 `tb2 service restart` 後，應直接假設 live collaboration state 會依設計遺失
+- 若 audit 已啟用，歷史事件可以跨重啟保留，但它是 historical ledger，不是 runtime restore path
 
 ## Transport 備註
 

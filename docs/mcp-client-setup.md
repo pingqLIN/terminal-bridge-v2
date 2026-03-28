@@ -139,6 +139,7 @@ TB2 now supports a lighter control path for intervention tools:
 
 The `status` tool now also returns `bridge_details` so another AI client can map `bridge_id`, `room_id`, panes, profile, and pending count without guessing.
 It also returns an `audit` snapshot so the client can decide whether persisted incident data is available before it asks for `audit_recent`.
+It now also returns a machine-readable `runtime` contract so the client can see that live room / bridge / intervention state is memory-only and is lost across service restart.
 
 ## Human Operator Tool Map
 

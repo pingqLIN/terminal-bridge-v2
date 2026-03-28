@@ -114,6 +114,19 @@ python -m tb2 room reject --room-id <ROOM_ID> --id all
 python -m tb2 service stop
 ```
 
+### 重新啟動背景 service
+
+```bash
+python -m tb2 service restart --host 127.0.0.1 --port 3189
+python -m tb2 service status
+```
+
+目前契約：
+
+- restart 會保留 service metadata 與 audit files
+- restart 不會保留 active rooms、bridges、pending interventions
+- restart 後 operator 應重新建立 session 與 bridge
+
 ## 5. 標準排錯流程
 
 ### Linux / macOS

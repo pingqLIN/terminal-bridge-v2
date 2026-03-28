@@ -106,6 +106,7 @@ python -m tb2 service audit --lines 10
 ```
 
 Use this path when you want durable operator and bridge events from the first run.
+It does not change the current restart contract: live room / bridge / pending intervention state is still lost after `service stop` or `service restart`.
 
 ## 5. Understand the handoff contract
 

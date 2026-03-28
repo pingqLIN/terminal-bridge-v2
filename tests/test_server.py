@@ -251,7 +251,11 @@ class TestStatusHandler:
         assert "bridges" in result
         assert "bridge_details" in result
         assert "audit" in result
+        assert "runtime" in result
         assert result["audit"]["enabled"] is False
+        assert result["runtime"]["state_persistence"] == "memory_only"
+        assert result["runtime"]["restart_behavior"] == "state_lost"
+        assert result["runtime"]["recovery_source"] == "audit_history_only"
         room_ids = [r["id"] for r in result["rooms"]]
         assert "status-test" in room_ids
         assert result["bridges"] == ["status-bridge"]

@@ -101,6 +101,7 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - operators can inspect persisted entries through `tb2 service audit` or the MCP `audit_recent` tool
 - the GUI Diagnostics card now shows audit enablement plus recent persisted events for the active room or bridge
 - the GUI audit view now supports event filtering and a bounded recent-entry limit for faster incident triage
+- live runtime state is still memory-only for now, so `tb2 service stop` / `restart` preserves audit history but not active rooms, bridges, or pending interventions
 
 ## Quick Install
 

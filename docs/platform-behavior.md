@@ -86,6 +86,7 @@ Priority:
 - the audit stream is off by default so test runs and casual local sessions do not silently write durable operator records
 - current persisted scope is intentionally narrow: room messages, bridge lifecycle, intervention decisions, and direct operator actions such as `terminal_send` / interrupt
 - `status` now includes an `audit` snapshot so operators can see whether persistence is enabled and where entries are being written
+- `status` now also includes a `runtime` contract that explicitly marks live control state as `memory_only` with `restart_behavior=state_lost`
 - operators can read recent entries through `tb2 service audit` locally or the MCP `audit_recent` tool remotely
 - the GUI Diagnostics card now mirrors that state and shows recent persisted events for the current room / bridge scope
 - GUI operators can further narrow that view by event name and recent-entry limit without leaving the main console
@@ -97,6 +98,13 @@ Priority:
 | Windows | `%LOCALAPPDATA%/tb2` | falls back to `~/AppData/Local/tb2` |
 | macOS | `~/Library/Application Support/tb2` | respects `XDG_STATE_HOME` and preserves legacy `~/.local/state/tb2` if state files exist |
 | Linux | `$XDG_STATE_HOME/tb2` or `~/.local/state/tb2` | standard XDG-style fallback |
+
+## Restart-State Contract
+
+- detached service state only persists process-manager metadata such as PID, host, port, log path, and audit destination
+- live room, bridge, and pending intervention state remains memory-only inside the running server
+- after `tb2 service stop` or `tb2 service restart`, operators should assume live collaboration state is lost by design
+- audit history can survive restart when enabled, but it is a historical ledger, not a runtime restore path
 
 ## Transport Notes
 

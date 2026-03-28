@@ -1052,6 +1052,11 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         "bridge_details": bridge_details,
         "transports": transports,
         "audit": _audit_trail.describe(),
+        "runtime": {
+            "state_persistence": "memory_only",
+            "restart_behavior": "state_lost",
+            "recovery_source": "audit_history_only",
+        },
     }
 
 

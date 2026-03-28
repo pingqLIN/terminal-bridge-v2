@@ -106,6 +106,7 @@ python -m tb2 service audit --lines 10
 ```
 
 當你希望從第一輪就保留 durable operator 與 bridge events 時，請走這條路徑。
+這不會改變目前的 restart 契約：`service stop` 或 `service restart` 後，live room / bridge / pending intervention state 仍會遺失。
 
 ## 5. 先理解 handoff 契約
 

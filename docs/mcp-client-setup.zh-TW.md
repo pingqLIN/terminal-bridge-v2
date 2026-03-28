@@ -139,6 +139,7 @@ TB2 現在對 intervention 類工具支援更輕量的解析路徑：
 
 `status` 現在也會回傳 `bridge_details`，讓其他 AI client 可以直接看到 `bridge_id`、`room_id`、pane、profile 與 pending count，而不是自己猜。
 它同時也會回傳 `audit` snapshot，讓 client 在呼叫 `audit_recent` 前先判斷目前是否真的有持久化事件可查。
+它現在也會回傳 machine-readable `runtime` contract，讓 client 明確知道 live room / bridge / intervention state 目前仍是記憶體態，service restart 後會遺失。
 
 ## Human Operator 工具地圖
 

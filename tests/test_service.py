@@ -132,6 +132,61 @@ def test_restart_service_calls_stop_then_start(monkeypatch):
     assert st.port == 3201
 
 
+def test_restart_service_discards_runtime_state_payload(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "pid": 2468,
+                "host": "127.0.0.1",
+                "port": 3189,
+                "rooms": [{"id": "room-a"}],
+                "bridges": [{"id": "bridge-a"}],
+                "pending_interventions": [{"id": 1}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _Proc:
+        pid = 3579
+
+        @staticmethod
+        def poll():
+            return None
+
+    alive = {"old": True}
+
+    def _alive(pid: int) -> bool:
+        if pid == 2468:
+            return alive["old"]
+        return pid == 3579
+
+    def _term(pid: int, timeout: float):
+        assert pid == 2468
+        assert timeout == 8.0
+        alive["old"] = False
+
+    monkeypatch.setattr(service, "_pid_alive", _alive)
+    monkeypatch.setattr(service, "_terminate_pid", _term)
+    monkeypatch.setattr(service, "_spawn_detached", lambda cmd, log_file: _Proc())
+
+    st = service.restart_service(host="127.0.0.1", port=3190)
+
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert st.running is True
+    assert st.pid == 3579
+    assert st.port == 3190
+    assert saved["pid"] == 3579
+    assert saved["host"] == "127.0.0.1"
+    assert saved["port"] == 3190
+    assert "rooms" not in saved
+    assert "bridges" not in saved
+    assert "pending_interventions" not in saved
+
+
 def test_start_service_force_stops_existing(tmp_path, monkeypatch):
     monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
     state = tmp_path / "server.state.json"

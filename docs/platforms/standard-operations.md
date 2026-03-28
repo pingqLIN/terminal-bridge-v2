@@ -118,6 +118,19 @@ Or stop it via MCP / GUI with `bridge_stop`.
 python -m tb2 service stop
 ```
 
+### Restart the detached service
+
+```bash
+python -m tb2 service restart --host 127.0.0.1 --port 3189
+python -m tb2 service status
+```
+
+Current contract:
+
+- restart preserves service metadata and audit files
+- restart does not preserve active rooms, bridges, or pending interventions
+- operators should re-establish sessions and bridges after restart
+
 ## 5. Standard Troubleshooting
 
 ### Linux / macOS

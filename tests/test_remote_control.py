@@ -202,6 +202,15 @@ class TestRemoteControlMcp:
             return "echo agent^> MSG:echo REMOTE_OK"
         return "printf 'agent> MSG:echo REMOTE_OK\\n'"
 
+    def test_status_reports_memory_only_restart_contract(self, mcp_server):
+        base_url = mcp_server["base_url"]
+
+        status = _tool(base_url, "status", {})
+
+        assert status["runtime"]["state_persistence"] == "memory_only"
+        assert status["runtime"]["restart_behavior"] == "state_lost"
+        assert status["runtime"]["recovery_source"] == "audit_history_only"
+
     def test_room_binding_and_duplicate_bridge_detection(self, mcp_server):
         base_url = mcp_server["base_url"]
         init = _tool(base_url, "terminal_init", {
