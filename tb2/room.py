@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 import re
 from typing import Any, Deque, Dict, List, Optional
 
+from .audit import record_event
 
 _ROOM_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 
@@ -122,6 +123,22 @@ class Room:
                 queue.append(msg)
             self.last_active = time.time()
             self._cv.notify_all()
+            record_event(
+                "room.message_posted",
+                room_id=self.room_id,
+                bridge_id=str(msg.meta.get("bridge_id", "")).strip() or None,
+                payload={
+                    "id": msg.id,
+                    "author": msg.author,
+                    "text": msg.text,
+                    "kind": msg.kind,
+                    "source_type": msg.source_type,
+                    "source_role": msg.source_role,
+                    "trusted": msg.trusted,
+                    "meta": dict(msg.meta),
+                    "created_at": msg.ts,
+                },
+            )
             return msg
 
     def poll(self, *, after_id: int = 0, limit: int = 50) -> List[RoomMessage]:

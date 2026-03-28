@@ -7,7 +7,7 @@ Usage:
     python -m tb2 send --target TARGET --text TEXT [--enter]
     python -m tb2 room {watch,post,pending,approve,reject} [...]
     python -m tb2 broker --a TARGET --b TARGET [--profile NAME] [--auto] [--intervention]
-    python -m tb2 service {start,stop,status,restart,logs} [...]
+    python -m tb2 service {start,stop,status,restart,logs,audit} [...]
     python -m tb2 gui [--host ADDR] [--port PORT] [--no-browser]
     python -m tb2 profiles [--verbose]
     python -m tb2 doctor [--json]
@@ -110,6 +110,7 @@ def cmd_gui(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
 
 def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    from .audit import tail_events
     from .service import restart_service, start_service, status_service, stop_service, tail_log
 
     if args.service_cmd == "start":
@@ -139,6 +140,16 @@ def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     if args.service_cmd == "logs":
         for line in tail_log(lines=int(args.lines)):
             print(line)
+        return 0
+
+    if args.service_cmd == "audit":
+        for item in tail_events(
+            limit=int(args.lines),
+            room_id=str(args.room_id),
+            bridge_id=str(args.bridge_id),
+            event=str(args.event),
+        ):
+            print(json.dumps(item, ensure_ascii=False))
         return 0
 
     st = status_service()
@@ -459,6 +470,13 @@ def build_parser() -> argparse.ArgumentParser:
     s_logs = ss.add_parser("logs", help="show service logs")
     s_logs.add_argument("--lines", type=int, default=120)
     s_logs.set_defaults(fn=cmd_service)
+
+    s_audit = ss.add_parser("audit", help="show persisted audit trail events")
+    s_audit.add_argument("--lines", type=int, default=120)
+    s_audit.add_argument("--room-id", default="")
+    s_audit.add_argument("--bridge-id", default="")
+    s_audit.add_argument("--event", default="")
+    s_audit.set_defaults(fn=cmd_service)
 
     return p
 

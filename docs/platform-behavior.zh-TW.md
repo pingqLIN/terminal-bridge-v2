@@ -78,6 +78,15 @@ TB2 現在依 capability 選預設。
 | `cmd.exe` | 可支援 | Windows 最低摩擦 fallback |
 | Windows 上的 Git Bash / MSYS shell | 明確指定時支援 | 不再被當成隱式預設值 |
 
+## Audit Trail 啟用方式
+
+- `TB2_AUDIT=1` 會在 TB2 一般 state root 下啟用 append-only JSONL audit trail，路徑是 `audit/events.jsonl`
+- `TB2_AUDIT_DIR=/path/to/dir` 可改成寫到指定目錄
+- 預設保持關閉，避免測試或一般本機使用默默留下持久化 operator 紀錄
+- 目前持久化範圍刻意收斂，只先涵蓋 room messages、bridge lifecycle、intervention decisions，以及 `terminal_send` / interrupt 這類直接 operator actions
+- `status` 現在會附帶 `audit` 狀態，方便 operator 確認是否啟用持久化與實際寫入位置
+- operator 可在本機用 `tb2 service audit`，或透過 MCP `audit_recent` 讀最近的持久化事件
+
 ## Service State Path 策略
 
 | 平台 | 優先 state root | 相容規則 |

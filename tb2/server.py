@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .audit import AuditTrail
 from .backend import TerminalBackend, TmuxBackend, TmuxError
 from .diff import diff_new_lines, strip_prompt_tail
 from .intervention import Action, InterventionLayer
@@ -105,7 +106,8 @@ class Bridge:
             if not ln.strip():
                 continue
             text = strip_ansi(ln) if profile.strip_ansi else ln
-            self.room.post(
+            _post_room_message(
+                self.room,
                 author=tag,
                 text=text,
                 kind="terminal",
@@ -123,11 +125,22 @@ class Bridge:
                     self.forwarded_recent.append(fp)
                     self._arm_auto_forward_guard(tag, from_pane, to_pane, parsed)
                     msg = self.intervention_layer.submit(from_pane, to_pane, parsed)
+                    _audit(
+                        "intervention.submitted",
+                        bridge_id=self.bridge_id,
+                        room_id=self.room.room_id,
+                        pending_id=msg.id,
+                        from_pane=from_pane,
+                        to_pane=to_pane,
+                        text=parsed,
+                        action=msg.action.value,
+                    )
                     if msg.action == Action.AUTO:
                         try:
                             self.backend.send(to_pane, parsed, enter=True)
                             self._record_auto_forward()
-                            self.room.post(
+                            _post_room_message(
+                                self.room,
                                 author="bridge",
                                 text=f"[forwarded {tag}->{to_pane}] {parsed}",
                                 kind="system",
@@ -138,7 +151,8 @@ class Bridge:
                             )
                         except TmuxError as exc:
                             self._reset_auto_forward_guard()
-                            self.room.post(
+                            _post_room_message(
+                                self.room,
                                 author="bridge",
                                 text=f"[forward failed {tag}->{to_pane}] {exc}",
                                 kind="system",
@@ -149,7 +163,8 @@ class Bridge:
                             )
                     else:
                         self._reset_auto_forward_guard()
-                        self.room.post(
+                        _post_room_message(
+                            self.room,
                             author="bridge",
                             text=f"[pending #{msg.id} {tag}->{to_pane}] {parsed}",
                             kind="intervention",
@@ -173,7 +188,17 @@ class Bridge:
         self.intervention_layer.pause()
         self._auto_forward_guard_reason = reason
         self._reset_auto_forward_guard()
-        self.room.post(
+        _audit(
+            "bridge.guard_blocked",
+            bridge_id=self.bridge_id,
+            room_id=self.room.room_id,
+            from_pane=from_pane,
+            to_pane=to_pane,
+            reason=reason,
+            text=text,
+        )
+        _post_room_message(
+            self.room,
             author="bridge",
             text=f"[auto-forward paused {tag}->{to_pane}] {reason}; intervention enabled",
             kind="intervention",
@@ -279,6 +304,7 @@ _cleanup_thread.start()
 
 _backend_cache: Dict[Tuple[str, str, str, str], TerminalBackend] = {}
 _backend_cache_lock = threading.Lock()
+_audit_trail = AuditTrail.from_env()
 
 
 def _parse_int(
@@ -455,6 +481,34 @@ def _room_message_payload(room: Room, msg: RoomMessage) -> Dict[str, Any]:
     }
 
 
+def _audit(event: str, **payload: Any) -> None:
+    _audit_trail.write(event, payload)
+
+
+def _post_room_message(
+    room: Room,
+    author: str,
+    text: str,
+    kind: str = "chat",
+    meta: Optional[Dict[str, Any]] = None,
+    *,
+    source_type: str = "client",
+    source_role: str = "external",
+    trusted: bool = False,
+) -> RoomMessage:
+    msg = room.post(
+        author=author,
+        text=text,
+        kind=kind,
+        meta=meta,
+        source_type=source_type,
+        source_role=source_role,
+        trusted=trusted,
+    )
+    _audit("room.message", room_id=room.room_id, message=_room_message_payload(room, msg))
+    return msg
+
+
 def _transport_counter(store: Dict[str, int], room_id: str, delta: int) -> None:
     with _transport_lock:
         next_value = store.get(room_id, 0) + delta
@@ -494,7 +548,8 @@ def _transport_snapshot() -> Dict[str, Any]:
 def _deliver_pending(bridge: Bridge, msg: Any) -> None:
     text = msg.edited_text if msg.edited_text else msg.text
     bridge.backend.send(msg.to_pane, text, enter=True)
-    bridge.room.post(
+    _post_room_message(
+        bridge.room,
         author="bridge",
         text=f"[approved #{msg.id} -> {msg.to_pane}] {text}",
         kind="intervention",
@@ -511,12 +566,14 @@ def _maybe_rearm_auto_forward_guard(bridge: Bridge) -> None:
     if bridge.intervention_layer.list_pending():
         return
     bridge.rearm_auto_forward_guard()
+    _audit("bridge.guard_rearmed", bridge_id=bridge.bridge_id, room_id=bridge.room.room_id)
 
 
 def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
     backend = _make_backend(args)
     session = str(args.get("session", "tb2"))
     a, b = backend.init_session(session)
+    _audit("terminal.session_init", session=session, pane_a=a, pane_b=b)
     return {"session": session, "pane_a": a, "pane_b": b}
 
 
@@ -537,15 +594,19 @@ def handle_terminal_send(args: Dict[str, Any]) -> Dict[str, Any]:
     text = str(args["text"])
     enter = bool(args.get("enter", False))
     backend.send(target, text, enter=enter)
+    _audit("terminal.sent", target=target, text=text, enter=enter)
     return {"ok": True}
 
 
 def handle_room_create(args: Dict[str, Any]) -> Dict[str, Any]:
     room_id = args.get("room_id")
     try:
-        room = create_room(str(room_id) if room_id is not None else None)
+        requested_room_id = str(room_id) if room_id is not None else None
+        existing = bool(get_room(requested_room_id)) if requested_room_id else False
+        room = create_room(requested_room_id)
     except ValueError as exc:
         return {"error": str(exc)}
+    _audit("room.created", room_id=room.room_id, existing=existing)
     return {"room_id": room.room_id}
 
 
@@ -574,7 +635,8 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
     room = get_room(room_id)
     if not room:
         return {"error": "room not found"}
-    msg = room.post(
+    msg = _post_room_message(
+        room,
         author=str(args.get("author", "user")),
         text=str(args["text"]),
         kind=str(args.get("kind", "chat")),
@@ -607,6 +669,15 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
             except Exception as exc:
                 deliver_error = str(exc)
     result: Dict[str, Any] = {"id": msg.id}
+    _audit(
+        "operator.room_post",
+        room_id=room.room_id,
+        message_id=msg.id,
+        author=msg.author,
+        kind=msg.kind,
+        deliver=str(deliver).lower() if deliver else None,
+        deliver_error=deliver_error,
+    )
     if deliver_error:
         result["deliver_error"] = deliver_error
     return result
@@ -681,6 +752,16 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         _bridges[bridge_id] = bridge
     t = threading.Thread(target=bridge.worker, daemon=True, name=f"bridge-{bridge_id}")
     t.start()
+    _audit(
+        "bridge.started",
+        bridge_id=bridge_id,
+        room_id=room.room_id,
+        pane_a=pane_a,
+        pane_b=pane_b,
+        profile=profile_name,
+        auto_forward=bridge.auto_forward,
+        intervention=bridge.intervention_layer.active,
+    )
     return {"bridge_id": bridge_id, "room_id": room.room_id}
 
 
@@ -693,6 +774,7 @@ def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
         bridge = _bridges.pop(bridge_id, None)
     if bridge:
         bridge.stop.set()
+        _audit("bridge.stopped", bridge_id=bridge_id, room_id=bridge.room.room_id)
         return {"ok": True}
     return {"error": "bridge not found"}
 
@@ -743,6 +825,15 @@ def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as exc:
             errors.append({"id": msg.id, "error": str(exc)})
     _maybe_rearm_auto_forward_guard(bridge)
+    _audit(
+        "intervention.approved",
+        bridge_id=bridge_id,
+        room_id=bridge.room.room_id,
+        approved=len(approved),
+        delivered=delivered,
+        errors=errors,
+        remaining=len(bridge.intervention_layer.list_pending()),
+    )
 
     return {
         "bridge_id": bridge_id,
@@ -771,7 +862,8 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
         msg = bridge.intervention_layer.reject(msg_id)
         if not msg:
             return {"error": f"pending message {msg_id} not found"}
-        bridge.room.post(
+        _post_room_message(
+            bridge.room,
             author="bridge",
             text=f"[rejected #{msg.id}] {msg.text}",
             kind="intervention",
@@ -782,7 +874,8 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
         )
         rejected = 1
     if rejected and (mid == "all" or mid is None):
-        bridge.room.post(
+        _post_room_message(
+            bridge.room,
             author="bridge",
             text=f"[rejected {rejected} pending message(s)]",
             kind="intervention",
@@ -792,6 +885,13 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
             trusted=True,
         )
     _maybe_rearm_auto_forward_guard(bridge)
+    _audit(
+        "intervention.rejected",
+        bridge_id=bridge_id,
+        room_id=bridge.room.room_id,
+        rejected=rejected,
+        remaining=len(bridge.intervention_layer.list_pending()),
+    )
 
     return {
         "bridge_id": bridge_id,
@@ -823,7 +923,8 @@ def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
     for pane in panes:
         try:
             bridge.backend.send(pane, "\x03", enter=False)
-            bridge.room.post(
+            _post_room_message(
+                bridge.room,
                 author="bridge",
                 text=f"[interrupt -> {pane}] ^C",
                 kind="system",
@@ -835,6 +936,14 @@ def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
             sent.append(pane)
         except Exception as exc:
             errors.append({"pane": pane, "error": str(exc)})
+    _audit(
+        "operator.interrupt",
+        bridge_id=bridge_id,
+        room_id=bridge.room.room_id,
+        target=str(target),
+        sent=sent,
+        errors=errors,
+    )
 
     return {"bridge_id": bridge_id, "sent": sent, "errors": errors, "ok": len(errors) == 0}
 
@@ -846,6 +955,31 @@ def handle_list_profiles(_args: Dict[str, Any]) -> Dict[str, Any]:
 def handle_doctor(args: Dict[str, Any]) -> Dict[str, Any]:
     distro = args.get("distro")
     return doctor_report(distro=str(distro) if distro else None)
+
+
+def handle_audit_recent(args: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        limit = _parse_int(args.get("limit"), name="limit", default=50, minimum=1, maximum=200)
+        room_id = str(args.get("room_id", "") or "").strip() or None
+        if room_id is not None:
+            room_id = validate_room_id(room_id)
+        bridge_id = str(args.get("bridge_id", "") or "").strip() or None
+        if bridge_id is not None:
+            bridge_id = _validate_bridge_id(bridge_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    event = str(args.get("event", "") or "").strip() or None
+    events = _audit_trail.recent(
+        limit=limit,
+        room_id=room_id,
+        bridge_id=bridge_id,
+        event=event,
+    )
+    return {
+        "events": events,
+        "count": len(events),
+        "audit": _audit_trail.describe(),
+    }
 
 
 def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
@@ -865,6 +999,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         "bridges": bridge_ids,
         "bridge_details": bridge_details,
         "transports": transports,
+        "audit": _audit_trail.describe(),
     }
 
 
@@ -883,6 +1018,7 @@ HANDLERS = {
     "intervention_reject": handle_intervention_reject,
     "list_profiles": handle_list_profiles,
     "doctor": handle_doctor,
+    "audit_recent": handle_audit_recent,
     "status": handle_status,
 }
 
@@ -901,6 +1037,7 @@ TOOL_DESCRIPTIONS = {
     "intervention_reject": "Reject pending message(s).",
     "list_profiles": "List available parsing profiles.",
     "doctor": "Report local backend support and first-class CLI compatibility.",
+    "audit_recent": "Return recent persisted audit events for rooms, bridges, and operator actions.",
     "status": "Return active rooms and bridge ids.",
 }
 
@@ -980,6 +1117,16 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
     "status": {
         "type": "object",
         "properties": {},
+        "additionalProperties": False,
+    },
+    "audit_recent": {
+        "type": "object",
+        "properties": {
+            "room_id": {"type": "string"},
+            "bridge_id": {"type": "string"},
+            "event": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+        },
         "additionalProperties": False,
     },
 }

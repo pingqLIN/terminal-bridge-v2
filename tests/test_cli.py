@@ -99,6 +99,16 @@ class TestBuildParser:
         assert args.service_cmd == "logs"
         assert args.lines == 120
 
+    def test_service_audit_defaults(self):
+        p = build_parser()
+        args = p.parse_args(["service", "audit"])
+        assert args.cmd == "service"
+        assert args.service_cmd == "audit"
+        assert args.lines == 120
+        assert args.room_id == ""
+        assert args.bridge_id == ""
+        assert args.event == ""
+
     def test_profiles_verbose_flag(self):
         p = build_parser()
         args = p.parse_args(["profiles", "--verbose"])
@@ -373,6 +383,33 @@ class TestServiceCommand:
         assert "line-a" in out
         assert "line-b" in out
         mock_tail.assert_called_once_with(lines=2)
+
+    @patch("tb2.audit.tail_events")
+    def test_service_audit_dispatch(self, mock_tail, capsys):
+        p = build_parser()
+        args = p.parse_args([
+            "service",
+            "audit",
+            "--lines",
+            "2",
+            "--room-id",
+            "room-a",
+            "--bridge-id",
+            "bridge-a",
+            "--event",
+            "bridge.started",
+        ])
+        mock_tail.return_value = [{"event": "bridge.started", "bridge_id": "bridge-a"}]
+        result = args.fn(MagicMock(), args)
+        out = capsys.readouterr().out
+        assert result == 0
+        assert "bridge.started" in out
+        mock_tail.assert_called_once_with(
+            limit=2,
+            room_id="room-a",
+            bridge_id="bridge-a",
+            event="bridge.started",
+        )
 
     @patch("tb2.service.status_service")
     def test_service_status_dispatch(self, mock_status):

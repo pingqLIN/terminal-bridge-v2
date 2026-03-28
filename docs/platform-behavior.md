@@ -78,6 +78,15 @@ Priority:
 | `cmd.exe` | supported | lowest-friction native fallback on Windows |
 | Git Bash / MSYS shells on Windows | supported when explicit | not used as implicit default anymore |
 
+## Audit Trail Opt-In
+
+- `TB2_AUDIT=1` enables an append-only JSONL audit trail under the normal TB2 state root at `audit/events.jsonl`
+- `TB2_AUDIT_DIR=/path/to/dir` writes the same stream to an explicit directory instead
+- the audit stream is off by default so test runs and casual local sessions do not silently write durable operator records
+- current persisted scope is intentionally narrow: room messages, bridge lifecycle, intervention decisions, and direct operator actions such as `terminal_send` / interrupt
+- `status` now includes an `audit` snapshot so operators can see whether persistence is enabled and where entries are being written
+- operators can read recent entries through `tb2 service audit` locally or the MCP `audit_recent` tool remotely
+
 ## Service State Path Policy
 
 | Platform | Preferred state root | Compatibility rule |

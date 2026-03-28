@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import tb2.server as server_mod
+from tb2.audit import AuditTrail
 from tb2.room import create_room, get_room, list_rooms
 
 
@@ -249,12 +250,123 @@ class TestStatusHandler:
         assert "rooms" in result
         assert "bridges" in result
         assert "bridge_details" in result
+        assert "audit" in result
+        assert result["audit"]["enabled"] is False
         room_ids = [r["id"] for r in result["rooms"]]
         assert "status-test" in room_ids
         assert result["bridges"] == ["status-bridge"]
         assert result["bridge_details"][0]["room_id"] == "status-test"
         assert result["bridge_details"][0]["profile"] == "codex"
         server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
+
+
+class TestAuditTrail:
+    @patch.object(server_mod, "_make_backend")
+    def test_audit_trail_records_bridge_room_and_operator_events(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+        room_id = "audit-room-events"
+
+        server_mod.handle_room_create({"room_id": room_id})
+        server_mod.handle_bridge_start({
+            "pane_a": "audit:a",
+            "pane_b": "audit:b",
+            "room_id": room_id,
+            "bridge_id": "audit-bridge",
+        })
+        server_mod.handle_room_post({
+            "room_id": room_id,
+            "author": "human-operator",
+            "text": "ship it",
+            "deliver": "a",
+            "bridge_id": "audit-bridge",
+        })
+        server_mod.handle_terminal_interrupt({"bridge_id": "audit-bridge", "target": "a"})
+        server_mod.handle_bridge_stop({"bridge_id": "audit-bridge"})
+
+        events = [
+            json.loads(line)["event"]
+            for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert "room.created" in events
+        assert "bridge.started" in events
+        assert "room.message_posted" in events
+        assert "operator.room_post" in events
+        assert "operator.interrupt" in events
+        assert "bridge.stopped" in events
+
+    @patch.object(server_mod, "_make_backend")
+    def test_audit_trail_records_intervention_approval(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_room_create({"room_id": "audit-review"})
+        server_mod.handle_bridge_start({
+            "pane_a": "review:a",
+            "pane_b": "review:b",
+            "room_id": "audit-review",
+            "bridge_id": "audit-review-bridge",
+            "intervention": True,
+        })
+        bridge = server_mod._get_bridge("audit-review-bridge")
+        assert bridge is not None
+        msg = bridge.intervention_layer.submit(bridge.pane_a, bridge.pane_b, "echo ok")
+
+        result = server_mod.handle_intervention_approve({
+            "bridge_id": "audit-review-bridge",
+            "id": msg.id,
+        })
+
+        assert result["approved"] == 1
+        lines = [
+            json.loads(line)
+            for line in (tmp_path / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        approved = [item for item in lines if item["event"] == "intervention.approved"]
+        assert approved
+        assert approved[-1]["approved"] == 1
+        assert approved[-1]["remaining"] == 0
+
+    @patch.object(server_mod, "_make_backend")
+    def test_audit_recent_filters_persisted_events(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+        room_id = "audit-room-recent"
+
+        server_mod.handle_room_create({"room_id": room_id})
+        server_mod.handle_bridge_start({
+            "pane_a": "audit:a",
+            "pane_b": "audit:b",
+            "room_id": room_id,
+            "bridge_id": "audit-bridge",
+        })
+        server_mod.handle_room_post({
+            "room_id": room_id,
+            "author": "human-operator",
+            "text": "ship it",
+            "deliver": "a",
+            "bridge_id": "audit-bridge",
+        })
+
+        result = server_mod.handle_audit_recent({
+            "room_id": room_id,
+            "event": "operator.room_post",
+            "limit": 5,
+        })
+
+        assert result["count"] == 1
+        assert result["audit"]["enabled"] is True
+        assert result["events"][0]["event"] == "operator.room_post"
+        assert result["events"][0]["message_id"] == 1
 
 
 class TestBridgeHandlers:
@@ -882,6 +994,9 @@ class TestMCPProtocol:
         approve = tools["intervention_approve"]["inputSchema"]
         assert "id" in approve["properties"]
         assert "edited_text" in approve["properties"]
+        audit_recent = tools["audit_recent"]["inputSchema"]
+        assert audit_recent["properties"]["event"]["type"] == "string"
+        assert audit_recent["properties"]["limit"]["maximum"] == 200
 
     def test_tools_call_returns_mcp_content_shape(self):
         result = self._rpc({

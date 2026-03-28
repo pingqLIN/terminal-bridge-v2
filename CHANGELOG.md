@@ -10,12 +10,14 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Traditional Chinese review artifacts covering release objections, devil's-advocate findings, remediation planning, and a P1 external review brief.
 - Regression coverage for dead-process pruning in `process` / `pipe` session views, duplicate `bridge_start` room reuse, forbidden-origin transport requests, and incomplete MCP POST bodies.
 - Machine-readable room event source fields so consumers can distinguish client, terminal, bridge automation, intervention, and control events without parsing `author`.
+- Opt-in append-only JSONL audit trail support for room messages, bridge lifecycle, intervention actions, and direct operator control actions.
 
 ### Changed
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
 - Local HTTP, SSE, and WebSocket control surfaces now enforce localhost-only `Origin` checks and safer request parsing.
 - `tb2 doctor` now surfaces readiness, validation coverage, and next-step guidance alongside backend and client probes.
 - Bridge status now reports auto-forward guard state, and runaway auto-forward flows now switch into intervention until pending review is resolved.
+- `status` now reports audit-trail enablement and destination details so operators can verify persistence state from the active control surface.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.
