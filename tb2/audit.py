@@ -156,7 +156,8 @@ def record_event(
     bridge_id: Optional[str] = None,
     payload: Optional[Dict[str, Any]] = None,
 ) -> bool:
-    return _trail.write(
+    trail = AuditTrail.from_env()
+    return trail.write(
         event,
         {
             "room_id": room_id,

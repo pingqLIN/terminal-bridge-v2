@@ -18,6 +18,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - `tb2 doctor` now surfaces readiness, validation coverage, and next-step guidance alongside backend and client probes.
 - Bridge status now reports auto-forward guard state, and runaway auto-forward flows now switch into intervention until pending review is resolved.
 - `status` now reports audit-trail enablement and destination details so operators can verify persistence state from the active control surface.
+- GUI diagnostics now surface audit enablement and recent persisted entries for the active room / bridge scope.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.

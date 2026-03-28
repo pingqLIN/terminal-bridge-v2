@@ -100,6 +100,7 @@ TB2 特別適合這類情境：
 - runaway auto-forward 保護一旦觸發，TB2 會改把 delivery 切進 review，而不是繼續默默送出
 - 若要保留持久化紀錄，現在可用 `TB2_AUDIT=1` 或 `TB2_AUDIT_DIR` 啟用 JSONL audit trail，寫入 room、bridge、intervention 與 operator actions
 - operator 可透過 `tb2 service audit` 或 MCP `audit_recent` 直接查看已落盤的事件
+- GUI 的 Diagnostics 卡現在也會顯示 audit 是否啟用，以及目前 room / bridge 的最近持久化事件
 
 ## 快速安裝
 

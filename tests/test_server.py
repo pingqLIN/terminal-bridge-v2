@@ -1077,6 +1077,13 @@ class TestGuiRouting:
         assert "Mission Control" in html
         assert "bridge_candidates" in html
 
+    def test_gui_html_surfaces_audit_panel(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert 'id="refresh-audit"' in html
+        assert 'id="audit-box"' in html
+        assert 'id="audit-note"' in html
+        assert "audit_recent" in html
+
     def test_gui_html_refreshes_status_after_review_actions(self):
         html = server_mod.build_gui_html("/mcp")
         assert "async function refreshReviewState()" in html

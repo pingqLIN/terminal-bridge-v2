@@ -1100,6 +1100,14 @@ GUI_HTML_TEMPLATE = r"""
                 <button id="interrupt-guest" class="warn" type="button" data-i18n="actions.interruptGuest">Interrupt Guest</button>
                 <button id="interrupt-both" class="warn" type="button" data-i18n="actions.interruptBoth">Interrupt Both</button>
               </div>
+              <div style="margin-top: 14px;">
+                <label for="audit-box" data-i18n="fields.audit">audit trail</label>
+                <div class="actions" style="margin-top: 8px;">
+                  <button id="refresh-audit" class="ghost" type="button" data-i18n="actions.refreshAudit">Refresh Audit</button>
+                </div>
+                <div class="note" id="audit-note" data-i18n="cards.auditDisabled">Audit trail is off. Set TB2_AUDIT=1 or TB2_AUDIT_DIR and restart the server to persist events.</div>
+                <pre id="audit-box"></pre>
+              </div>
               <details>
                 <summary data-i18n="cards.captureSummary">Captured terminal state</summary>
                 <div class="row" style="margin-top: 12px;">
@@ -1198,6 +1206,7 @@ GUI_HTML_TEMPLATE = r"""
             pendingEdit: 'edited approval text',
             captureHost: 'Host capture',
             captureGuest: 'Guest capture',
+            audit: 'audit trail',
             sendText: 'human operator message',
             stream: 'live room stream',
             status: 'server status',
@@ -1227,6 +1236,7 @@ GUI_HTML_TEMPLATE = r"""
             rejectAll: 'Reject All',
             approveSelected: 'Approve Selected',
             rejectSelected: 'Reject Selected',
+            refreshAudit: 'Refresh Audit',
             captureHost: 'Capture Host',
             captureGuest: 'Capture Guest',
             interruptHost: 'Interrupt Host',
@@ -1245,6 +1255,7 @@ GUI_HTML_TEMPLATE = r"""
             diagnosticsTitle: 'Diagnostics',
             diagnosticsCopy: 'Capture and interrupt tools.',
             diagnosticsMeta: 'Tools',
+            diagnosticsMetaAudited: 'Audit on',
             captureSummary: 'Captured terminal state',
             launchNote: 'Init session, then start bridge.',
             liveTitle: 'Live Collaboration',
@@ -1252,6 +1263,11 @@ GUI_HTML_TEMPLATE = r"""
             liveEmpty: 'Start bridge to show room tools.',
             guardReasonFallback: 'unspecified',
             guardNote: 'Auto-forward guard active. New handoffs now route to review: {reason}',
+            auditDisabled: 'Audit trail is off. Set TB2_AUDIT=1 or TB2_AUDIT_DIR and restart the server to persist events.',
+            auditEnabled: 'Audit trail is writing to {file}.',
+            auditDestinationFallback: 'configured destination',
+            auditError: 'Audit trail error: {error}',
+            auditEmpty: 'No recent audit entries for the current scope.',
             statusTitle: 'Status and Activity',
             statusCopy: 'Status and log.',
             statusNote: 'Open to view details.',
@@ -1393,6 +1409,7 @@ GUI_HTML_TEMPLATE = r"""
             pendingEdit: '核准時改寫文字',
             captureHost: 'Host capture',
             captureGuest: 'Guest capture',
+            audit: 'audit trail',
             sendText: 'human operator 訊息',
             stream: 'live room stream',
             status: 'server status',
@@ -1422,6 +1439,7 @@ GUI_HTML_TEMPLATE = r"""
             rejectAll: '全部退回',
             approveSelected: '核准所選項目',
             rejectSelected: '退回所選項目',
+            refreshAudit: '更新 Audit',
             captureHost: '擷取 Host',
             captureGuest: '擷取 Guest',
             interruptHost: '中斷 Host',
@@ -1440,6 +1458,7 @@ GUI_HTML_TEMPLATE = r"""
             diagnosticsTitle: '診斷模式',
             diagnosticsCopy: '擷取與中斷工具。',
             diagnosticsMeta: '工具',
+            diagnosticsMetaAudited: 'Audit 已啟用',
             captureSummary: '擷取的 terminal 狀態',
             launchNote: '先初始化 Session，再啟動 Bridge。',
             liveTitle: '即時協作',
@@ -1447,6 +1466,11 @@ GUI_HTML_TEMPLATE = r"""
             liveEmpty: '啟動 Bridge 後顯示 room 工具。',
             guardReasonFallback: '未提供原因',
             guardNote: 'Auto-forward guard 已啟用。新的 handoff 會改送 review：{reason}',
+            auditDisabled: 'Audit trail 目前未啟用。請設定 TB2_AUDIT=1 或 TB2_AUDIT_DIR，並重新啟動 server 才會持久化事件。',
+            auditEnabled: 'Audit trail 正在寫入 {file}。',
+            auditDestinationFallback: '已設定的目的地',
+            auditError: 'Audit trail 錯誤：{error}',
+            auditEmpty: '目前 scope 沒有最近的 audit entries。',
             statusTitle: '狀態與活動',
             statusCopy: '',
             statusNote: '展開查看詳細資訊。',
@@ -1598,6 +1622,8 @@ GUI_HTML_TEMPLATE = r"""
         sse: null,
         ws: null,
         guard: null,
+        audit: null,
+        auditEvents: [],
         seen: new Set()
       };
 
@@ -1679,6 +1705,7 @@ GUI_HTML_TEMPLATE = r"""
         renderPresetCards();
         setLanguageButtons();
         setLayoutButtons();
+        renderAudit();
       }
 
       function applyLocale(locale) {
@@ -1820,7 +1847,9 @@ GUI_HTML_TEMPLATE = r"""
         $('status-summary-meta').textContent = guardBlocked
           ? t('cards.statusMetaGuarded')
           : (hasBridge || hasRoom ? t('cards.statusMetaReady') : t('cards.statusMetaIdle'));
-        $('diagnostics-summary-meta').textContent = t('cards.diagnosticsMeta');
+        $('diagnostics-summary-meta').textContent = state.audit && state.audit.enabled
+          ? t('cards.diagnosticsMetaAudited')
+          : t('cards.diagnosticsMeta');
         if (guardBlocked) {
           $('guard-note').textContent = format('cards.guardNote', {
             reason: state.guard.guard_reason || t('cards.guardReasonFallback')
@@ -1865,6 +1894,32 @@ GUI_HTML_TEMPLATE = r"""
         const trust = trusted ? ' [trusted]' : '';
         box.textContent += '[' + (event.kind || 'chat') + '] ' + label + trust + ' | ' + (event.text || '') + '\n';
         box.scrollTop = box.scrollHeight;
+      }
+
+      function formatAuditEntry(item) {
+        const ts = item && item.ts ? new Date(Number(item.ts) * 1000).toLocaleTimeString() : '?';
+        const event = String((item && item.event) || 'event');
+        const bridgeId = String((item && item.bridge_id) || '').trim();
+        const roomId = String((item && item.room_id) || '').trim();
+        const scope = [bridgeId, roomId].filter(Boolean).join(' / ');
+        return '[' + ts + '] ' + event + (scope ? ' | ' + scope : '') + '\n' + JSON.stringify(item, null, 2);
+      }
+
+      function renderAudit() {
+        const audit = state.audit || {};
+        const enabled = Boolean(audit.enabled);
+        const destination = String(audit.file || audit.root || '').trim() || t('cards.auditDestinationFallback');
+        let note = enabled
+          ? format('cards.auditEnabled', { file: destination })
+          : t('cards.auditDisabled');
+        if (audit.last_error) {
+          note += ' ' + format('cards.auditError', { error: audit.last_error });
+        }
+        $('audit-note').textContent = note;
+        $('refresh-audit').disabled = !enabled;
+        $('audit-box').textContent = state.auditEvents.length
+          ? state.auditEvents.map(formatAuditEntry).join('\n\n')
+          : t('cards.auditEmpty');
       }
 
       function stopTransport() {
@@ -1997,7 +2052,18 @@ GUI_HTML_TEMPLATE = r"""
         const inferred = detail ? (detail.bridge_id || '') : '';
         if (!$('bridge-id').value.trim() && inferred) $('bridge-id').value = inferred;
         state.guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
+        state.audit = res.audit || null;
         $('status-box').textContent = JSON.stringify(res, null, 2);
+        renderAudit();
+        syncMetrics();
+        return res;
+      }
+
+      async function refreshAudit() {
+        const res = await tool('audit_recent', Object.assign({ limit: 12 }, bridgeArgs()));
+        state.audit = res.audit || state.audit;
+        state.auditEvents = Array.isArray(res.events) ? res.events : [];
+        renderAudit();
         syncMetrics();
         return res;
       }
@@ -2140,6 +2206,7 @@ GUI_HTML_TEMPLATE = r"""
         $('stop-bridge').onclick = () => run(stopBridge);
         $('refresh-status').onclick = () => run(refreshStatus);
         $('refresh-pending').onclick = () => run(refreshPending);
+        $('refresh-audit').onclick = () => run(refreshAudit);
         $('send-host').onclick = () => run(() => sendRoom('a'));
         $('send-guest').onclick = () => run(() => sendRoom('b'));
         $('send-room').onclick = () => run(() => sendRoom($('deliver').value || ''));
@@ -2188,6 +2255,7 @@ GUI_HTML_TEMPLATE = r"""
         });
         await run(refreshPending);
         await run(refreshStatus);
+        await run(refreshAudit);
       }
 
       boot();

@@ -98,6 +98,7 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - runaway auto-forward protection switches delivery into review instead of silently continuing
 - opt-in JSONL audit trail can persist room, bridge, intervention, and operator actions via `TB2_AUDIT=1` or `TB2_AUDIT_DIR`
 - operators can inspect persisted entries through `tb2 service audit` or the MCP `audit_recent` tool
+- the GUI Diagnostics card now shows audit enablement plus recent persisted events for the active room or bridge
 
 ## Quick Install
 

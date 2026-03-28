@@ -86,6 +86,7 @@ TB2 現在依 capability 選預設。
 - 目前持久化範圍刻意收斂，只先涵蓋 room messages、bridge lifecycle、intervention decisions，以及 `terminal_send` / interrupt 這類直接 operator actions
 - `status` 現在會附帶 `audit` 狀態，方便 operator 確認是否啟用持久化與實際寫入位置
 - operator 可在本機用 `tb2 service audit`，或透過 MCP `audit_recent` 讀最近的持久化事件
+- GUI 的 Diagnostics 卡現在也會同步顯示這個狀態，並帶出目前 room / bridge scope 的最近持久化事件
 
 ## Service State Path 策略
 
