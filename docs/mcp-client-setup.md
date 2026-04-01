@@ -142,7 +142,7 @@ TB2 now supports a lighter control path for intervention tools:
 The `status` tool now also returns `bridge_details` so another AI client can map `bridge_id`, `room_id`, panes, profile, and pending count without guessing.
 It also returns an `audit` snapshot so the client can decide whether persisted incident data is available before it asks for `audit_recent`.
 That `audit` snapshot now also exposes the text-redaction mode plus machine-readable storage flags so clients can distinguish durable metadata from live room content without inferring it from prose.
-It now also returns a machine-readable `runtime` contract so the client can see that live room / bridge / intervention state is memory-only and is lost across service restart.
+It now also returns a machine-readable `runtime` contract so the client can see that live room / bridge / intervention state is memory-only and is lost across service restart. Treat `launch_mode`, `snapshot_schema_version`, `audit_policy_persistence`, and `continuity.mode` as the stable fields for distinguishing direct local runs from service-managed fresh starts or restart-after-loss flows. When TB2 is running under the managed service path, `audit_policy_persistence=service_state` means a restart carries forward audit policy inputs, but not live collaboration state.
 
 ## Human Operator Tool Map
 

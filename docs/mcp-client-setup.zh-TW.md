@@ -142,7 +142,7 @@ TB2 現在對 intervention 類工具支援更輕量的解析路徑：
 `status` 現在也會回傳 `bridge_details`，讓其他 AI client 可以直接看到 `bridge_id`、`room_id`、pane、profile 與 pending count，而不是自己猜。
 它同時也會回傳 `audit` snapshot，讓 client 在呼叫 `audit_recent` 前先判斷目前是否真的有持久化事件可查。
 這個 `audit` snapshot 現在也會帶出 text redaction mode 與 machine-readable storage flags，讓 client 不必靠文件敘述推論 durable metadata 與 live room content 的差別。
-它現在也會回傳 machine-readable `runtime` contract，讓 client 明確知道 live room / bridge / intervention state 目前仍是記憶體態，service restart 後會遺失。
+它現在也會回傳 machine-readable `runtime` contract，讓 client 明確知道 live room / bridge / intervention state 目前仍是記憶體態，service restart 後會遺失。請把 `launch_mode`、`snapshot_schema_version`、`audit_policy_persistence`、`continuity.mode` 視為正式欄位，用來區分 direct local run、service-managed fresh start，或 restart 後 state lost 的情境。當 TB2 走 managed service path 時，`audit_policy_persistence=service_state` 代表 restart 會延續 audit policy 輸入，但不會恢復 live collaboration state。
 
 ## Human Operator 工具地圖
 

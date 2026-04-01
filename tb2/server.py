@@ -28,6 +28,7 @@ from .profile import get_profile, list_profiles, strip_ansi
 from .support import doctor_report
 from .gui import build_gui_html
 from .room import Room, RoomMessage, RoomSubscription, cleanup_stale, create_room, delete_room, get_room, list_rooms, validate_room_id
+from .service import runtime_contract
 
 
 # ---------------------------------------------------------------------------
@@ -1052,11 +1053,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         "bridge_details": bridge_details,
         "transports": transports,
         "audit": _audit_trail.describe(),
-        "runtime": {
-            "state_persistence": "memory_only",
-            "restart_behavior": "state_lost",
-            "recovery_source": "audit_history_only",
-        },
+        "runtime": runtime_contract(),
     }
 
 

@@ -372,6 +372,22 @@ class TestServiceCommand:
         assert result == 0
         mock_restart.assert_called_once_with(host="127.0.0.1", port=3200, python_exe="")
 
+    @patch("tb2.service.restart_service")
+    def test_service_restart_dispatch_preserves_previous_binding_when_omitted(self, mock_restart):
+        p = build_parser()
+        args = p.parse_args(["service", "restart"])
+        mock_restart.return_value.to_dict.return_value = {
+            "running": True,
+            "pid": 7,
+            "host": "127.0.0.1",
+            "port": 3189,
+            "state_file": "/tmp/state.json",
+            "log_file": "/tmp/server.log",
+        }
+        result = args.fn(MagicMock(), args)
+        assert result == 0
+        mock_restart.assert_called_once_with(host=None, port=None, python_exe="")
+
     @patch("tb2.service.tail_log")
     def test_service_logs_dispatch(self, mock_tail, capsys):
         p = build_parser()

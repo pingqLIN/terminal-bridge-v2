@@ -324,12 +324,49 @@ class TestStatusHandler:
         assert result["runtime"]["state_persistence"] == "memory_only"
         assert result["runtime"]["restart_behavior"] == "state_lost"
         assert result["runtime"]["recovery_source"] == "audit_history_only"
+        assert result["runtime"]["launch_mode"] == "direct"
+        assert result["runtime"]["snapshot_schema_version"] is None
+        assert result["runtime"]["audit_policy_persistence"] == "process_env_only"
+        assert result["runtime"]["continuity"]["mode"] == "process_local_only"
+        assert result["runtime"]["continuity"]["runtime_restored"] is False
         room_ids = [r["id"] for r in result["rooms"]]
         assert "status-test" in room_ids
         assert result["bridges"] == ["status-bridge"]
         assert result["bridge_details"][0]["room_id"] == "status-test"
         assert result["bridge_details"][0]["profile"] == "codex"
         server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
+
+    def test_status_surfaces_service_runtime_metadata(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+        state = tmp_path / "server.state.json"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "runtime": {
+                        "launch_mode": "service",
+                        "audit_policy_persistence": "service_state",
+                        "continuity": {
+                            "mode": "restart_state_lost",
+                            "runtime_restored": False,
+                            "previous_pid": 2468,
+                            "previous_started_at": 12.5,
+                        },
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        result = server_mod.handle_status({})
+
+        assert result["runtime"]["launch_mode"] == "service"
+        assert result["runtime"]["snapshot_schema_version"] == 1
+        assert result["runtime"]["audit_policy_persistence"] == "service_state"
+        assert result["runtime"]["continuity"]["mode"] == "restart_state_lost"
+        assert result["runtime"]["continuity"]["previous_pid"] == 2468
+        assert result["runtime"]["continuity"]["previous_started_at"] == 12.5
 
     def test_status_reports_blocked_full_text_opt_in(self, tmp_path, monkeypatch):
         trail = AuditTrail(tmp_path, text_mode="full")

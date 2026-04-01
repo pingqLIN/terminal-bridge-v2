@@ -462,8 +462,8 @@ def build_parser() -> argparse.ArgumentParser:
     s_status.set_defaults(fn=cmd_service)
 
     s_restart = ss.add_parser("restart", help="restart detached tb2 server")
-    s_restart.add_argument("--host", default="127.0.0.1")
-    s_restart.add_argument("--port", type=int, default=3189)
+    s_restart.add_argument("--host", default=None)
+    s_restart.add_argument("--port", type=int, default=None)
     s_restart.add_argument("--python", default="", help="python executable to launch")
     s_restart.set_defaults(fn=cmd_service)
 

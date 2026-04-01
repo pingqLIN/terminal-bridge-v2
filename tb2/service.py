@@ -26,6 +26,24 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
+_STATE_SCHEMA_VERSION = 1
+_RUNTIME_PERSISTENCE = "memory_only"
+_RUNTIME_RESTART_BEHAVIOR = "state_lost"
+_RUNTIME_RECOVERY_SOURCE = "audit_history_only"
+_DIRECT_LAUNCH_MODE = "direct"
+_SERVICE_LAUNCH_MODE = "service"
+_CONTINUITY_DIRECT = "process_local_only"
+_CONTINUITY_FRESH = "fresh_start"
+_CONTINUITY_RESTART_LOST = "restart_state_lost"
+_AUDIT_ENV_KEYS = (
+    "TB2_AUDIT",
+    "TB2_AUDIT_ALLOW_FULL_TEXT",
+    "TB2_AUDIT_DIR",
+    "TB2_AUDIT_MAX_BYTES",
+    "TB2_AUDIT_MAX_FILES",
+    "TB2_AUDIT_TEXT_MODE",
+)
+
 
 @dataclass(frozen=True)
 class ServicePaths:
@@ -73,11 +91,14 @@ def start_service(
     port: int = 3189,
     python_exe: Optional[str] = None,
     force: bool = False,
+    _previous_state: Optional[Dict[str, object]] = None,
+    _previous_runtime_active: bool = False,
 ) -> ServiceStatus:
     """Start `python -m tb2 server` as a detached background process."""
     paths = ServicePaths.discover()
     _ensure_runtime_dir(paths.root)
 
+    previous_state = _load_state(paths.state_file) if _previous_state is None else _previous_state
     current = status_service(paths=paths)
     if current.running and not force:
         raise RuntimeError(f"tb2 service is already running (pid={current.pid})")
@@ -96,16 +117,19 @@ def start_service(
         "--port",
         str(port),
     ]
-    proc = _spawn_detached(cmd=cmd, log_file=paths.log_file)
+    env_overrides = _service_env_overrides(previous_state=previous_state)
+    proc = _spawn_detached(cmd=cmd, log_file=paths.log_file, env=_launch_env(env_overrides))
     _save_state(
         paths.state_file,
-        {
-            "pid": proc.pid,
-            "host": host,
-            "port": int(port),
-            "started_at": time.time(),
-            "cmd": cmd,
-        },
+        _build_state(
+            pid=proc.pid,
+            host=host,
+            port=int(port),
+            cmd=cmd,
+            env_overrides=env_overrides,
+            previous_state=previous_state,
+            previous_runtime_active=_previous_runtime_active,
+        ),
     )
 
     time.sleep(0.25)
@@ -144,13 +168,25 @@ def stop_service(*, timeout: float = 8.0) -> ServiceStatus:
 
 def restart_service(
     *,
-    host: str = "127.0.0.1",
-    port: int = 3189,
+    host: Optional[str] = None,
+    port: Optional[int] = None,
     python_exe: Optional[str] = None,
 ) -> ServiceStatus:
     """Restart the background tb2 service."""
+    paths = ServicePaths.discover()
+    previous_state = _load_state(paths.state_file)
+    current = status_service(paths=paths)
+    previous_host = str(previous_state.get("host", current.host))
+    previous_port = _as_port(previous_state.get("port"), default=current.port)
     stop_service()
-    return start_service(host=host, port=port, python_exe=python_exe, force=True)
+    return start_service(
+        host=host or previous_host,
+        port=previous_port if port is None else int(port),
+        python_exe=python_exe,
+        force=True,
+        _previous_state=previous_state,
+        _previous_runtime_active=current.running,
+    )
 
 
 def status_service(*, paths: Optional[ServicePaths] = None) -> ServiceStatus:
@@ -181,6 +217,44 @@ def tail_log(*, lines: int = 120) -> List[str]:
     cap = max(1, int(lines))
     with paths.log_file.open("r", encoding="utf-8", errors="replace") as handle:
         return [line.rstrip("\n") for line in deque(handle, maxlen=cap)]
+
+
+def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, object]:
+    p = paths or ServicePaths.discover()
+    state = _load_state(p.state_file)
+    runtime = state.get("runtime")
+    if not isinstance(runtime, dict):
+        return {
+            "state_persistence": _RUNTIME_PERSISTENCE,
+            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR,
+            "recovery_source": _RUNTIME_RECOVERY_SOURCE,
+            "launch_mode": _DIRECT_LAUNCH_MODE,
+            "snapshot_schema_version": None,
+            "audit_policy_persistence": "process_env_only",
+            "continuity": {
+                "mode": _CONTINUITY_DIRECT,
+                "runtime_restored": False,
+                "previous_pid": None,
+                "previous_started_at": None,
+            },
+        }
+    continuity = runtime.get("continuity")
+    continuity_dict = continuity if isinstance(continuity, dict) else {}
+    launch_mode = str(runtime.get("launch_mode", _SERVICE_LAUNCH_MODE))
+    return {
+        "state_persistence": _RUNTIME_PERSISTENCE,
+        "restart_behavior": _RUNTIME_RESTART_BEHAVIOR,
+        "recovery_source": _RUNTIME_RECOVERY_SOURCE,
+        "launch_mode": launch_mode,
+        "snapshot_schema_version": _as_int(state.get("schema_version")),
+        "audit_policy_persistence": str(runtime.get("audit_policy_persistence", "service_state")),
+        "continuity": {
+            "mode": str(continuity_dict.get("mode", _CONTINUITY_FRESH)),
+            "runtime_restored": bool(continuity_dict.get("runtime_restored", False)),
+            "previous_pid": _as_pid(continuity_dict.get("previous_pid")),
+            "previous_started_at": _as_float(continuity_dict.get("previous_started_at")),
+        },
+    }
 
 
 def _state_root() -> Path:
@@ -228,7 +302,7 @@ def _ensure_runtime_dir(root: Path) -> None:
         os.chmod(root, 0o700)
 
 
-def _spawn_detached(*, cmd: List[str], log_file: Path) -> subprocess.Popen:
+def _spawn_detached(*, cmd: List[str], log_file: Path, env: Optional[Dict[str, str]] = None) -> subprocess.Popen:
     _ensure_runtime_dir(log_file.parent)
     with log_file.open("a", encoding="utf-8", buffering=1) as log:
         if os.name == "nt":
@@ -242,6 +316,7 @@ def _spawn_detached(*, cmd: List[str], log_file: Path) -> subprocess.Popen:
                 stderr=subprocess.STDOUT,
                 close_fds=True,
                 creationflags=flags,
+                env=env,
             )
 
         return subprocess.Popen(
@@ -251,6 +326,7 @@ def _spawn_detached(*, cmd: List[str], log_file: Path) -> subprocess.Popen:
             stderr=subprocess.STDOUT,
             close_fds=True,
             start_new_session=True,
+            env=env,
         )
 
 
@@ -268,6 +344,20 @@ def _as_port(raw: object, *, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return value if value > 0 else default
+
+
+def _as_int(raw: object) -> Optional[int]:
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_float(raw: object) -> Optional[float]:
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _pid_alive(pid: int) -> bool:
@@ -338,6 +428,68 @@ def _load_state(path: Path) -> Dict[str, object]:
     if isinstance(data, dict):
         return data
     return {}
+
+
+def _build_state(
+    *,
+    pid: int,
+    host: str,
+    port: int,
+    cmd: List[str],
+    env_overrides: Dict[str, str],
+    previous_state: Dict[str, object],
+    previous_runtime_active: bool,
+) -> Dict[str, object]:
+    previous_pid = _as_pid(previous_state.get("pid")) if previous_runtime_active else None
+    previous_started_at = _as_float(previous_state.get("started_at")) if previous_runtime_active else None
+    continuity_mode = _CONTINUITY_RESTART_LOST if previous_runtime_active else _CONTINUITY_FRESH
+    return {
+        "schema_version": _STATE_SCHEMA_VERSION,
+        "pid": pid,
+        "host": host,
+        "port": int(port),
+        "started_at": time.time(),
+        "cmd": cmd,
+        "config": {
+            "env_overrides": env_overrides,
+        },
+        "runtime": {
+            "launch_mode": _SERVICE_LAUNCH_MODE,
+            "state_persistence": _RUNTIME_PERSISTENCE,
+            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR,
+            "recovery_source": _RUNTIME_RECOVERY_SOURCE,
+            "audit_policy_persistence": "service_state",
+            "continuity": {
+                "mode": continuity_mode,
+                "runtime_restored": False,
+                "previous_pid": previous_pid,
+                "previous_started_at": previous_started_at,
+            },
+        },
+    }
+
+
+def _service_env_overrides(*, previous_state: Dict[str, object]) -> Dict[str, str]:
+    config = previous_state.get("config")
+    config_dict = config if isinstance(config, dict) else {}
+    raw_overrides = config_dict.get("env_overrides")
+    previous_overrides = raw_overrides if isinstance(raw_overrides, dict) else {}
+    overrides: Dict[str, str] = {}
+    for key in _AUDIT_ENV_KEYS:
+        current = os.environ.get(key)
+        if current is not None:
+            overrides[key] = current
+            continue
+        previous = previous_overrides.get(key)
+        if isinstance(previous, str):
+            overrides[key] = previous
+    return overrides
+
+
+def _launch_env(overrides: Dict[str, str]) -> Dict[str, str]:
+    env = dict(os.environ)
+    env.update(overrides)
+    return env
 
 
 def _save_state(path: Path, data: Dict[str, object]) -> None:

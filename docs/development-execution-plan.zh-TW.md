@@ -152,7 +152,7 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 
 - `tests/test_service.py` 與 `tests/test_remote_control.py` 鎖定 restart contract
 - 文件清楚說明 restart 後哪些狀態保留、哪些不保留
-- operator 可以從 `status` 與 audit 明確判斷目前是 fresh start 還是 restored state
+- operator 可以從 `status` 與 audit 明確判斷目前是 fresh/direct start，還是 restart 後 state lost
 
 ## Batch C：Audit Privacy Boundary
 

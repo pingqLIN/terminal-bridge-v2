@@ -105,9 +105,12 @@ TB2 現在依 capability 選預設。
 
 ## Restart-State 契約
 
-- 背景 service 目前只會持久化 process-manager metadata，例如 PID、host、port、log path 與 audit destination
+- 背景 service state 現在採用 versioned snapshot contract，讓 TB2 能持久化 launch metadata，但不暗示會做 runtime restore
+- service 管理下的 snapshot 會保留 process-manager metadata，以及 audit enablement、destination、retention、text redaction mode 這類 audit policy 輸入
 - live room、bridge、pending intervention state 仍只存在於正在執行的 server 記憶體中
 - 執行 `tb2 service stop` 或 `tb2 service restart` 後，應直接假設 live collaboration state 會依設計遺失
+- `status.runtime` 現在會帶出 `launch_mode`、`snapshot_schema_version`、`audit_policy_persistence`，以及巢狀的 `continuity` 記錄，方便 client 區分 direct launch、service-managed fresh start，或 restart 後 state lost 的情境
+- 目前 `continuity.mode` 的正式值為 `process_local_only`、`fresh_start`、`restart_state_lost`
 - 若 audit 已啟用，歷史事件可以跨重啟保留，但它是 historical ledger，不是 runtime restore path
 
 ## Transport 備註

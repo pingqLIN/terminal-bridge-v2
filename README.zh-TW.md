@@ -105,7 +105,8 @@ TB2 特別適合這類情境：
 - GUI audit 視窗現在也支援 event filter 與最近筆數限制，方便 incident triage
 - 持久化 audit entry 現在預設採 `mask` mode 來遮罩文字欄位；可用 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 指定想要的策略，但在 service / config-driven flow 裡若要讓 `full` 真正生效，還必須先明確確認 raw-text storage
 - audit client 應把 `status.audit.redaction.requested_mode`、實際生效的 `mode`、`raw_text_opt_in_acknowledged` 與 `raw_text_opt_in_blocked` 視為持久化文字策略的 machine-readable policy boundary
-- 目前 live runtime state 仍是記憶體態，因此 `tb2 service stop` / `restart` 只會保留 audit history，不會保留 active rooms、bridges、pending interventions
+- 目前 live runtime state 仍是記憶體態，因此 `tb2 service stop` / `restart` 只會保留 audit history 與 managed-service audit policy 輸入，不會保留 active rooms、bridges、pending interventions
+- `status.runtime` 現在也會透過 `launch_mode`、`snapshot_schema_version`、`continuity` metadata 區分 direct local run、service-managed fresh start，或 restart 後 state lost 的情境
 
 ## 快速安裝
 

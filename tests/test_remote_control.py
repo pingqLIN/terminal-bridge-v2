@@ -217,6 +217,11 @@ class TestRemoteControlMcp:
         assert status["runtime"]["state_persistence"] == "memory_only"
         assert status["runtime"]["restart_behavior"] == "state_lost"
         assert status["runtime"]["recovery_source"] == "audit_history_only"
+        assert status["runtime"]["launch_mode"] == "direct"
+        assert status["runtime"]["snapshot_schema_version"] is None
+        assert status["runtime"]["audit_policy_persistence"] == "process_env_only"
+        assert status["runtime"]["continuity"]["mode"] == "process_local_only"
+        assert status["runtime"]["continuity"]["runtime_restored"] is False
 
     def test_status_reports_full_text_audit_contract(self, mcp_server, tmp_path, monkeypatch):
         monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path, text_mode="full", allow_full_text=True))

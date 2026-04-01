@@ -123,8 +123,9 @@ python -m tb2 service status
 
 目前契約：
 
-- restart 會保留 service metadata 與 audit files
+- restart 會保留 service-manager metadata、已持久化的 audit policy overrides，以及既有 audit files
 - restart 不會保留 active rooms、bridges、pending interventions
+- `status.runtime` 會透過 `launch_mode` 與 `continuity.mode` 區分 direct run、service-managed fresh start、restart 後 state lost
 - restart 後 operator 應重新建立 session 與 bridge
 
 ## 5. 標準排錯流程

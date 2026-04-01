@@ -105,9 +105,12 @@ Priority:
 
 ## Restart-State Contract
 
-- detached service state only persists process-manager metadata such as PID, host, port, log path, and audit destination
+- detached service state now uses a versioned snapshot contract so TB2 can persist launch metadata without implying runtime restore
+- service-managed snapshots persist process-manager metadata plus selected audit-policy inputs such as audit enablement, destination, retention, and text-redaction mode
 - live room, bridge, and pending intervention state remains memory-only inside the running server
 - after `tb2 service stop` or `tb2 service restart`, operators should assume live collaboration state is lost by design
+- `status.runtime` now exposes `launch_mode`, `snapshot_schema_version`, `audit_policy_persistence`, and a nested `continuity` record so clients can distinguish direct launches from service-managed fresh starts or restart-after-loss flows
+- current `continuity.mode` values are `process_local_only`, `fresh_start`, and `restart_state_lost`
 - audit history can survive restart when enabled, but it is a historical ledger, not a runtime restore path
 
 ## Transport Notes
