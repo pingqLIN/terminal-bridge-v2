@@ -135,6 +135,8 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       body[data-home="preset-only"] .hero-header,
+      body[data-home="preset-only"] .workspace-nav,
+      body[data-home="preset-only"] .workspace-panels,
       body[data-home="preset-only"] .layout,
       body[data-home="preset-only"] .layout-secondary {
         display: none;
@@ -367,6 +369,124 @@ GUI_HTML_TEMPLATE = r"""
         align-items: start;
       }
 
+      .workspace-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .workspace-tab {
+        display: grid;
+        gap: 2px;
+        align-content: center;
+        justify-items: start;
+        appearance: none;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+        color: var(--muted);
+        border-radius: 10px;
+        min-height: 40px;
+        min-width: 136px;
+        padding: 8px 14px 9px;
+        font: inherit;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        cursor: pointer;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
+      }
+
+      .workspace-tab.active {
+        border-color: var(--accent);
+        background: rgba(47, 75, 92, 0.1);
+        color: var(--ink);
+        box-shadow: 0 0 0 1px rgba(47, 75, 92, 0.08), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.52);
+      }
+
+      .workspace-tab-label {
+        color: var(--ink);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      .workspace-tab-meta {
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: none;
+      }
+
+      .workspace-tab.active .workspace-tab-meta {
+        color: var(--accent);
+      }
+
+      .workspace-strip {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .workspace-chip {
+        display: grid;
+        gap: 4px;
+        min-height: 72px;
+        padding: 11px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.78);
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
+      }
+
+      .workspace-chip strong {
+        color: var(--muted);
+        font-size: 0.67rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .workspace-chip span {
+        color: var(--ink);
+        font-size: 0.84rem;
+        line-height: 1.28;
+      }
+
+      .workspace-chip small {
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.35;
+      }
+
+      .workspace-chip.is-attention {
+        border-color: rgba(108, 77, 72, 0.36);
+        background: linear-gradient(180deg, rgba(255, 249, 246, 0.96), rgba(247, 240, 236, 0.94));
+      }
+
+      .workspace-chip.is-active {
+        border-color: rgba(47, 75, 92, 0.22);
+      }
+
+      .workspace-chip.is-muted {
+        opacity: 0.6;
+      }
+
+      .workspace-panels {
+        display: grid;
+        gap: 12px;
+      }
+
+      .workspace-panel {
+        display: none;
+        gap: 12px;
+      }
+
+      .workspace-panel.is-active {
+        display: grid;
+      }
+
       .layout-secondary {
         display: grid;
         gap: 12px;
@@ -415,6 +535,10 @@ GUI_HTML_TEMPLATE = r"""
 
       .card--current {
         box-shadow: 0 0 0 1px rgba(47, 75, 92, 0.12), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      }
+
+      .focus-target {
+        box-shadow: 0 0 0 2px rgba(47, 75, 92, 0.22), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.42);
       }
 
       .stage-note {
@@ -748,6 +872,740 @@ GUI_HTML_TEMPLATE = r"""
         background: rgba(250, 248, 244, 0.96);
       }
 
+      .card--relation {
+        --card-accent: var(--accent-strong);
+      }
+
+      .relation-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+        gap: 16px;
+        align-items: start;
+      }
+
+      .relation-stage,
+      .relation-sidebar {
+        display: grid;
+        gap: 12px;
+      }
+
+      .relation-stage-head {
+        display: grid;
+        gap: 10px;
+      }
+
+      .relation-stage-note {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px 12px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px dashed rgba(217, 204, 184, 0.9);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.4;
+      }
+
+      .relation-stage-note strong {
+        color: var(--ink);
+        font-size: 0.75rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .relation-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .relation-badges .badge {
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .relation-badges .badge.is-active {
+        border-color: rgba(47, 75, 92, 0.26);
+      }
+
+      .relation-badges .badge.is-standby {
+        border-style: dashed;
+        opacity: 0.86;
+      }
+
+      .relation-badges .badge.is-muted {
+        opacity: 0.56;
+      }
+
+      .relation-badges .badge.is-attention {
+        border-color: rgba(108, 77, 72, 0.36);
+      }
+
+      .relation-badges .badge.is-selected {
+        box-shadow: 0 0 0 2px rgba(47, 75, 92, 0.16);
+      }
+
+      .relation-scroller {
+        overflow-x: auto;
+        padding-bottom: 2px;
+      }
+
+      .relation-diagram {
+        position: relative;
+        min-width: 930px;
+        min-height: 456px;
+        border-radius: 18px;
+        border: 1px solid color-mix(in oklab, var(--line) 74%, white);
+        background:
+          radial-gradient(circle at top left, rgba(47, 75, 92, 0.12), transparent 26%),
+          radial-gradient(circle at bottom right, rgba(116, 100, 86, 0.12), transparent 22%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 241, 233, 0.98));
+        overflow: hidden;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62), var(--shadow-soft);
+      }
+
+      .relation-diagram::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(217, 204, 184, 0.14) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(217, 204, 184, 0.14) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 100%);
+      }
+
+      .relation-lanes {
+        position: absolute;
+        inset: 12px;
+        pointer-events: none;
+      }
+
+      .relation-lane {
+        position: absolute;
+        top: 10px;
+        bottom: 10px;
+        border-radius: 18px;
+        border: 1px solid rgba(217, 204, 184, 0.46);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.14));
+      }
+
+      .relation-lane span {
+        position: absolute;
+        top: 14px;
+        left: 18px;
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(217, 204, 184, 0.72);
+        background: rgba(255, 255, 255, 0.84);
+        color: var(--muted);
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .relation-lane--operator {
+        left: 14px;
+        width: 26%;
+      }
+
+      .relation-lane--control {
+        left: 37%;
+        width: 26%;
+      }
+
+      .relation-lane--execution {
+        right: 14px;
+        width: 26%;
+      }
+
+      .relation-lines {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .relation-link {
+        fill: none;
+        stroke: rgba(47, 75, 92, 0.62);
+        stroke-width: 2.6;
+        stroke-linecap: round;
+      }
+
+      .relation-link.is-active {
+        filter: drop-shadow(0 0 8px rgba(47, 75, 92, 0.1));
+      }
+
+      .relation-link.is-standby {
+        stroke-dasharray: 8 7;
+        opacity: 0.68;
+      }
+
+      .relation-link.is-muted {
+        stroke-dasharray: 4 8;
+        opacity: 0.28;
+      }
+
+      .relation-link.is-attention {
+        stroke: rgba(108, 77, 72, 0.86);
+      }
+
+      .relation-pin {
+        fill: rgba(255, 255, 255, 0.94);
+        stroke: rgba(47, 75, 92, 0.46);
+        stroke-width: 1.4;
+      }
+
+      .relation-pin.is-attention {
+        stroke: rgba(108, 77, 72, 0.74);
+      }
+
+      .relation-link-badge rect {
+        fill: rgba(255, 255, 255, 0.92);
+        stroke: rgba(217, 204, 184, 0.78);
+        stroke-width: 1;
+        rx: 999px;
+        ry: 999px;
+      }
+
+      .relation-link-badge text {
+        fill: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .relation-link-badge.is-active rect {
+        stroke: rgba(47, 75, 92, 0.22);
+      }
+
+      .relation-link-badge.is-standby rect {
+        stroke-dasharray: 4 4;
+        opacity: 0.9;
+      }
+
+      .relation-link-badge.is-muted {
+        opacity: 0.46;
+      }
+
+      .relation-link-badge.is-attention rect {
+        stroke: rgba(108, 77, 72, 0.28);
+      }
+
+      .relation-link-group {
+        pointer-events: none;
+      }
+
+      .relation-node {
+        position: absolute;
+        width: 172px;
+        min-height: 102px;
+        padding: 12px 14px;
+        border: 1px solid color-mix(in oklab, var(--line) 76%, white);
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 245, 237, 0.94));
+        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+        transform: translate(-50%, -50%);
+        display: grid;
+        gap: 6px;
+        cursor: pointer;
+      }
+
+      .relation-node::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 4px;
+        border-radius: 18px 0 0 18px;
+        background: rgba(47, 75, 92, 0.22);
+      }
+
+      .relation-node.is-active {
+        box-shadow: 0 0 0 1px rgba(47, 75, 92, 0.14), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      }
+
+      .relation-node.is-active::before {
+        background: var(--accent);
+      }
+
+      .relation-node.is-standby {
+        opacity: 0.8;
+      }
+
+      .relation-node.is-standby::before {
+        background: rgba(116, 100, 86, 0.44);
+      }
+
+      .relation-node.is-muted {
+        opacity: 0.46;
+        filter: saturate(0.78);
+      }
+
+      .relation-node.is-attention {
+        border-color: rgba(108, 77, 72, 0.7);
+        box-shadow: 0 0 0 1px rgba(108, 77, 72, 0.14), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.62);
+      }
+
+      .relation-node.is-attention::before {
+        background: var(--danger);
+      }
+
+      .relation-node-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        min-height: 24px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(217, 204, 184, 0.78);
+        background: rgba(255, 255, 255, 0.84);
+        color: var(--accent);
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .relation-node strong {
+        color: var(--ink);
+        font-size: 0.88rem;
+        line-height: 1.18;
+      }
+
+      .relation-node span {
+        color: var(--muted);
+        font-size: 0.74rem;
+        line-height: 1.32;
+      }
+
+      .relation-node code {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 5px 8px;
+        border-radius: 10px;
+        background: rgba(240, 236, 228, 0.92);
+        color: var(--accent-strong);
+        font-size: 0.68rem;
+        font-family: "IBM Plex Mono", "Consolas", monospace;
+        word-break: break-word;
+      }
+
+      .relation-node:focus-visible {
+        outline: 2px solid rgba(47, 75, 92, 0.32);
+        outline-offset: 3px;
+      }
+
+      .relation-node.is-selected {
+        box-shadow: 0 0 0 2px rgba(47, 75, 92, 0.2), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      }
+
+      .relation-sidebar {
+        align-content: start;
+      }
+
+      .relation-panel {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(217, 204, 184, 0.8);
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+      }
+
+      .relation-panel-head {
+        display: grid;
+        gap: 3px;
+      }
+
+      .relation-panel-head strong {
+        color: var(--ink);
+        font-size: 0.82rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .relation-panel-head span {
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.4;
+      }
+
+      .relation-controls {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        align-items: end;
+      }
+
+      .relation-checks {
+        display: grid;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.7);
+        background: rgba(250, 246, 240, 0.84);
+      }
+
+      .relation-checks label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        letter-spacing: 0;
+        text-transform: none;
+      }
+
+      .relation-checks input {
+        width: auto;
+        margin: 0;
+      }
+
+      .relation-note {
+        margin: 0;
+      }
+
+      .runtime-compare {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .runtime-card {
+        display: grid;
+        gap: 9px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.78);
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .runtime-card.is-active {
+        border-color: rgba(47, 75, 92, 0.24);
+      }
+
+      .runtime-card.is-attention {
+        border-color: rgba(108, 77, 72, 0.36);
+        background: linear-gradient(180deg, rgba(255, 249, 246, 0.96), rgba(247, 239, 234, 0.94));
+      }
+
+      .runtime-card strong {
+        color: var(--ink);
+        font-size: 0.76rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .runtime-card span {
+        color: var(--muted);
+        font-size: 0.74rem;
+        line-height: 1.38;
+      }
+
+      .runtime-list {
+        display: grid;
+        gap: 6px;
+      }
+
+      .runtime-list b {
+        color: var(--muted);
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .runtime-list em {
+        color: var(--ink);
+        font-style: normal;
+        font-size: 0.8rem;
+        line-height: 1.3;
+      }
+
+      .runtime-drift {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        min-height: 24px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(108, 77, 72, 0.28);
+        background: rgba(255, 247, 244, 0.94);
+        color: var(--danger);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .relation-spotlight {
+        display: grid;
+        gap: 10px;
+        padding: 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(217, 204, 184, 0.8);
+        background: rgba(255, 255, 255, 0.8);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
+      }
+
+      .relation-spotlight-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px 12px;
+      }
+
+      .relation-spotlight-head strong {
+        color: var(--ink);
+        font-size: 0.82rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .relation-spotlight-head span {
+        color: var(--muted);
+        font-size: 0.74rem;
+        line-height: 1.35;
+      }
+
+      .relation-spotlight-code {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 5px 8px;
+        border-radius: 10px;
+        background: rgba(240, 236, 228, 0.92);
+        color: var(--accent-strong);
+        font-size: 0.68rem;
+        font-family: "IBM Plex Mono", "Consolas", monospace;
+        word-break: break-word;
+      }
+
+      .relation-spotlight-copy {
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.45;
+      }
+
+      .relation-spotlight-facts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .relation-spotlight-fact {
+        display: grid;
+        gap: 4px;
+        min-height: 66px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.72);
+        background: rgba(255, 255, 255, 0.88);
+      }
+
+      .relation-spotlight-fact strong {
+        color: var(--muted);
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .relation-spotlight-fact span {
+        color: var(--ink);
+        font-size: 0.8rem;
+        line-height: 1.3;
+      }
+
+      .relation-facts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .relation-fact {
+        display: grid;
+        gap: 4px;
+        min-height: 72px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.78);
+        background: rgba(255, 255, 255, 0.84);
+        color: var(--muted);
+        font-size: 0.74rem;
+      }
+
+      .relation-fact strong {
+        color: var(--muted);
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .relation-fact span {
+        color: var(--ink);
+        font-size: 0.82rem;
+        line-height: 1.28;
+      }
+
+      .relation-ledger {
+        display: grid;
+        gap: 8px;
+      }
+
+      .relation-link-item {
+        display: grid;
+        gap: 4px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.72);
+        background: rgba(255, 255, 255, 0.84);
+      }
+
+      .relation-link-item strong {
+        color: var(--ink);
+        font-size: 0.78rem;
+        line-height: 1.24;
+      }
+
+      .relation-link-item span {
+        color: var(--muted);
+        font-size: 0.74rem;
+        line-height: 1.35;
+      }
+
+      .relation-link-item.is-active {
+        border-color: rgba(47, 75, 92, 0.28);
+      }
+
+      .relation-link-item.is-attention {
+        border-color: rgba(108, 77, 72, 0.34);
+      }
+
+      .relation-link-item.is-muted {
+        opacity: 0.54;
+      }
+
+      .relation-link-item.is-selected {
+        box-shadow: 0 0 0 2px rgba(47, 75, 92, 0.16);
+      }
+
+      .queue-guide {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.82);
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .queue-guide strong {
+        color: var(--ink);
+        font-size: 0.76rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .queue-guide ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.45;
+      }
+
+      .summary-strip {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .summary-tile {
+        display: grid;
+        gap: 4px;
+        min-height: 72px;
+        padding: 11px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.78);
+        background: rgba(255, 255, 255, 0.8);
+      }
+
+      .summary-tile strong {
+        color: var(--muted);
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .summary-tile span {
+        color: var(--ink);
+        font-size: 0.84rem;
+        line-height: 1.28;
+      }
+
+      .summary-tile small {
+        color: var(--muted);
+        font-size: 0.72rem;
+        line-height: 1.35;
+      }
+
+      .summary-tile.is-attention {
+        border-color: rgba(108, 77, 72, 0.34);
+        background: linear-gradient(180deg, rgba(255, 249, 246, 0.96), rgba(247, 239, 234, 0.94));
+      }
+
+      .summary-tile.is-active {
+        border-color: rgba(47, 75, 92, 0.24);
+      }
+
+      .summary-tile.is-muted {
+        opacity: 0.62;
+      }
+
+      .decision-note {
+        margin: 0;
+      }
+
+      .inspect-guide {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 10px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.82);
+        background: rgba(255, 255, 255, 0.74);
+      }
+
+      .inspect-guide strong {
+        color: var(--ink);
+        font-size: 0.76rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .inspect-guide p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.45;
+      }
+
       .subtle {
         color: var(--muted);
         font-size: 0.76rem;
@@ -778,12 +1636,25 @@ GUI_HTML_TEMPLATE = r"""
           grid-template-columns: 1fr;
         }
 
+        .workspace-strip {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
         .status-grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .relation-shell {
+          grid-template-columns: 1fr;
         }
       }
 
       @media (max-width: 820px) {
+        .workspace-nav {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
         .preset-grid,
         .status-grid,
         .row {
@@ -816,6 +1687,23 @@ GUI_HTML_TEMPLATE = r"""
 
         .control-actions {
           justify-content: flex-start;
+        }
+
+        .relation-controls,
+        .relation-facts,
+        .runtime-compare,
+        .summary-strip {
+          grid-template-columns: 1fr;
+        }
+
+        .relation-diagram {
+          min-width: 760px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .workspace-strip {
+          grid-template-columns: 1fr;
         }
       }
     </style>
@@ -887,8 +1775,31 @@ GUI_HTML_TEMPLATE = r"""
         </div>
       </section>
 
-      <section class="layout">
-        <div class="stack">
+      <section class="workspace-nav" id="workspace-nav" aria-label="Workspace Tabs">
+        <button class="workspace-tab active" data-workspace-tab="workflow" type="button">
+          <span class="workspace-tab-label">Workflow</span>
+          <span class="workspace-tab-meta" id="workspace-meta-workflow">launch + live</span>
+        </button>
+        <button class="workspace-tab" data-workspace-tab="topology" type="button">
+          <span class="workspace-tab-label">Topology</span>
+          <span class="workspace-tab-meta" id="workspace-meta-topology">live graph</span>
+        </button>
+        <button class="workspace-tab" data-workspace-tab="review" type="button">
+          <span class="workspace-tab-label">Review</span>
+          <span class="workspace-tab-meta" id="workspace-meta-review">queue idle</span>
+        </button>
+        <button class="workspace-tab" data-workspace-tab="inspect" type="button">
+          <span class="workspace-tab-label">Inspect</span>
+          <span class="workspace-tab-meta" id="workspace-meta-inspect">status + diagnostics</span>
+        </button>
+      </section>
+
+      <section class="workspace-strip" id="workspace-strip"></section>
+
+      <section class="workspace-panels">
+        <section class="workspace-panel is-active" data-workspace-panel="workflow">
+          <section class="layout">
+            <div class="stack">
           <article class="card card--launch card--current" id="launch-card">
             <div class="card-head">
               <span class="card-kicker" data-i18n="flow.launch">Step 1 · Launch</span>
@@ -943,7 +1854,7 @@ GUI_HTML_TEMPLATE = r"""
               <button id="refresh-status" class="ghost" type="button" data-i18n="actions.refreshStatus">Refresh Status</button>
             </div>
 
-            <details>
+            <details id="launch-advanced">
               <summary data-i18n="actions.advanced">Advanced IDs, pane mapping, and transport</summary>
               <div class="row" style="margin-top: 12px;">
                 <div>
@@ -981,9 +1892,9 @@ GUI_HTML_TEMPLATE = r"""
               </div>
             </details>
           </article>
-        </div>
+            </div>
 
-        <div class="stack">
+            <div class="stack">
           <article class="card card--live" id="live-card">
             <div class="card-head">
               <span class="card-kicker" data-i18n="flow.live">Step 2 · Live Room</span>
@@ -1016,11 +1927,130 @@ GUI_HTML_TEMPLATE = r"""
               </div>
             </div>
           </article>
-        </div>
-      </section>
+            </div>
+          </section>
+        </section>
 
-      <section class="layout-secondary">
-        <article class="card card--review hidden" id="pending-card">
+        <section class="workspace-panel" data-workspace-panel="topology">
+          <section class="layout-secondary">
+            <article class="card card--relation" id="relation-card">
+          <details class="disclosure" id="relation-details">
+            <summary class="disclosure-summary">
+              <div class="summary-stack">
+                <span class="card-kicker" data-i18n="flow.relation">Support · Relation View</span>
+                <h2 data-i18n="cards.relationTitle">Relation View</h2>
+              </div>
+              <span class="disclosure-meta" id="relation-summary-meta">topology</span>
+            </summary>
+            <div class="disclosure-body">
+              <p class="disclosure-copy" data-i18n="cards.relationCopy">See which components are live for the current preset, how they connect, and adjust the routing controls without leaving the console.</p>
+              <div class="relation-shell">
+                <div class="relation-stage">
+                  <div class="relation-stage-head">
+                    <div class="relation-badges" id="relation-badges"></div>
+                    <div class="relation-stage-note">
+                      <strong data-i18n="cards.relationHintTitle">Topology Actions</strong>
+                      <span data-i18n="cards.relationHint">Click any node to jump to the matching control area. The left card is the launch plan; the right card reflects the live runtime contract.</span>
+                    </div>
+                  </div>
+                  <div class="relation-scroller">
+                    <div class="relation-diagram" id="relation-diagram">
+                      <div class="relation-lanes">
+                        <div class="relation-lane relation-lane--operator"><span data-i18n="relationLanes.operator">Operator Surface</span></div>
+                        <div class="relation-lane relation-lane--control"><span data-i18n="relationLanes.control">Control Plane</span></div>
+                        <div class="relation-lane relation-lane--execution"><span data-i18n="relationLanes.execution">Execution Plane</span></div>
+                      </div>
+                      <svg class="relation-lines" id="relation-lines" viewBox="0 0 980 428" preserveAspectRatio="xMidYMid meet"></svg>
+                    </div>
+                  </div>
+                </div>
+                <div class="relation-sidebar">
+                  <section class="relation-panel">
+                    <div class="relation-panel-head">
+                      <strong data-i18n="cards.relationConfigTitle">Launch Mirror</strong>
+                      <span data-i18n="cards.relationConfigCopy">Edit the same launch settings used by the main console without leaving the topology view.</span>
+                    </div>
+                    <div class="relation-controls">
+                      <div>
+                        <label for="relation-backend" data-i18n="fields.backend">backend</label>
+                        <select id="relation-backend">__BACKEND_OPTIONS__</select>
+                      </div>
+                      <div>
+                        <label for="relation-profile" data-i18n="fields.profile">profile</label>
+                        <select id="relation-profile">
+                          <option value="generic">generic</option>
+                          <option value="codex">codex</option>
+                          <option value="claude-code">claude-code</option>
+                          <option value="gemini">gemini</option>
+                          <option value="aider">aider</option>
+                          <option value="llama">llama</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label for="relation-transport" data-i18n="fields.transport">live room transport</label>
+                        <select id="relation-transport">
+                          <option value="sse" data-i18n="transport.sse">SSE</option>
+                          <option value="ws" data-i18n="transport.ws">WebSocket</option>
+                          <option value="poll" data-i18n="transport.poll">room_poll</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label for="relation-deliver" data-i18n="fields.deliver">human delivery target</label>
+                        <select id="relation-deliver">
+                          <option value="" data-i18n="deliver.roomOnly">room only</option>
+                          <option value="a" data-i18n="deliver.host">Host pane</option>
+                          <option value="b" data-i18n="deliver.guest">Guest pane</option>
+                          <option value="both" data-i18n="deliver.both">Both panes</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="relation-checks">
+                      <label><input id="relation-auto-forward" type="checkbox"><span data-i18n="fields.autoForward">auto-forward Guest `MSG:` handoffs</span></label>
+                      <label><input id="relation-intervention" type="checkbox"><span data-i18n="fields.intervention">require human approval before forwarding</span></label>
+                      <button id="relation-refresh" class="ghost" type="button" data-i18n="actions.refreshStatus">Refresh Status</button>
+                    </div>
+                    <div class="note note--quiet relation-note" id="relation-note" data-i18n="cards.relationNote">
+                      Quick edits update launch settings immediately. Restart the active bridge if you need profile or approval changes to take effect on a running loop.
+                    </div>
+                    <section class="relation-spotlight" id="relation-spotlight">
+                      <div class="relation-spotlight-head">
+                        <strong id="relation-spotlight-title" data-i18n="cards.relationSpotlightTitle">Topology Spotlight</strong>
+                        <span id="relation-spotlight-state">active</span>
+                      </div>
+                      <div class="relation-spotlight-code hidden" id="relation-spotlight-code"></div>
+                      <div class="relation-spotlight-copy" id="relation-spotlight-copy" data-i18n="cards.relationSpotlightCopy">Select a node or connection to inspect the current state, why it matters, and where to jump next.</div>
+                      <div class="relation-spotlight-facts" id="relation-spotlight-facts"></div>
+                      <div class="actions">
+                        <button id="relation-spotlight-jump" class="ghost" type="button" data-i18n="actions.jumpToFocus">Jump to Matched Control</button>
+                      </div>
+                    </section>
+                    <div class="runtime-compare" id="relation-compare"></div>
+                  </section>
+                  <section class="relation-panel">
+                    <div class="relation-panel-head">
+                      <strong data-i18n="cards.relationFactsTitle">Live Runtime</strong>
+                      <span data-i18n="cards.relationFactsCopy">The view stays aligned with live room, bridge, audit, and runtime state rather than decorative placeholder data.</span>
+                    </div>
+                    <div class="relation-facts" id="relation-facts"></div>
+                  </section>
+                  <section class="relation-panel">
+                    <div class="relation-panel-head">
+                      <strong data-i18n="cards.relationLedgerTitle">Connection Ledger</strong>
+                      <span data-i18n="cards.relationLedgerCopy">Each line below describes the exact route or dependency currently shown in the diagram.</span>
+                    </div>
+                    <div class="relation-ledger" id="relation-ledger"></div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          </details>
+            </article>
+          </section>
+        </section>
+
+        <section class="workspace-panel" data-workspace-panel="review">
+          <section class="layout-secondary">
+            <article class="card card--review" id="pending-card">
           <details class="disclosure" id="pending-details">
             <summary class="disclosure-summary">
               <div class="summary-stack">
@@ -1030,7 +2060,17 @@ GUI_HTML_TEMPLATE = r"""
               <span class="disclosure-meta" id="pending-summary-meta">0 pending</span>
             </summary>
             <div class="disclosure-body">
-              <p class="disclosure-copy" data-i18n="cards.reviewCopy">Approval Gate makes this the primary operating panel. In other presets it stays available but secondary.</p>
+              <p class="disclosure-copy" data-i18n="cards.reviewCopy">Approval Gate makes this the primary decision panel. In other presets it stays available for guarded handoffs and exception review.</p>
+              <div class="queue-guide">
+                <strong data-i18n="cards.reviewGuideTitle">Review Checklist</strong>
+                <ul id="review-guide-list">
+                  <li data-i18n="cards.reviewGuidePoint1">Confirm the route is correct before delivery.</li>
+                  <li data-i18n="cards.reviewGuidePoint2">Edit the message only when operator intent must be clarified.</li>
+                  <li data-i18n="cards.reviewGuidePoint3">Reject when the handoff is unsafe, incomplete, or targeted at the wrong pane.</li>
+                </ul>
+              </div>
+              <div class="summary-strip" id="review-strip"></div>
+              <div class="note decision-note" id="review-note" data-i18n="cards.reviewDecisionIdle">No item selected yet. Choose a pending handoff to load the decision context.</div>
               <div class="note note--quiet" id="pending-empty" data-i18n="cards.reviewEmpty">No pending approvals yet. This section expands when intervention is enabled or approvals arrive.</div>
               <div class="queue">
                 <div class="actions">
@@ -1059,9 +2099,13 @@ GUI_HTML_TEMPLATE = r"""
               </div>
             </div>
           </details>
-        </article>
+            </article>
+          </section>
+        </section>
 
-        <article class="card card--status" id="status-card">
+        <section class="workspace-panel" data-workspace-panel="inspect">
+          <section class="layout-secondary">
+            <article class="card card--status" id="status-card">
           <details class="disclosure" id="status-details">
             <summary class="disclosure-summary">
               <div class="summary-stack">
@@ -1072,6 +2116,11 @@ GUI_HTML_TEMPLATE = r"""
             </summary>
             <div class="disclosure-body">
               <p class="disclosure-copy" data-i18n="cards.statusCopy">Status and log.</p>
+              <div class="inspect-guide">
+                <strong data-i18n="cards.inspectGuideTitle">Inspect Flow</strong>
+                <p data-i18n="cards.inspectGuideCopy">Use Status for the current runtime truth, Activity for recent operator and transport events, and Diagnostics only when you need capture, interrupt, or audit investigation.</p>
+              </div>
+              <div class="summary-strip" id="inspect-strip"></div>
               <div class="note" id="status-note" data-i18n="cards.statusNote">Presets hide complexity, but they do not remove it. Open raw status when pane IDs, bridge IDs, or transport state matter.</div>
               <div class="badge-row" id="status-badges"></div>
               <div class="row">
@@ -1086,9 +2135,9 @@ GUI_HTML_TEMPLATE = r"""
               </div>
             </div>
           </details>
-        </article>
+            </article>
 
-        <article class="card card--diagnostics hidden" id="diagnostics-card">
+            <article class="card card--diagnostics" id="diagnostics-card">
           <details class="disclosure" id="diagnostics-details">
             <summary class="disclosure-summary">
               <div class="summary-stack">
@@ -1142,7 +2191,9 @@ GUI_HTML_TEMPLATE = r"""
               </details>
             </div>
           </details>
-        </article>
+            </article>
+          </section>
+        </section>
       </section>
     </main>
 
@@ -1170,6 +2221,43 @@ GUI_HTML_TEMPLATE = r"""
             balanced: 'Balanced',
             wide: 'Wide',
             stacked: 'Stacked'
+          },
+          workspace: {
+            workflow: 'Workflow',
+            topology: 'Topology',
+            review: 'Review',
+            inspect: 'Inspect'
+          },
+          workspaceMeta: {
+            workflowSetup: 'init session + bridge',
+            workflowReady: 'launch + live ready',
+            topologyIdle: 'launch map',
+            topologyLive: 'live links visible',
+            reviewOff: 'review off',
+            reviewArmed: 'review armed',
+            inspectIdle: 'idle',
+            inspectLive: 'runtime + logs',
+            inspectAudit: 'audit + diagnostics'
+          },
+          strip: {
+            preset: 'Preset',
+            session: 'Session',
+            panes: 'Panes',
+            bridge: 'Bridge',
+            routing: 'Routing',
+            audit: 'Audit',
+            emptySession: 'not set',
+            panesReady: 'Host + Guest ready',
+            panesWaiting: 'waiting for panes',
+            bridgeLive: 'live bridge',
+            bridgeIdle: 'not running',
+            roomAttached: 'room {room}',
+            roomPending: 'room pending',
+            routeReview: 'review before delivery',
+            routeDirect: 'direct handoff',
+            routeManual: 'manual relay',
+            auditOn: 'durable trail on',
+            auditOff: 'disabled'
           },
           presets: {
             quick: {
@@ -1264,13 +2352,45 @@ GUI_HTML_TEMPLATE = r"""
             interruptHost: 'Interrupt Host',
             interruptGuest: 'Interrupt Guest',
             interruptBoth: 'Interrupt Both',
+            jumpToFocus: 'Jump to Matched Control',
             sendHost: 'Send to Host',
             sendGuest: 'Send to Guest',
             sendRoom: 'Post to Room'
           },
           cards: {
+            relationTitle: 'Relation View',
+            relationCopy: 'See which components are live for the current preset, how they connect, and adjust the routing controls without leaving the console.',
+            relationConfigTitle: 'Launch Plan',
+            relationConfigCopy: 'Edit the staged launch settings here. They affect the next bridge start immediately, but not the already running bridge.',
+            relationFactsTitle: 'Live Runtime',
+            relationFactsCopy: 'This panel reflects the active room, bridge, audit, and runtime contract exactly as they are running right now.',
+            relationLedgerTitle: 'Connection Ledger',
+            relationLedgerCopy: 'Each line below describes the exact route or dependency currently shown in the diagram.',
+            relationHintTitle: 'Topology Actions',
+            relationHint: 'Click any node to jump to the matching control area. The launch card shows the staged plan; the runtime card shows the live contract.',
+            relationSpotlightTitle: 'Topology Spotlight',
+            relationSpotlightCopy: 'Select a node or connection to inspect the current state, why it matters, and where to jump next.',
+            relationDriftLaunch: 'Launch plan changed',
+            relationDriftRuntime: 'Live bridge still uses the previous contract',
+            relationNote: 'Quick edits update launch settings immediately. Restart the active bridge if you need profile or approval changes to take effect on a running loop.',
+            relationNoteLive: 'The active bridge is still running with profile {profile}, auto-forward {autoForward}, and review {intervention}. Restart the bridge to apply the edited launch settings.',
+            relationMeta: '{preset} · {links} live links',
             reviewTitle: 'Review Queue',
-            reviewCopy: 'Approve or reject pending items.',
+            reviewCopy: 'Approval Gate makes this the main decision panel. In other presets it stays ready for guarded handoffs, corrections, and exception review.',
+            reviewGuideTitle: 'Review Checklist',
+            reviewGuidePoint1: 'Confirm the target route is correct before delivery.',
+            reviewGuidePoint2: 'Edit the message only when operator intent must be clarified.',
+            reviewGuidePoint3: 'Reject when the handoff is unsafe, incomplete, or aimed at the wrong pane.',
+            reviewDecisionIdle: 'No item selected yet. Choose a pending handoff to load the decision context.',
+            reviewDecisionApprove: 'Approve when the route, target pane, and wording are already safe for delivery.',
+            reviewDecisionEdit: 'Edit before approve because the message has operator intent but needs tighter wording or context.',
+            reviewDecisionReject: 'Reject because the route, target, or content is unsafe, incomplete, or misdirected.',
+            reviewTilePending: 'Pending',
+            reviewTileRoute: 'Route',
+            reviewTileAction: 'Action',
+            reviewTileEdited: 'Edited',
+            reviewEditedYes: 'edited text present',
+            reviewEditedNo: 'send original text',
             reviewEmpty: 'No pending items.',
             reviewMetaIdle: 'Expand',
             reviewMetaPending: '{count} pending',
@@ -1286,10 +2406,10 @@ GUI_HTML_TEMPLATE = r"""
             diagnosticsMeta: 'Tools',
             diagnosticsMetaAudited: 'Audit on',
             captureSummary: 'Captured terminal state',
-            launchNote: 'Init session, then start bridge.',
+            launchNote: 'Stage the launch plan here. Init Session prepares panes; Start Collaboration begins the active bridge.',
             liveTitle: 'Live Collaboration',
-            liveCopy: 'Watch room and send messages.',
-            liveEmpty: 'Start bridge to show room tools.',
+            liveCopy: 'Use this panel once the bridge is active. Watch the room, send operator guidance, and confirm guarded delivery behavior.',
+            liveEmpty: 'Start Collaboration to unlock room controls and the live stream.',
             guardReasonFallback: 'unspecified',
             guardNote: 'Auto-forward guard active. New handoffs now route to review: {reason}',
             auditDisabled: 'Audit trail is off. Set TB2_AUDIT=1 or TB2_AUDIT_DIR and restart the server to persist events.',
@@ -1304,8 +2424,16 @@ GUI_HTML_TEMPLATE = r"""
             auditScope: 'Scope: {scope}. Filter: {event}. Limit: {limit}.',
             auditScopeFallback: 'global',
             statusTitle: 'Status and Activity',
-            statusCopy: 'Status and log.',
-            statusNote: 'Open to view details.',
+            statusCopy: 'Read the runtime snapshot first, then correlate it with recent transport and operator activity.',
+            statusNote: 'Presets reduce clutter, but they do not change the underlying runtime. Open this panel when room, bridge, pane, or subscriber truth matters.',
+            inspectGuideTitle: 'Inspect Flow',
+            inspectGuideCopy: 'Use Status for runtime truth, Activity for recent events, and Diagnostics only when you need capture, interrupt, or audit investigation.',
+            inspectTileBridge: 'Bridge',
+            inspectTileRoom: 'Room',
+            inspectTileTransport: 'Transport',
+            inspectTileGuard: 'Guard',
+            inspectGuardActive: 'guarded',
+            inspectGuardIdle: 'not guarding',
             statusMetaIdle: 'Expand',
             statusMetaReady: 'Active',
             statusMetaGuarded: 'Guarded',
@@ -1329,6 +2457,54 @@ GUI_HTML_TEMPLATE = r"""
             pending: 'Pending',
             notReady: 'not ready',
             notAttached: 'not attached'
+          },
+          relation: {
+            gui: 'Browser GUI',
+            guiDetail: 'Operator console',
+            mcp: 'MCP Client',
+            mcpDetail: 'External tool driver',
+            server: 'TB2 Server',
+            serverDetail: 'JSON-RPC / status hub',
+            room: 'Live Room',
+            roomDetail: 'Shared handoff buffer',
+            bridge: 'Bridge Worker',
+            bridgeDetail: 'Message relay',
+            host: 'Host Pane',
+            guest: 'Guest Pane',
+            review: 'Review Queue',
+            reviewDetail: 'Human approval gate',
+            audit: 'Audit Trail',
+            auditDetail: 'Persisted events',
+            runtime: 'Runtime',
+            backend: 'Backend',
+            profile: 'Profile',
+            transport: 'Transport',
+            subscribersLabel: 'Subscribers',
+            continuity: 'Continuity',
+            guard: 'Guard',
+            pending: 'Pending',
+            autoForwardLabel: 'Auto-forward',
+            reviewMode: 'Review',
+            active: 'active',
+            standby: 'standby',
+            muted: 'off',
+            attention: 'guarded',
+            direct: 'direct',
+            none: 'not attached',
+            subscribers: '{total} subscribers',
+            pendingCount: '{count} pending',
+            auditOff: 'disabled',
+            auditOn: '{mode} redaction',
+            autoForwardOn: 'on',
+            autoForwardOff: 'off',
+            reviewOn: 'on',
+            reviewOff: 'off',
+            launchConfig: 'Launch config'
+          },
+          relationLanes: {
+            operator: 'Operator Surface',
+            control: 'Control Plane',
+            execution: 'Execution Plane'
           },
           placeholders: {
             autoIfEmpty: 'auto if empty',
@@ -1376,6 +2552,7 @@ GUI_HTML_TEMPLATE = r"""
           flow: {
             launch: 'Step 1 · Launch',
             live: 'Step 2 · Live Room',
+            relation: 'Support · Relation View',
             oversight: 'Step 3 · Oversight',
             status: 'Support · Status',
             diagnostics: 'Advanced · Diagnostics'
@@ -1401,6 +2578,43 @@ GUI_HTML_TEMPLATE = r"""
             balanced: '標準',
             wide: '加寬',
             stacked: '堆疊'
+          },
+          workspace: {
+            workflow: '工作流',
+            topology: '拓樸',
+            review: '審核',
+            inspect: '檢查'
+          },
+          workspaceMeta: {
+            workflowSetup: '初始化與啟動',
+            workflowReady: '主流程就緒',
+            topologyIdle: '啟動拓樸',
+            topologyLive: 'live 連線中',
+            reviewOff: '審核關閉',
+            reviewArmed: '審核待命',
+            inspectIdle: '待命',
+            inspectLive: '狀態與活動',
+            inspectAudit: 'audit 與診斷'
+          },
+          strip: {
+            preset: 'Preset',
+            session: 'Session',
+            panes: 'Panes',
+            bridge: 'Bridge',
+            routing: 'Routing',
+            audit: 'Audit',
+            emptySession: '尚未設定',
+            panesReady: 'Host + Guest 已就緒',
+            panesWaiting: '尚待建立 panes',
+            bridgeLive: 'bridge 運作中',
+            bridgeIdle: '尚未啟動',
+            roomAttached: 'room {room}',
+            roomPending: '尚未綁定 room',
+            routeReview: '送出前先審核',
+            routeDirect: '直接交接',
+            routeManual: '人工 relay',
+            auditOn: '持久化紀錄啟用',
+            auditOff: '未啟用'
           },
           presets: {
             quick: {
@@ -1495,13 +2709,45 @@ GUI_HTML_TEMPLATE = r"""
             interruptHost: '中斷 Host',
             interruptGuest: '中斷 Guest',
             interruptBoth: '同時中斷',
+            jumpToFocus: '跳到對應控制區',
             sendHost: '送到 Host',
             sendGuest: '送到 Guest',
             sendRoom: '發到 Room'
           },
           cards: {
+            relationTitle: '關聯視圖',
+            relationCopy: '直接查看目前 preset 啟用了哪些元件、彼此怎麼連線，並在同一區快速調整路由與啟動設定。',
+            relationConfigTitle: '啟動計畫',
+            relationConfigCopy: '這裡編輯的是下一次啟動要套用的設定。它會立刻改變 staged launch plan，但不會直接改掉正在運行的 bridge。',
+            relationFactsTitle: 'Live Runtime',
+            relationFactsCopy: '這裡只顯示目前正在運作的 room、bridge、audit 與 runtime 契約，不會混入裝飾性假資料。',
+            relationLedgerTitle: '連線帳本',
+            relationLedgerCopy: '下方每一筆都對應圖上目前畫出的實際連線、路由或依賴關係。',
+            relationHintTitle: '拓樸操作',
+            relationHint: '點擊任一節點即可跳到對應控制區。左邊卡片是 staged launch plan，右邊卡片是 live runtime contract。',
+            relationSpotlightTitle: '拓樸焦點',
+            relationSpotlightCopy: '選擇節點或連線後，這裡會說明目前狀態、它的重要性，以及下一步可以跳去哪個控制區。',
+            relationDriftLaunch: '啟動計畫已變更',
+            relationDriftRuntime: '目前 live bridge 仍沿用上一版契約',
+            relationNote: '這裡的快速編輯會立即更新啟動設定。若目前 bridge 已在運行，想讓 profile 或審核設定生效仍需重新啟動 bridge。',
+            relationNoteLive: '目前 active bridge 仍以 profile {profile}、auto-forward {autoForward}、review {intervention} 運作。若要套用你剛修改的啟動設定，請重新啟動 bridge。',
+            relationMeta: '{preset} · {links} 條啟用連線',
             reviewTitle: '審核佇列',
-            reviewCopy: '核准或退回待審項目。',
+            reviewCopy: '審核閘門模式下，這裡是主要決策面板；其他 preset 也會在 guarded handoff、改寫與例外處理時回到這裡。',
+            reviewGuideTitle: '審核檢查表',
+            reviewGuidePoint1: '先確認送達目標與路徑是否正確。',
+            reviewGuidePoint2: '只有在需要釐清 operator 意圖時才改寫訊息。',
+            reviewGuidePoint3: '若 handoff 有風險、資訊不完整、或目標 pane 錯誤，就直接退回。',
+            reviewDecisionIdle: '尚未選定項目。先選一筆待審 handoff，才會載入決策脈絡。',
+            reviewDecisionApprove: '當路徑、目標 pane 與文字內容都已可安全送達時，直接核准。',
+            reviewDecisionEdit: '這筆 handoff 意圖正確，但需要補足語氣或脈絡時，先改寫再核准。',
+            reviewDecisionReject: '若路徑、目標或內容有風險、不完整、或送錯對象，就直接退回。',
+            reviewTilePending: '待審',
+            reviewTileRoute: '路徑',
+            reviewTileAction: '動作',
+            reviewTileEdited: '改寫',
+            reviewEditedYes: '已有改寫文字',
+            reviewEditedNo: '送出原始內容',
             reviewEmpty: '目前沒有待審項目。',
             reviewMetaIdle: '展開',
             reviewMetaPending: '{count} 筆待審',
@@ -1517,10 +2763,10 @@ GUI_HTML_TEMPLATE = r"""
             diagnosticsMeta: '工具',
             diagnosticsMetaAudited: 'Audit 已啟用',
             captureSummary: '擷取的 terminal 狀態',
-            launchNote: '先初始化 Session，再啟動 Bridge。',
+            launchNote: '先在這裡排好啟動計畫。Init Session 用來建立 panes；開始協作才會真的啟動 active bridge。',
             liveTitle: '即時協作',
-            liveCopy: '查看 room 並送出訊息。',
-            liveEmpty: '啟動 Bridge 後顯示 room 工具。',
+            liveCopy: 'Bridge 啟動後，這裡就是主要操作面。查看 room、送出 operator 指示，並觀察 guarded delivery 是否如預期運作。',
+            liveEmpty: '按下開始協作後，這裡才會顯示 room 控制與 live stream。',
             guardReasonFallback: '未提供原因',
             guardNote: 'Auto-forward guard 已啟用。新的 handoff 會改送 review：{reason}',
             auditDisabled: 'Audit trail 目前未啟用。請設定 TB2_AUDIT=1 或 TB2_AUDIT_DIR，並重新啟動 server 才會持久化事件。',
@@ -1535,8 +2781,16 @@ GUI_HTML_TEMPLATE = r"""
             auditScope: '目前 scope：{scope}。Filter：{event}。Limit：{limit}。',
             auditScopeFallback: '全域',
             statusTitle: '狀態與活動',
-            statusCopy: '',
-            statusNote: '展開查看詳細資訊。',
+            statusCopy: '先讀取 runtime snapshot，再對照最近的 transport 與 operator activity。',
+            statusNote: 'Preset 會幫你收斂畫面，但不會改變底層 runtime。當 room、bridge、pane 或 subscriber 真實狀態重要時，就打開這裡。',
+            inspectGuideTitle: '檢查流程',
+            inspectGuideCopy: 'Status 用來看 runtime truth，Activity 用來對照最近事件，Diagnostics 則只在需要 capture、interrupt 或 audit 調查時再使用。',
+            inspectTileBridge: 'Bridge',
+            inspectTileRoom: 'Room',
+            inspectTileTransport: 'Transport',
+            inspectTileGuard: 'Guard',
+            inspectGuardActive: '警戒中',
+            inspectGuardIdle: '未警戒',
             statusMetaIdle: '展開',
             statusMetaReady: '運作中',
             statusMetaGuarded: '受保護',
@@ -1560,6 +2814,54 @@ GUI_HTML_TEMPLATE = r"""
             pending: '待審',
             notReady: '尚未就緒',
             notAttached: '尚未連接'
+          },
+          relation: {
+            gui: 'Browser GUI',
+            guiDetail: '操作控制台',
+            mcp: 'MCP Client',
+            mcpDetail: '外部工具驅動端',
+            server: 'TB2 Server',
+            serverDetail: 'JSON-RPC / status 中樞',
+            room: 'Live Room',
+            roomDetail: '共享 handoff 緩衝區',
+            bridge: 'Bridge Worker',
+            bridgeDetail: '訊息轉發工作器',
+            host: 'Host Pane',
+            guest: 'Guest Pane',
+            review: 'Review Queue',
+            reviewDetail: '人工審核閘門',
+            audit: 'Audit Trail',
+            auditDetail: '持久化事件紀錄',
+            runtime: 'Runtime',
+            backend: 'Backend',
+            profile: 'Profile',
+            transport: 'Transport',
+            subscribersLabel: 'Subscribers',
+            continuity: 'Continuity',
+            guard: 'Guard',
+            pending: '待審',
+            autoForwardLabel: '自動轉發',
+            reviewMode: '審核',
+            active: '啟用中',
+            standby: '待命',
+            muted: '關閉',
+            attention: '警戒中',
+            direct: '直接',
+            none: '尚未連接',
+            subscribers: '{total} 個訂閱',
+            pendingCount: '{count} 筆待審',
+            auditOff: '未啟用',
+            auditOn: '{mode} 遮罩',
+            autoForwardOn: '開啟',
+            autoForwardOff: '關閉',
+            reviewOn: '開啟',
+            reviewOff: '關閉',
+            launchConfig: '啟動設定'
+          },
+          relationLanes: {
+            operator: '操作面',
+            control: '控制平面',
+            execution: '執行平面'
           },
           placeholders: {
             autoIfEmpty: '留空則自動產生',
@@ -1607,6 +2909,7 @@ GUI_HTML_TEMPLATE = r"""
           flow: {
             launch: '步驟 1 · 啟動',
             live: '步驟 2 · 即時協作',
+            relation: '支援 · 關聯視圖',
             oversight: '步驟 3 · 人工審核',
             status: '支援 · 狀態',
             diagnostics: '進階 · 診斷'
@@ -1686,18 +2989,34 @@ GUI_HTML_TEMPLATE = r"""
         }
       };
 
+      const RELATION_CANVAS = { width: 980, height: 428 };
+      const RELATION_POSITIONS = {
+        gui: { x: 150, y: 96 },
+        mcp: { x: 150, y: 214 },
+        audit: { x: 150, y: 332 },
+        room: { x: 490, y: 96 },
+        server: { x: 490, y: 214 },
+        review: { x: 490, y: 332 },
+        host: { x: 830, y: 96 },
+        bridge: { x: 830, y: 214 },
+        guest: { x: 830, y: 332 },
+      };
+
       const state = {
         reqId: 1,
         locale: 'en',
         layout: 'balanced',
+        workspaceTab: 'workflow',
         preset: 'quick',
         home: true,
+        relationFocus: null,
         lastMsgId: 0,
         poller: null,
         sse: null,
         ws: null,
         guard: null,
         audit: null,
+        statusSnapshot: null,
         auditEvents: [],
         pendingItems: [],
         seen: new Set()
@@ -1741,8 +3060,68 @@ GUI_HTML_TEMPLATE = r"""
         return 'wide';
       }
 
+      function preferredWorkspaceTab() {
+        try {
+          const saved = window.localStorage.getItem('tb2-workspace-tab');
+          if (saved === 'workflow' || saved === 'topology' || saved === 'review' || saved === 'inspect') return saved;
+        } catch (_) {
+          // Ignore storage failures and fall back to the default tab.
+        }
+        return 'workflow';
+      }
+
+      function recommendedWorkspaceTab(name) {
+        if (name === 'approval' || name === 'radar') return 'review';
+        if (name === 'mcp' || name === 'mission') return 'topology';
+        if (name === 'diagnostics') return 'inspect';
+        return 'workflow';
+      }
+
       function transportName(mode) {
         return t('transport.' + mode);
+      }
+
+      function deliverName(value) {
+        if (value === 'a') return t('deliver.host');
+        if (value === 'b') return t('deliver.guest');
+        if (value === 'both') return t('deliver.both');
+        return t('deliver.roomOnly');
+      }
+
+      function setSelectValue(select, value) {
+        if (!select) return;
+        const exists = Array.from(select.options).some(option => option.value === value);
+        if (!exists) return;
+        select.value = value;
+      }
+
+      function syncMirroredSelectOptions(sourceId, targetId) {
+        const source = $(sourceId);
+        const target = $(targetId);
+        if (!source || !target) return;
+        const known = new Set(Array.from(target.options).map(option => option.value));
+        Array.from(source.options).forEach(option => {
+          if (known.has(option.value)) return;
+          const clone = document.createElement('option');
+          clone.value = option.value;
+          clone.textContent = option.textContent;
+          const i18nKey = option.getAttribute('data-i18n');
+          if (i18nKey) clone.setAttribute('data-i18n', i18nKey);
+          target.appendChild(clone);
+        });
+      }
+
+      function syncRelationControls() {
+        syncMirroredSelectOptions('backend', 'relation-backend');
+        syncMirroredSelectOptions('profile', 'relation-profile');
+        syncMirroredSelectOptions('transport', 'relation-transport');
+        syncMirroredSelectOptions('deliver', 'relation-deliver');
+        setSelectValue($('relation-backend'), $('backend').value);
+        setSelectValue($('relation-profile'), $('profile').value);
+        setSelectValue($('relation-transport'), $('transport').value);
+        setSelectValue($('relation-deliver'), $('deliver').value);
+        $('relation-auto-forward').checked = $('auto-forward').checked;
+        $('relation-intervention').checked = $('intervention').checked;
       }
 
       function setLanguageButtons() {
@@ -1755,6 +3134,160 @@ GUI_HTML_TEMPLATE = r"""
         document.querySelectorAll('[data-layout-mode]').forEach(button => {
           button.classList.toggle('active', button.dataset.layoutMode === state.layout);
         });
+      }
+
+      function setWorkspaceButtons() {
+        document.querySelectorAll('[data-workspace-tab]').forEach(button => {
+          const active = button.dataset.workspaceTab === state.workspaceTab;
+          button.classList.toggle('active', active);
+          button.setAttribute('aria-pressed', active ? 'true' : 'false');
+          button.setAttribute('aria-current', active ? 'page' : 'false');
+        });
+      }
+
+      function workspaceMetaText(name) {
+        const detail = inferBridgeDetail(state.statusSnapshot);
+        const bridgeActive = Boolean((detail && detail.bridge_id) || $('bridge-id').value.trim());
+        const roomActive = Boolean((detail && detail.room_id) || $('room-id').value.trim());
+        const pendingCount = state.pendingItems.length;
+        const reviewEnabled = detail ? Boolean(detail.intervention) : $('intervention').checked;
+        const auditActive = Boolean(state.audit && state.audit.enabled);
+        if (name === 'workflow') {
+          const hasPanes = Boolean($('pane-a').value.trim() && $('pane-b').value.trim());
+          return hasPanes || bridgeActive ? t('workspaceMeta.workflowReady') : t('workspaceMeta.workflowSetup');
+        }
+        if (name === 'topology') {
+          return bridgeActive || roomActive ? t('workspaceMeta.topologyLive') : t('workspaceMeta.topologyIdle');
+        }
+        if (name === 'review') {
+          if (pendingCount > 0) return format('cards.reviewMetaPending', { count: pendingCount });
+          return reviewEnabled ? t('workspaceMeta.reviewArmed') : t('workspaceMeta.reviewOff');
+        }
+        if (name === 'inspect') {
+          if (auditActive) return t('workspaceMeta.inspectAudit');
+          return bridgeActive || roomActive ? t('workspaceMeta.inspectLive') : t('workspaceMeta.inspectIdle');
+        }
+        return '';
+      }
+
+      function renderWorkspaceTabs() {
+        document.querySelectorAll('[data-workspace-tab]').forEach(button => {
+          const name = button.dataset.workspaceTab || 'workflow';
+          const label = button.querySelector('.workspace-tab-label');
+          const meta = button.querySelector('.workspace-tab-meta');
+          if (label) label.textContent = t('workspace.' + name);
+          if (meta) meta.textContent = workspaceMetaText(name);
+        });
+      }
+
+      function addWorkspaceChip(container, label, value, detail, stateName) {
+        const item = document.createElement('div');
+        item.className = 'workspace-chip is-' + stateName;
+        const title = document.createElement('strong');
+        title.textContent = label;
+        const main = document.createElement('span');
+        main.textContent = value;
+        const sub = document.createElement('small');
+        sub.textContent = detail;
+        item.appendChild(title);
+        item.appendChild(main);
+        item.appendChild(sub);
+        container.appendChild(item);
+      }
+
+      function addSummaryTile(container, label, value, detail, stateName) {
+        const item = document.createElement('div');
+        item.className = 'summary-tile is-' + stateName;
+        const title = document.createElement('strong');
+        title.textContent = label;
+        const main = document.createElement('span');
+        main.textContent = value;
+        const sub = document.createElement('small');
+        sub.textContent = detail;
+        item.appendChild(title);
+        item.appendChild(main);
+        item.appendChild(sub);
+        container.appendChild(item);
+      }
+
+      function renderWorkspaceStrip() {
+        const container = $('workspace-strip');
+        if (!container) return;
+        container.replaceChildren();
+        const detail = inferBridgeDetail(state.statusSnapshot);
+        const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
+        const bridgeId = $('bridge-id').value.trim() || (detail && detail.bridge_id) || '';
+        const sessionId = $('session').value.trim();
+        const hasPanes = Boolean($('pane-a').value.trim() && $('pane-b').value.trim());
+        const bridgeActive = Boolean(bridgeId);
+        const reviewEnabled = detail ? Boolean(detail.intervention) : $('intervention').checked;
+        const autoForward = detail ? Boolean(detail.auto_forward) : $('auto-forward').checked;
+        const pendingCount = state.pendingItems.length;
+        const auditActive = Boolean(state.audit && state.audit.enabled);
+        addWorkspaceChip(
+          container,
+          t('strip.preset'),
+          t('presets.' + state.preset + '.label'),
+          t('presets.' + state.preset + '.summary'),
+          'active'
+        );
+        addWorkspaceChip(
+          container,
+          t('strip.session'),
+          sessionId || t('strip.emptySession'),
+          hasPanes ? t('strip.panesReady') : t('strip.panesWaiting'),
+          hasPanes ? 'active' : 'muted'
+        );
+        addWorkspaceChip(
+          container,
+          t('strip.panes'),
+          hasPanes ? $('pane-a').value.trim() + ' / ' + $('pane-b').value.trim() : t('strip.panesWaiting'),
+          hasPanes ? t('strip.panesReady') : t('cards.launchNote'),
+          hasPanes ? 'active' : 'muted'
+        );
+        addWorkspaceChip(
+          container,
+          t('strip.bridge'),
+          bridgeActive ? bridgeId : t('strip.bridgeIdle'),
+          roomId ? format('strip.roomAttached', { room: roomId }) : t('strip.roomPending'),
+          bridgeActive ? 'active' : 'muted'
+        );
+        addWorkspaceChip(
+          container,
+          t('strip.routing'),
+          pendingCount > 0
+            ? format('cards.reviewMetaPending', { count: pendingCount })
+            : (reviewEnabled ? t('strip.routeReview') : (autoForward ? t('strip.routeDirect') : t('strip.routeManual'))),
+          reviewEnabled
+            ? (pendingCount > 0 ? t('cards.reviewGuidePoint1') : t('relation.reviewDetail'))
+            : (autoForward ? t('fields.autoForward') : t('cards.reviewEmpty')),
+          pendingCount > 0 ? 'attention' : (reviewEnabled || autoForward ? 'active' : 'muted')
+        );
+        addWorkspaceChip(
+          container,
+          t('strip.audit'),
+          auditActive ? t('strip.auditOn') : t('strip.auditOff'),
+          auditActive
+            ? format('relation.auditOn', { mode: String((state.audit.redaction && state.audit.redaction.mode) || 'default') })
+            : t('relation.auditOff'),
+          auditActive ? 'active' : 'muted'
+        );
+      }
+
+      function setWorkspaceTab(name, options) {
+        const next = name === 'topology' || name === 'review' || name === 'inspect' ? name : 'workflow';
+        state.workspaceTab = next;
+        document.querySelectorAll('[data-workspace-panel]').forEach(panel => {
+          panel.classList.toggle('is-active', panel.dataset.workspacePanel === next);
+        });
+        setWorkspaceButtons();
+        if (!options || options.persist !== false) {
+          try {
+            window.localStorage.setItem('tb2-workspace-tab', next);
+          } catch (_) {
+            // Ignore storage failures.
+          }
+        }
       }
 
       function renderPresetCards() {
@@ -1781,7 +3314,13 @@ GUI_HTML_TEMPLATE = r"""
         renderPresetCards();
         setLanguageButtons();
         setLayoutButtons();
+        setWorkspaceButtons();
+        renderWorkspaceTabs();
+        renderWorkspaceStrip();
+        renderReviewSummary();
+        renderInspectSummary(state.statusSnapshot || {});
         renderAudit();
+        renderRelationView();
       }
 
       function applyLocale(locale) {
@@ -1792,7 +3331,7 @@ GUI_HTML_TEMPLATE = r"""
           // Ignore storage failures.
         }
         translatePage();
-        applyPreset(state.preset);
+        applyPreset(state.preset, { keepTab: true });
         syncMetrics();
       }
 
@@ -1812,6 +3351,32 @@ GUI_HTML_TEMPLATE = r"""
         if (!state.home) return;
         state.home = false;
         document.body.dataset.home = 'workspace';
+      }
+
+      function pulseTarget(target) {
+        if (!target) return;
+        target.classList.remove('focus-target');
+        window.setTimeout(() => target.classList.add('focus-target'), 0);
+        window.setTimeout(() => target.classList.remove('focus-target'), 2200);
+      }
+
+      function focusControlArea(targetId, tab, options) {
+        const requested = $(targetId);
+        const target = requested && !requested.classList.contains('hidden')
+          ? requested
+          : (tab === 'inspect' ? $('status-card') : (tab === 'review' ? $('pending-card') : $('launch-card')));
+        if (!target) return;
+        setWorkspaceTab(tab, { persist: false });
+        if (options && options.openId) {
+          const disclosure = $(options.openId);
+          if (disclosure && 'open' in disclosure) disclosure.open = true;
+        }
+        window.requestAnimationFrame(() => {
+          target.setAttribute('tabindex', '-1');
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          target.focus({ preventScroll: true });
+          pulseTarget(target);
+        });
       }
 
       const log = text => {
@@ -1887,6 +3452,7 @@ GUI_HTML_TEMPLATE = r"""
         $('transport-badge').textContent = $('transport').value ? format('transport.active', {
           mode: transportName($('transport').value)
         }) : t('transport.idle');
+        syncRelationControls();
         syncPanels();
       }
 
@@ -1899,8 +3465,6 @@ GUI_HTML_TEMPLATE = r"""
         const guardBlocked = Boolean(state.guard && state.guard.blocked);
         const preset = PRESETS[state.preset] || PRESETS.quick;
         const focus = preset.focus || 'launch';
-        const showStatus = preset.showStatus !== false;
-
         $('launch-card').classList.toggle('card--current', focus === 'launch' || (!liveActive && focus !== 'status'));
         $('live-card').classList.toggle('card--current', focus === 'live' || ((hasPanes || liveActive) && focus === 'launch'));
         $('pending-card').classList.toggle('card--current', focus === 'pending' || pendingCount > 0 || state.preset === 'approval');
@@ -1911,9 +3475,9 @@ GUI_HTML_TEMPLATE = r"""
         setHidden('live-empty', liveActive);
         setHidden('guard-note', !guardBlocked);
 
-        setHidden('pending-card', !(preset.showPending || pendingCount > 0));
-        setHidden('diagnostics-card', !preset.showDiagnostics);
-        setHidden('status-card', !showStatus);
+        setHidden('pending-card', false);
+        setHidden('diagnostics-card', false);
+        setHidden('status-card', false);
         setHidden('pending-empty', pendingCount > 0);
         setHidden('pending-work', pendingCount === 0);
 
@@ -1934,13 +3498,20 @@ GUI_HTML_TEMPLATE = r"""
 
         $('pending-details').open = state.preset === 'approval' || pendingCount > 0;
         $('status-details').open = focus === 'status';
+        if (state.preset === 'mission' || state.preset === 'mcp') $('relation-details').open = true;
         if (state.preset === 'diagnostics') $('diagnostics-details').open = true;
         if (focus === 'diagnostics') $('diagnostics-details').open = true;
+        renderWorkspaceTabs();
+        renderWorkspaceStrip();
+        renderReviewSummary();
+        renderInspectSummary(state.statusSnapshot || {});
+        renderRelationView();
       }
 
-      function applyPreset(name) {
+      function applyPreset(name, options) {
         const preset = PRESETS[name] || PRESETS.quick;
         state.preset = name;
+        state.relationFocus = null;
         revealWorkspace();
         document.body.dataset.scene = preset.scene || name;
         const label = t('presets.' + name + '.label');
@@ -1953,6 +3524,9 @@ GUI_HTML_TEMPLATE = r"""
         document.querySelectorAll('[data-preset]').forEach(button => {
           button.classList.toggle('active', button.dataset.preset === name);
         });
+        if (!(options && options.keepTab)) {
+          setWorkspaceTab(recommendedWorkspaceTab(name), { persist: false });
+        }
         syncMetrics();
       }
 
@@ -2103,10 +3677,101 @@ GUI_HTML_TEMPLATE = r"""
         return Number.isNaN(date.getTime()) ? String(ts) : date.toLocaleString();
       }
 
+      function relativePendingAge(ts) {
+        const value = Number(ts || 0);
+        if (!value) return '?';
+        const deltaSeconds = Math.max(0, Math.round(Date.now() / 1000) - value);
+        if (deltaSeconds < 60) return deltaSeconds + 's';
+        if (deltaSeconds < 3600) return Math.floor(deltaSeconds / 60) + 'm';
+        if (deltaSeconds < 86400) return Math.floor(deltaSeconds / 3600) + 'h';
+        return Math.floor(deltaSeconds / 86400) + 'd';
+      }
+
       function selectedPendingItem() {
         const id = $('pending-select').value;
         if (!id) return null;
         return state.pendingItems.find(item => String(item.id) === id) || null;
+      }
+
+      function reviewDecisionText(item, edited) {
+        if (!item) return t('cards.reviewDecisionIdle');
+        const text = String(item.text || '');
+        const routeMismatch = String(item.to_pane || '').trim() === '';
+        if (routeMismatch) return t('cards.reviewDecisionReject');
+        if (edited && edited !== text) return t('cards.reviewDecisionEdit');
+        if (!text.trim()) return t('cards.reviewDecisionReject');
+        return t('cards.reviewDecisionApprove');
+      }
+
+      function renderReviewSummary() {
+        const container = $('review-strip');
+        const note = $('review-note');
+        if (!container || !note) return;
+        container.replaceChildren();
+        const item = selectedPendingItem();
+        const edited = $('pending-edit').value.trim();
+        if (!item) {
+          addSummaryTile(container, t('cards.reviewTilePending'), format('relation.pendingCount', { count: state.pendingItems.length }), t('cards.reviewEmpty'), state.pendingItems.length > 0 ? 'attention' : 'muted');
+          addSummaryTile(container, t('cards.reviewTileRoute'), t('relation.none'), t('cards.pendingDetailEmpty'), 'muted');
+          addSummaryTile(container, t('cards.reviewTileAction'), t('cards.reviewDecisionIdle'), t('cards.reviewGuidePoint1'), 'muted');
+          addSummaryTile(container, t('cards.reviewTileEdited'), t('cards.reviewEditedNo'), t('cards.pendingDetailEditedFallback'), 'muted');
+          note.textContent = t('cards.reviewDecisionIdle');
+          return;
+        }
+        const route = String(item.from_pane || '?') + ' -> ' + String(item.to_pane || '?');
+        const hasEditedText = Boolean(edited && edited !== String(item.text || ''));
+        addSummaryTile(container, t('cards.reviewTilePending'), '#' + String(item.id || '?'), relativePendingAge(item.created_at), 'attention');
+        addSummaryTile(container, t('cards.reviewTileRoute'), route, formatPendingTimestamp(item.created_at), 'active');
+        addSummaryTile(container, t('cards.reviewTileAction'), String(item.action || '?'), reviewDecisionText(item, edited), 'active');
+        addSummaryTile(container, t('cards.reviewTileEdited'), hasEditedText ? t('cards.reviewEditedYes') : t('cards.reviewEditedNo'), hasEditedText ? edited : t('cards.pendingDetailEditedFallback'), hasEditedText ? 'attention' : 'muted');
+        note.textContent = reviewDecisionText(item, edited);
+      }
+
+      function renderInspectSummary(status) {
+        const container = $('inspect-strip');
+        if (!container) return;
+        container.replaceChildren();
+        const detail = inferBridgeDetail(status || state.statusSnapshot);
+        const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
+        const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
+        const room = rooms.find(item => item && item.id === roomId) || null;
+        const subscribers = room && room.subscribers ? room.subscribers : null;
+        const guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : state.guard;
+        const transportMode = $('transport').value.trim() || 'sse';
+        addSummaryTile(
+          container,
+          t('cards.inspectTileBridge'),
+          detail && detail.bridge_id ? String(detail.bridge_id) : t('strip.bridgeIdle'),
+          detail && detail.profile ? String(detail.profile) : t('relation.none'),
+          detail && detail.bridge_id ? 'active' : 'muted'
+        );
+        addSummaryTile(
+          container,
+          t('cards.inspectTileRoom'),
+          roomId || t('relation.none'),
+          subscribers ? format('relation.subscribers', { total: subscribers.total || 0 }) : t('cards.statusBadgeTransportIdle'),
+          roomId ? 'active' : 'muted'
+        );
+        addSummaryTile(
+          container,
+          t('cards.inspectTileTransport'),
+          transportName(transportMode),
+          subscribers
+            ? format('cards.statusBadgeTransport', {
+                total: subscribers.total || 0,
+                sse: subscribers.sse || 0,
+                websocket: subscribers.websocket || 0,
+              })
+            : t('cards.statusBadgeTransportIdle'),
+          subscribers && subscribers.total > 0 ? 'active' : 'muted'
+        );
+        addSummaryTile(
+          container,
+          t('cards.inspectTileGuard'),
+          guard && guard.blocked ? t('cards.inspectGuardActive') : t('cards.inspectGuardIdle'),
+          guard && guard.guard_reason ? String(guard.guard_reason) : t('cards.inspectGuideCopy'),
+          guard && guard.blocked ? 'attention' : 'active'
+        );
       }
 
       function renderPendingDetail() {
@@ -2116,6 +3781,7 @@ GUI_HTML_TEMPLATE = r"""
         if (!item) {
           box.textContent = t('cards.pendingDetailEmpty');
           if (document.activeElement !== edit) edit.value = '';
+          renderReviewSummary();
           return;
         }
         if (document.activeElement !== edit) edit.value = String(item.edited_text || '');
@@ -2126,6 +3792,7 @@ GUI_HTML_TEMPLATE = r"""
           t('cards.pendingDetailOriginal') + ': ' + String(item.text || ''),
           t('cards.pendingDetailEdited') + ': ' + String(item.edited_text || t('cards.pendingDetailEditedFallback')),
         ].join('\n');
+        renderReviewSummary();
       }
 
       function fillPending(items) {
@@ -2157,6 +3824,7 @@ GUI_HTML_TEMPLATE = r"""
         $('bridge-id').value = '';
         $('pending-edit').value = '';
         state.guard = null;
+        state.statusSnapshot = null;
         fillPending([]);
       }
 
@@ -2205,6 +3873,9 @@ GUI_HTML_TEMPLATE = r"""
           badge.textContent = label;
           box.appendChild(badge);
         }
+        renderWorkspaceTabs();
+        renderWorkspaceStrip();
+        renderInspectSummary(status);
       }
 
       function inferBridgeId(status) {
@@ -2231,6 +3902,747 @@ GUI_HTML_TEMPLATE = r"""
         return null;
       }
 
+      function relationStateName(flags) {
+        if (flags && flags.attention) return 'attention';
+        if (flags && flags.active) return 'active';
+        if (flags && flags.standby) return 'standby';
+        return 'muted';
+      }
+
+      function relationBooleanLabel(value, onKey, offKey) {
+        return value ? t('relation.' + onKey) : t('relation.' + offKey);
+      }
+
+      function relationStatusLabel(name) {
+        return t('relation.' + name);
+      }
+
+      function setRelationFocus(focus) {
+        state.relationFocus = focus || null;
+        renderRelationView();
+      }
+
+      function addRelationFact(container, label, value) {
+        const item = document.createElement('span');
+        item.className = 'relation-fact';
+        const key = document.createElement('strong');
+        key.textContent = label;
+        const text = document.createElement('span');
+        text.textContent = value;
+        item.appendChild(key);
+        item.appendChild(text);
+        container.appendChild(item);
+      }
+
+      function addRelationBadge(container, label, value, stateName) {
+        const badge = document.createElement('span');
+        badge.className = 'badge is-' + stateName;
+        const strong = document.createElement('strong');
+        strong.textContent = label;
+        const text = document.createElement('span');
+        text.textContent = value;
+        badge.appendChild(strong);
+        badge.appendChild(text);
+        container.appendChild(badge);
+        return badge;
+      }
+
+      function addSpotlightFact(container, label, value) {
+        const item = document.createElement('div');
+        item.className = 'relation-spotlight-fact';
+        const key = document.createElement('strong');
+        key.textContent = label;
+        const text = document.createElement('span');
+        text.textContent = value;
+        item.appendChild(key);
+        item.appendChild(text);
+        container.appendChild(item);
+      }
+
+      function relationNodeFocusTarget(key) {
+        if (key === 'room') return { tab: 'workflow', targetId: 'live-card' };
+        if (key === 'review') return { tab: 'review', targetId: 'pending-card', openId: 'pending-details' };
+        if (key === 'audit') return { tab: 'inspect', targetId: 'diagnostics-card', openId: 'diagnostics-details' };
+        if (key === 'mcp' || key === 'server') return { tab: 'inspect', targetId: 'status-card', openId: 'status-details' };
+        if (key === 'host' || key === 'guest') return { tab: 'workflow', targetId: 'launch-card', openId: 'launch-advanced' };
+        if (key === 'bridge' || key === 'gui') return { tab: 'workflow', targetId: 'launch-card' };
+        return { tab: 'topology', targetId: 'relation-card', openId: 'relation-details' };
+      }
+
+      function addRelationNode(container, definition) {
+        const node = document.createElement('div');
+        node.className = 'relation-node is-' + definition.state;
+        if (state.relationFocus && state.relationFocus.kind === 'node' && state.relationFocus.key === definition.key) {
+          node.classList.add('is-selected');
+        }
+        node.style.left = String((definition.x / RELATION_CANVAS.width) * 100) + '%';
+        node.style.top = String((definition.y / RELATION_CANVAS.height) * 100) + '%';
+        node.dataset.nodeKey = definition.key;
+        node.setAttribute('role', 'button');
+        node.setAttribute('tabindex', '0');
+
+        const tag = document.createElement('div');
+        tag.className = 'relation-node-tag';
+        tag.textContent = t('relation.' + definition.state);
+
+        const title = document.createElement('strong');
+        title.textContent = definition.title;
+
+        const detail = document.createElement('span');
+        detail.textContent = definition.detail;
+
+        node.appendChild(tag);
+        node.appendChild(title);
+        node.appendChild(detail);
+
+        if (definition.code) {
+          const code = document.createElement('code');
+          code.textContent = definition.code;
+          node.appendChild(code);
+        }
+
+        container.appendChild(node);
+      }
+
+      function relationLinkPath(start, end) {
+        const deltaX = end.x - start.x;
+        const control = Math.max(76, Math.min(160, Math.abs(deltaX) * 0.42));
+        const direction = deltaX >= 0 ? 1 : -1;
+        const c1x = start.x + control * direction;
+        const c2x = end.x - control * direction;
+        return 'M' + start.x + ' ' + start.y + ' C ' + c1x + ' ' + start.y + ', ' + c2x + ' ' + end.y + ', ' + end.x + ' ' + end.y;
+      }
+
+      function addRelationLink(svg, definition) {
+        const start = RELATION_POSITIONS[definition.from];
+        const end = RELATION_POSITIONS[definition.to];
+        if (!start || !end) return;
+
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('class', 'relation-link-group');
+        group.dataset.linkKey = definition.key || '';
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', relationLinkPath(start, end));
+        path.setAttribute('class', 'relation-link is-' + definition.state);
+        group.appendChild(path);
+
+        for (const point of [start, end]) {
+          const pin = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          pin.setAttribute('cx', String(point.x));
+          pin.setAttribute('cy', String(point.y));
+          pin.setAttribute('r', '5.5');
+          pin.setAttribute('class', 'relation-pin is-' + definition.state);
+          group.appendChild(pin);
+        }
+
+        if (definition.label) {
+          const badge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          badge.setAttribute('class', 'relation-link-badge is-' + definition.state);
+          const x = (start.x + end.x) / 2 + (definition.dx || 0);
+          const y = (start.y + end.y) / 2 + (definition.dy || -6);
+          const width = Math.max(78, definition.label.length * 7.2 + 18);
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('x', String(x - width / 2));
+          rect.setAttribute('y', String(y - 12));
+          rect.setAttribute('width', String(width));
+          rect.setAttribute('height', '24');
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', String(x));
+          text.setAttribute('y', String(y + 4));
+          text.setAttribute('text-anchor', 'middle');
+          text.textContent = definition.label;
+          badge.appendChild(rect);
+          badge.appendChild(text);
+          group.appendChild(badge);
+        }
+
+        svg.appendChild(group);
+      }
+
+      function addRelationLedgerItem(container, definition, nodes) {
+        const item = document.createElement('div');
+        item.className = 'relation-link-item is-' + definition.state;
+        if (state.relationFocus && state.relationFocus.kind === 'link' && state.relationFocus.key === definition.key) {
+          item.classList.add('is-selected');
+        }
+        item.dataset.linkKey = definition.key || '';
+        item.setAttribute('role', 'button');
+        item.setAttribute('tabindex', '0');
+
+        const title = document.createElement('strong');
+        title.textContent = nodes[definition.from].title + ' -> ' + nodes[definition.to].title;
+
+        const route = document.createElement('span');
+        route.textContent = definition.label + ' · ' + relationStatusLabel(definition.state);
+
+        item.appendChild(title);
+        item.appendChild(route);
+
+        if (definition.detail) {
+          const detail = document.createElement('span');
+          detail.textContent = definition.detail;
+          item.appendChild(detail);
+        }
+
+        container.appendChild(item);
+      }
+
+      function addRuntimeLine(container, label, value) {
+        const item = document.createElement('span');
+        item.className = 'runtime-list';
+        const key = document.createElement('b');
+        key.textContent = label;
+        const text = document.createElement('em');
+        text.textContent = value;
+        item.appendChild(key);
+        item.appendChild(text);
+        container.appendChild(item);
+      }
+
+      function addRuntimeCard(container, options) {
+        const card = document.createElement('section');
+        card.className = 'runtime-card is-' + options.state;
+        const title = document.createElement('strong');
+        title.textContent = options.title;
+        const summary = document.createElement('span');
+        summary.textContent = options.summary;
+        card.appendChild(title);
+        card.appendChild(summary);
+        if (options.drift) {
+          const drift = document.createElement('span');
+          drift.className = 'runtime-drift';
+          drift.textContent = options.drift;
+          card.appendChild(drift);
+        }
+        const list = document.createElement('div');
+        list.className = 'runtime-list-wrap';
+        for (const line of options.lines) addRuntimeLine(list, line.label, line.value);
+        card.appendChild(list);
+        container.appendChild(card);
+      }
+
+      function relationSpotlightPayload(context) {
+        const focus = state.relationFocus;
+        if (!focus || !context) return null;
+        if (focus.kind === 'node') {
+          const node = context.nodeMap[focus.key];
+          if (!node) return null;
+          return {
+            title: node.title,
+            state: relationStatusLabel(node.state),
+            copy: node.detail,
+            code: node.code || '',
+            target: relationNodeFocusTarget(node.key),
+            facts: [
+              { label: t('relation.runtime'), value: relationStatusLabel(node.state) },
+              { label: t('relation.profile'), value: context.bridgeProfile || context.profileName },
+              { label: t('relation.room'), value: context.roomId || t('relation.none') },
+              { label: t('relation.pending'), value: format('relation.pendingCount', { count: context.pendingCount }) },
+            ],
+          };
+        }
+        if (focus.kind === 'link') {
+          const link = context.linkMap[focus.key];
+          if (!link) return null;
+          return {
+            title: context.nodeMap[link.from].title + ' -> ' + context.nodeMap[link.to].title,
+            state: relationStatusLabel(link.state),
+            copy: link.detail || link.label,
+            code: link.label,
+            target: relationNodeFocusTarget(link.to),
+            facts: [
+              { label: t('relation.transport'), value: context.transportLabel },
+              { label: t('fields.deliver'), value: context.deliverLabel },
+              { label: t('relation.guard'), value: context.guardLabel },
+              { label: t('relation.pending'), value: format('relation.pendingCount', { count: context.pendingCount }) },
+            ],
+          };
+        }
+        if (focus.kind === 'badge') {
+          const badge = context.badgeMap[focus.key];
+          if (!badge) return null;
+          return {
+            title: badge.label,
+            state: relationStatusLabel(badge.state),
+            copy: badge.copy,
+            code: badge.value,
+            target: badge.target,
+            facts: badge.facts,
+          };
+        }
+        return null;
+      }
+
+      function renderRelationSpotlight(context) {
+        const title = $('relation-spotlight-title');
+        const stateBox = $('relation-spotlight-state');
+        const copy = $('relation-spotlight-copy');
+        const code = $('relation-spotlight-code');
+        const facts = $('relation-spotlight-facts');
+        const jump = $('relation-spotlight-jump');
+        if (!stateBox || !copy || !code || !facts || !jump) return;
+        facts.replaceChildren();
+        const payload = relationSpotlightPayload(context);
+        if (!payload) {
+          if (title) title.textContent = t('cards.relationSpotlightTitle');
+          stateBox.textContent = t('relation.active');
+          copy.textContent = t('cards.relationSpotlightCopy');
+          code.textContent = '';
+          code.classList.add('hidden');
+          jump.disabled = true;
+          return;
+        }
+        if (title) title.textContent = payload.title;
+        stateBox.textContent = payload.state;
+        copy.textContent = payload.copy;
+        if (payload.code) {
+          code.textContent = payload.code;
+          code.classList.remove('hidden');
+        } else {
+          code.textContent = '';
+          code.classList.add('hidden');
+        }
+        for (const fact of payload.facts) addSpotlightFact(facts, fact.label, fact.value);
+        jump.disabled = false;
+        jump.onclick = () => focusControlArea(payload.target.targetId, payload.target.tab, payload.target);
+      }
+
+      function renderRelationView() {
+        const diagram = $('relation-diagram');
+        const svg = $('relation-lines');
+        const facts = $('relation-facts');
+        const badges = $('relation-badges');
+        const ledger = $('relation-ledger');
+        const compare = $('relation-compare');
+        if (!diagram || !svg || !facts || !badges || !ledger || !compare) return;
+
+        syncRelationControls();
+
+        const status = state.statusSnapshot || {};
+        const detail = inferBridgeDetail(status);
+        const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
+        const preset = PRESETS[state.preset] || PRESETS.quick;
+        const presetLabel = t('presets.' + state.preset + '.label');
+        const bridgeId = $('bridge-id').value.trim() || (detail && detail.bridge_id) || '';
+        const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
+        const hostPane = $('pane-a').value.trim() || (detail && detail.pane_a) || '';
+        const guestPane = $('pane-b').value.trim() || (detail && detail.pane_b) || '';
+        const backendName = $('backend').value.trim() || t('relation.direct');
+        const profileName = $('profile').value.trim() || 'generic';
+        const transportMode = $('transport').value.trim() || 'sse';
+        const deliverLabel = deliverName($('deliver').value.trim());
+        const room = rooms.find(item => item && item.id === roomId) || (rooms.length === 1 ? rooms[0] : null);
+        const subscribers = room && room.subscribers ? room.subscribers : { total: 0, sse: 0, websocket: 0 };
+        const pendingCount = detail ? Number(detail.pending_count || 0) : (Number($('metric-pending').textContent || '0') || 0);
+        const guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : state.guard;
+        const audit = state.audit || status.audit || {};
+        const runtime = status.runtime || {};
+        const bridgeProfile = detail && detail.profile ? String(detail.profile) : profileName;
+        const bridgeAutoForward = detail ? Boolean(detail.auto_forward) : $('auto-forward').checked;
+        const bridgeIntervention = detail ? Boolean(detail.intervention) : $('intervention').checked;
+        const relationNote = $('relation-note');
+        const mcpFocused = state.preset === 'mcp' || state.preset === 'mission';
+        const roomActive = Boolean(roomId);
+        const bridgeActive = Boolean(bridgeId);
+        const hasPanes = Boolean(hostPane && guestPane);
+        const reviewEnabled = bridgeActive ? bridgeIntervention : $('intervention').checked;
+        const reviewAttention = Boolean((guard && guard.blocked) || pendingCount > 0);
+        const auditActive = Boolean(audit && audit.enabled);
+        const transportLabel = transportName(transportMode);
+        const guardLabel = guard && guard.blocked ? t('relation.attention') : (reviewEnabled ? t('relation.standby') : t('relation.muted'));
+        const relayLabel = bridgeAutoForward ? 'MSG relay' : 'manual relay';
+        const reviewLabel = bridgeIntervention ? 'intervention' : 'review off';
+        const configDrift = Boolean(
+          bridgeActive
+          && detail
+          && (
+            bridgeProfile !== profileName
+            || bridgeAutoForward !== $('auto-forward').checked
+            || bridgeIntervention !== $('intervention').checked
+          )
+        );
+
+        relationNote.textContent = configDrift
+          ? format('cards.relationNoteLive', {
+              profile: bridgeProfile,
+              autoForward: relationBooleanLabel(bridgeAutoForward, 'autoForwardOn', 'autoForwardOff'),
+              intervention: relationBooleanLabel(bridgeIntervention, 'reviewOn', 'reviewOff'),
+            })
+          : t('cards.relationNote');
+
+        svg.replaceChildren();
+        diagram.querySelectorAll('.relation-node').forEach(node => node.remove());
+        badges.replaceChildren();
+        facts.replaceChildren();
+        ledger.replaceChildren();
+        compare.replaceChildren();
+
+        addRuntimeCard(compare, {
+          title: t('cards.relationConfigTitle'),
+          summary: t('cards.relationConfigCopy'),
+          state: configDrift ? 'attention' : 'active',
+          lines: [
+            { label: t('relation.profile'), value: profileName },
+            { label: t('relation.transport'), value: transportName(transportMode) },
+            { label: t('fields.deliver'), value: deliverLabel },
+            {
+              label: t('relation.autoForwardLabel'),
+              value: relationBooleanLabel($('auto-forward').checked, 'autoForwardOn', 'autoForwardOff')
+            },
+            {
+              label: t('relation.reviewMode'),
+              value: relationBooleanLabel($('intervention').checked, 'reviewOn', 'reviewOff')
+            },
+          ],
+          drift: configDrift ? t('cards.relationDriftLaunch') : ''
+        });
+        addRuntimeCard(compare, {
+          title: t('cards.relationFactsTitle'),
+          summary: t('cards.relationFactsCopy'),
+          state: bridgeActive || roomActive ? (configDrift ? 'attention' : 'active') : 'muted',
+          lines: [
+            { label: t('relation.profile'), value: bridgeActive ? bridgeProfile : t('relation.none') },
+            { label: t('relation.room'), value: roomActive ? roomId : t('relation.none') },
+            { label: t('relation.bridge'), value: bridgeActive ? bridgeId : t('relation.none') },
+            {
+              label: t('relation.autoForwardLabel'),
+              value: relationBooleanLabel(bridgeAutoForward, 'autoForwardOn', 'autoForwardOff')
+            },
+            {
+              label: t('relation.reviewMode'),
+              value: relationBooleanLabel(bridgeIntervention, 'reviewOn', 'reviewOff')
+            },
+          ],
+          drift: configDrift ? t('cards.relationDriftRuntime') : ''
+        });
+
+        const nodes = [
+          {
+            key: 'gui',
+            state: relationStateName({ active: true }),
+            title: t('relation.gui'),
+            detail: t('relation.guiDetail'),
+            code: state.layout + ' / ' + state.locale,
+          },
+          {
+            key: 'mcp',
+            state: relationStateName({ active: mcpFocused, standby: !mcpFocused }),
+            title: t('relation.mcp'),
+            detail: t('relation.mcpDetail'),
+            code: mcpFocused ? '/mcp' : '',
+          },
+          {
+            key: 'audit',
+            state: relationStateName({
+              active: auditActive,
+              standby: !auditActive && (preset.showDiagnostics || state.preset === 'mission'),
+            }),
+            title: t('relation.audit'),
+            detail: auditActive
+              ? format('relation.auditOn', { mode: String((audit.redaction && audit.redaction.mode) || 'default') })
+              : t('relation.auditOff'),
+            code: auditActive ? String(audit.file || audit.root || '') : '',
+          },
+          {
+            key: 'server',
+            state: relationStateName({ active: true }),
+            title: t('relation.server'),
+            detail: t('relation.serverDetail'),
+            code: String(runtime.launch_mode || t('relation.direct')),
+          },
+          {
+            key: 'room',
+            state: relationStateName({ active: roomActive, standby: !roomActive }),
+            title: t('relation.room'),
+            detail: roomActive ? format('relation.subscribers', { total: subscribers.total || 0 }) : t('relation.none'),
+            code: roomId,
+          },
+          {
+            key: 'review',
+            state: relationStateName({
+              attention: reviewAttention,
+              active: reviewEnabled,
+              standby: !reviewEnabled && preset.showPending,
+            }),
+            title: t('relation.review'),
+            detail: reviewAttention
+              ? format('relation.pendingCount', { count: pendingCount })
+              : (reviewEnabled ? t('relation.reviewDetail') : t('relation.reviewOff')),
+            code: guard && guard.guard_reason ? String(guard.guard_reason) : '',
+          },
+          {
+            key: 'bridge',
+            state: relationStateName({ active: bridgeActive, standby: !bridgeActive && hasPanes }),
+            title: t('relation.bridge'),
+            detail: bridgeActive ? t('relation.bridgeDetail') : t('relation.launchConfig'),
+            code: bridgeId,
+          },
+          {
+            key: 'host',
+            state: relationStateName({ active: Boolean(hostPane && bridgeActive), standby: Boolean(hostPane && !bridgeActive) }),
+            title: t('relation.host'),
+            detail: hostPane ? t('fields.paneHost') : t('metrics.notReady'),
+            code: hostPane,
+          },
+          {
+            key: 'guest',
+            state: relationStateName({ active: Boolean(guestPane && bridgeActive), standby: Boolean(guestPane && !bridgeActive) }),
+            title: t('relation.guest'),
+            detail: guestPane ? t('fields.paneGuest') + ' · ' + bridgeProfile : t('metrics.notReady'),
+            code: guestPane,
+          },
+        ];
+
+        const nodeMap = Object.fromEntries(nodes.map(node => [node.key, node]));
+
+        const links = [
+          {
+            key: 'gui-server',
+            from: 'gui',
+            to: 'server',
+            label: 'tools/call',
+            state: 'active',
+            dx: -14,
+            dy: -14,
+            detail: t('relation.gui') + ' -> ' + t('relation.server') + ' JSON-RPC',
+          },
+          {
+            key: 'mcp-server',
+            from: 'mcp',
+            to: 'server',
+            label: 'HTTP /mcp',
+            state: mcpFocused ? 'active' : 'standby',
+            dx: -10,
+            dy: 16,
+            detail: t('relation.mcp') + ' endpoint /mcp',
+          },
+          {
+            key: 'server-room',
+            from: 'server',
+            to: 'room',
+            label: 'room state',
+            state: roomActive ? 'active' : 'standby',
+            dx: 14,
+            dy: -12,
+            detail: roomActive ? roomId : t('relation.none'),
+          },
+          {
+            key: 'gui-room',
+            from: 'gui',
+            to: 'room',
+            label: transportLabel,
+            state: roomActive ? 'active' : 'standby',
+            dx: 0,
+            dy: -18,
+            detail: format('relation.subscribers', { total: subscribers.total || 0 }),
+          },
+          {
+            key: 'room-bridge',
+            from: 'room',
+            to: 'bridge',
+            label: relayLabel,
+            state: bridgeActive && roomActive ? (reviewAttention ? 'attention' : 'active') : 'standby',
+            dx: 32,
+            dy: -10,
+            detail: relationBooleanLabel(bridgeAutoForward, 'autoForwardOn', 'autoForwardOff'),
+          },
+          {
+            key: 'bridge-host',
+            from: 'bridge',
+            to: 'host',
+            label: 'pane A',
+            state: hostPane ? (bridgeActive ? 'active' : 'standby') : 'muted',
+            dx: 28,
+            dy: -12,
+            detail: hostPane || t('metrics.notReady'),
+          },
+          {
+            key: 'bridge-guest',
+            from: 'bridge',
+            to: 'guest',
+            label: 'pane B',
+            state: guestPane ? (bridgeActive ? 'active' : 'standby') : 'muted',
+            dx: 28,
+            dy: 16,
+            detail: bridgeProfile + ' · ' + (guestPane || t('metrics.notReady')),
+          },
+          {
+            key: 'bridge-review',
+            from: 'bridge',
+            to: 'review',
+            label: reviewLabel,
+            state: reviewAttention ? 'attention' : (reviewEnabled ? 'active' : 'standby'),
+            dx: 4,
+            dy: -14,
+            detail: format('relation.pendingCount', { count: pendingCount }),
+          },
+          {
+            key: 'server-audit',
+            from: 'server',
+            to: 'audit',
+            label: auditActive ? 'TB2_AUDIT' : t('relation.auditOff'),
+            state: auditActive ? 'active' : (preset.showDiagnostics || state.preset === 'mission' ? 'standby' : 'muted'),
+            dx: -12,
+            dy: 18,
+            detail: auditActive ? String(audit.file || audit.root || '') : t('relation.auditOff'),
+          },
+        ];
+
+        for (const link of links) addRelationLink(svg, link);
+        for (const node of nodes) {
+          const position = RELATION_POSITIONS[node.key];
+          addRelationNode(diagram, Object.assign({}, node, position));
+        }
+
+        const linkMap = Object.fromEntries(links.map(link => [link.key, link]));
+        if (!state.relationFocus) {
+          const preferredNode = nodes.find(node => node.state === 'attention')
+            || nodes.find(node => node.state === 'active' && node.key === 'bridge')
+            || nodes.find(node => node.state === 'active');
+          if (preferredNode) state.relationFocus = { kind: 'node', key: preferredNode.key };
+        }
+
+        const activeNodes = nodes.filter(node => node.state === 'active' || node.state === 'attention').length;
+        const liveLinks = links.filter(link => link.state === 'active' || link.state === 'attention').length;
+        $('relation-summary-meta').textContent = format('cards.relationMeta', {
+          preset: presetLabel,
+          links: liveLinks,
+        });
+
+        const badgeDefinitions = [
+          {
+            key: 'preset',
+            label: t('badges.preset'),
+            value: presetLabel,
+            state: relationStateName({ active: true }),
+            copy: t('presets.' + state.preset + '.summary'),
+            target: { tab: 'workflow', targetId: 'launch-card' },
+            facts: [
+              { label: t('strip.preset'), value: presetLabel },
+              { label: t('relation.runtime'), value: String(runtime.launch_mode || t('relation.direct')) },
+            ],
+          },
+          {
+            key: 'runtime',
+            label: t('relation.runtime'),
+            value: String(runtime.launch_mode || t('relation.direct')),
+            state: relationStateName({ active: true }),
+            copy: t('cards.relationFactsCopy'),
+            target: relationNodeFocusTarget('server'),
+            facts: [
+              { label: t('relation.runtime'), value: String(runtime.launch_mode || t('relation.direct')) },
+              { label: t('relation.continuity'), value: String(runtime.continuity && runtime.continuity.mode ? runtime.continuity.mode : t('relation.direct')) },
+            ],
+          },
+          {
+            key: 'transport',
+            label: t('relation.transport'),
+            value: transportLabel,
+            state: relationStateName({ active: roomActive, standby: !roomActive }),
+            copy: t('relation.roomDetail'),
+            target: relationNodeFocusTarget('room'),
+            facts: [
+              { label: t('relation.room'), value: roomId || t('relation.none') },
+              { label: t('relation.subscribersLabel'), value: format('relation.subscribers', { total: subscribers.total || 0 }) },
+            ],
+          },
+          {
+            key: 'pending',
+            label: t('relation.pending'),
+            value: format('relation.pendingCount', { count: pendingCount }),
+            state: relationStateName({ attention: pendingCount > 0, active: pendingCount === 0 && reviewEnabled, standby: pendingCount === 0 && !reviewEnabled }),
+            copy: t('cards.reviewCopy'),
+            target: relationNodeFocusTarget('review'),
+            facts: [
+              { label: t('relation.pending'), value: format('relation.pendingCount', { count: pendingCount }) },
+              { label: t('relation.guard'), value: guardLabel },
+            ],
+          },
+          {
+            key: 'audit',
+            label: t('relation.audit'),
+            value: auditActive ? format('relation.auditOn', { mode: String((audit.redaction && audit.redaction.mode) || 'default') }) : t('relation.auditOff'),
+            state: relationStateName({ active: auditActive, standby: !auditActive && (preset.showDiagnostics || state.preset === 'mission') }),
+            copy: t('cards.auditDisabled'),
+            target: relationNodeFocusTarget('audit'),
+            facts: [
+              { label: t('relation.audit'), value: auditActive ? format('relation.auditOn', { mode: String((audit.redaction && audit.redaction.mode) || 'default') }) : t('relation.auditOff') },
+              { label: t('relation.runtime'), value: auditActive ? String(audit.file || audit.root || '') : t('relation.none') },
+            ],
+          },
+          {
+            key: 'coverage',
+            label: t('cards.relationTitle'),
+            value: String(activeNodes) + '/9 active',
+            state: relationStateName({ active: bridgeActive || roomActive, standby: !bridgeActive && hasPanes }),
+            copy: t('cards.relationLedgerCopy'),
+            target: { tab: 'topology', targetId: 'relation-card', openId: 'relation-details' },
+            facts: [
+              { label: t('relation.pending'), value: format('relation.pendingCount', { count: pendingCount }) },
+              { label: t('relation.transport'), value: transportLabel },
+            ],
+          },
+        ];
+        const badgeMap = Object.fromEntries(badgeDefinitions.map(badge => [badge.key, badge]));
+        for (const badgeDefinition of badgeDefinitions) {
+          const badge = addRelationBadge(badges, badgeDefinition.label, badgeDefinition.value, badgeDefinition.state);
+          badge.dataset.badgeKey = badgeDefinition.key;
+          badge.setAttribute('role', 'button');
+          badge.setAttribute('tabindex', '0');
+          if (state.relationFocus && state.relationFocus.kind === 'badge' && state.relationFocus.key === badgeDefinition.key) {
+            badge.classList.add('is-selected');
+          }
+        }
+
+        addRelationFact(facts, t('relation.runtime'), String(runtime.launch_mode || t('relation.direct')));
+        addRelationFact(
+          facts,
+          t('relation.continuity'),
+          String(runtime.continuity && runtime.continuity.mode ? runtime.continuity.mode : t('relation.direct'))
+        );
+        addRelationFact(facts, t('relation.profile'), bridgeActive ? bridgeProfile : profileName);
+        addRelationFact(facts, t('relation.transport'), transportName(transportMode));
+        addRelationFact(facts, t('relation.room'), roomActive ? roomId : t('relation.none'));
+        addRelationFact(facts, t('relation.bridge'), bridgeActive ? bridgeId : t('relation.none'));
+        addRelationFact(
+          facts,
+          t('relation.autoForwardLabel'),
+          relationBooleanLabel(bridgeAutoForward, 'autoForwardOn', 'autoForwardOff')
+        );
+        addRelationFact(
+          facts,
+          t('relation.reviewMode'),
+          relationBooleanLabel(bridgeIntervention, 'reviewOn', 'reviewOff')
+        );
+        addRelationFact(facts, t('relation.pending'), format('relation.pendingCount', { count: pendingCount }));
+        addRelationFact(facts, t('relation.subscribersLabel'), format('relation.subscribers', { total: subscribers.total || 0 }));
+        addRelationFact(
+          facts,
+          t('relation.audit'),
+          auditActive ? format('relation.auditOn', { mode: String((audit.redaction && audit.redaction.mode) || 'default') }) : t('relation.auditOff')
+        );
+        addRelationFact(
+          facts,
+          t('relation.guard'),
+          guardLabel
+        );
+
+        for (const link of links) addRelationLedgerItem(ledger, link, nodeMap);
+        renderRelationSpotlight({
+          nodeMap,
+          linkMap,
+          badgeMap,
+          profileName,
+          bridgeProfile,
+          roomId,
+          pendingCount,
+          transportLabel,
+          deliverLabel,
+          guardLabel,
+        });
+      }
+
       async function refreshPending() {
         const args = bridgeArgs();
         if (!args.bridge_id && !args.room_id) {
@@ -2255,6 +4667,7 @@ GUI_HTML_TEMPLATE = r"""
 
       async function refreshStatus() {
         const res = await tool('status', {});
+        state.statusSnapshot = res;
         const detail = inferBridgeDetail(res);
         const inferred = detail ? (detail.bridge_id || '') : '';
         if (!$('bridge-id').value.trim() && inferred) $('bridge-id').value = inferred;
@@ -2400,6 +4813,9 @@ GUI_HTML_TEMPLATE = r"""
         document.querySelectorAll('[data-preset]').forEach(button => {
           button.addEventListener('click', () => applyPreset(button.dataset.preset));
         });
+        document.querySelectorAll('[data-workspace-tab]').forEach(button => {
+          button.addEventListener('click', () => setWorkspaceTab(button.dataset.workspaceTab));
+        });
         document.querySelectorAll('[data-lang]').forEach(button => {
           button.addEventListener('click', () => {
             if (button.dataset.lang === state.locale) return;
@@ -2446,14 +4862,85 @@ GUI_HTML_TEMPLATE = r"""
           syncMetrics();
           connectTransport();
         };
+        ['backend', 'profile', 'deliver', 'auto-forward', 'intervention'].forEach(id => {
+          $(id).addEventListener('change', () => syncMetrics());
+        });
+        $('relation-backend').onchange = () => {
+          $('backend').value = $('relation-backend').value;
+          syncMetrics();
+        };
+        $('relation-profile').onchange = () => {
+          $('profile').value = $('relation-profile').value;
+          syncMetrics();
+        };
+        $('relation-transport').onchange = () => {
+          $('transport').value = $('relation-transport').value;
+          $('transport').dispatchEvent(new Event('change'));
+        };
+        $('relation-deliver').onchange = () => {
+          $('deliver').value = $('relation-deliver').value;
+          syncMetrics();
+        };
+        $('relation-auto-forward').onchange = () => {
+          $('auto-forward').checked = $('relation-auto-forward').checked;
+          syncMetrics();
+        };
+        $('relation-intervention').onchange = () => {
+          $('intervention').checked = $('relation-intervention').checked;
+          syncMetrics();
+        };
+        $('relation-refresh').onclick = () => run(refreshStatus);
         $('pending-select').onchange = () => renderPendingDetail();
+        $('pending-edit').addEventListener('input', () => renderReviewSummary());
+        $('relation-diagram').addEventListener('click', event => {
+          const node = event.target.closest('.relation-node');
+          if (!node) return;
+          setRelationFocus({ kind: 'node', key: node.dataset.nodeKey || '' });
+          const target = relationNodeFocusTarget(node.dataset.nodeKey || '');
+          focusControlArea(target.targetId, target.tab, target);
+        });
+        $('relation-diagram').addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const node = event.target.closest('.relation-node');
+          if (!node) return;
+          event.preventDefault();
+          setRelationFocus({ kind: 'node', key: node.dataset.nodeKey || '' });
+          const target = relationNodeFocusTarget(node.dataset.nodeKey || '');
+          focusControlArea(target.targetId, target.tab, target);
+        });
+        $('relation-ledger').addEventListener('click', event => {
+          const item = event.target.closest('.relation-link-item');
+          if (!item) return;
+          setRelationFocus({ kind: 'link', key: item.dataset.linkKey || '' });
+        });
+        $('relation-ledger').addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const item = event.target.closest('.relation-link-item');
+          if (!item) return;
+          event.preventDefault();
+          setRelationFocus({ kind: 'link', key: item.dataset.linkKey || '' });
+        });
+        $('relation-badges').addEventListener('click', event => {
+          const badge = event.target.closest('.badge');
+          if (!badge) return;
+          setRelationFocus({ kind: 'badge', key: badge.dataset.badgeKey || '' });
+        });
+        $('relation-badges').addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          const badge = event.target.closest('.badge');
+          if (!badge) return;
+          event.preventDefault();
+          setRelationFocus({ kind: 'badge', key: badge.dataset.badgeKey || '' });
+        });
       }
 
       async function boot() {
         state.locale = preferredLocale();
         state.layout = preferredLayout();
+        state.workspaceTab = preferredWorkspaceTab();
         bind();
         translatePage();
+        setWorkspaceTab(state.workspaceTab, { persist: false });
         applyLayout(state.layout);
         document.body.dataset.home = 'preset-only';
         log(format('logs.ready', { endpoint: MCP_ENDPOINT }));
@@ -2469,6 +4956,7 @@ GUI_HTML_TEMPLATE = r"""
             option.textContent = profile;
             select.appendChild(option);
           }
+          syncMirroredSelectOptions('profile', 'relation-profile');
         });
         await run(refreshPending);
         await run(refreshStatus);
