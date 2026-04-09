@@ -1029,6 +1029,7 @@ GUI_HTML_TEMPLATE = r"""
       .relation-lines {
         position: absolute;
         inset: 0;
+        z-index: 1;
         width: 100%;
         height: 100%;
         pointer-events: none;
@@ -1070,7 +1071,7 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .relation-link-badge rect {
-        fill: rgba(255, 255, 255, 0.92);
+        fill: rgba(255, 255, 255, 0.985);
         stroke: rgba(217, 204, 184, 0.78);
         stroke-width: 1;
         rx: 999px;
@@ -1105,19 +1106,79 @@ GUI_HTML_TEMPLATE = r"""
         pointer-events: none;
       }
 
+      .relation-link-group.is-selected .relation-link {
+        stroke-width: 3.4;
+        filter: drop-shadow(0 0 10px rgba(47, 75, 92, 0.16));
+      }
+
+      .relation-link-group.is-selected .relation-link-badge rect {
+        stroke-width: 1.4;
+        stroke: rgba(47, 75, 92, 0.34);
+      }
+
       .relation-node {
         position: absolute;
-        width: 172px;
-        min-height: 102px;
+        z-index: 2;
+        width: 180px;
+        min-height: 118px;
         padding: 12px 14px;
         border: 1px solid color-mix(in oklab, var(--line) 76%, white);
         border-radius: 18px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 245, 237, 0.94));
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 243, 235, 0.985));
         box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.68);
         transform: translate(-50%, -50%);
         display: grid;
         gap: 6px;
         cursor: pointer;
+      }
+
+      .relation-node-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .relation-node-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .status-led {
+        position: relative;
+        display: inline-flex;
+        width: 12px;
+        height: 12px;
+        flex: 0 0 auto;
+        border-radius: 999px;
+        border: 1px solid rgba(47, 75, 92, 0.2);
+        background: rgba(125, 97, 88, 0.5);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      }
+
+      .status-led::after {
+        content: "";
+        position: absolute;
+        inset: 1.5px;
+        border-radius: inherit;
+        background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.06) 68%);
+      }
+
+      .status-led.is-ok {
+        background: linear-gradient(180deg, rgba(124, 214, 146, 0.98), rgba(54, 164, 87, 0.98));
+        box-shadow: 0 0 0 1px rgba(90, 195, 120, 0.18), 0 0 16px rgba(108, 212, 138, 0.34);
+      }
+
+      .status-led.is-warn {
+        background: linear-gradient(180deg, rgba(252, 219, 112, 0.98), rgba(214, 160, 36, 0.98));
+        box-shadow: 0 0 0 1px rgba(237, 194, 82, 0.18), 0 0 16px rgba(245, 206, 96, 0.3);
+      }
+
+      .status-led.is-down {
+        background: linear-gradient(180deg, rgba(241, 138, 138, 0.98), rgba(186, 62, 62, 0.98));
+        box-shadow: 0 0 0 1px rgba(219, 102, 102, 0.18), 0 0 16px rgba(232, 120, 120, 0.3);
       }
 
       .relation-node::before {
@@ -1199,6 +1260,47 @@ GUI_HTML_TEMPLATE = r"""
         font-size: 0.68rem;
         font-family: "IBM Plex Mono", "Consolas", monospace;
         word-break: break-word;
+      }
+
+      .relation-node-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 2px;
+      }
+
+      .relation-node-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 28px;
+        padding: 4px 9px;
+        border-radius: 999px;
+        border: 1px solid rgba(217, 204, 184, 0.84);
+        background: rgba(255, 255, 255, 0.96);
+        color: var(--accent-strong);
+        font-size: 0.67rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      .relation-node-action strong {
+        font-size: 0.64rem;
+        line-height: 1;
+        color: var(--muted);
+      }
+
+      .relation-node-action em {
+        font-style: normal;
+        color: var(--accent-strong);
+      }
+
+      .relation-node-action.is-on {
+        border-color: rgba(47, 75, 92, 0.24);
+      }
+
+      .relation-node-action.is-off {
+        border-style: dashed;
       }
 
       .relation-node:focus-visible {
@@ -1291,6 +1393,13 @@ GUI_HTML_TEMPLATE = r"""
         border-radius: 12px;
         border: 1px solid rgba(217, 204, 184, 0.78);
         background: rgba(255, 255, 255, 0.88);
+      }
+
+      .runtime-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
       }
 
       .runtime-card.is-active {
@@ -1631,6 +1740,66 @@ GUI_HTML_TEMPLATE = r"""
         --card-accent: var(--accent-alt);
       }
 
+      .fleet-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .workstream-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      [data-tooltip] {
+        position: relative;
+        cursor: help;
+        border-bottom: 1px dashed var(--muted);
+      }
+
+      [data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        transform: translateX(-50%) translateY(4px);
+        background: rgba(34, 55, 68, 0.95);
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 0.76rem;
+        line-height: 1.4;
+        width: 260px;
+        text-align: left;
+        pointer-events: none;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        z-index: 100;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        backdrop-filter: blur(4px);
+        font-weight: 400;
+      }
+
+      [data-tooltip]:hover::after {
+        opacity: 1;
+        visibility: visible;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      details.disclosure summary {
+        padding: 10px 14px;
+        background: rgba(255, 255, 255, 0.4);
+        border: 1px solid rgba(217, 204, 184, 0.4);
+        border-radius: 8px;
+        transition: background 0.2s ease;
+      }
+
+      details.disclosure summary:hover {
+        background: rgba(255, 255, 255, 0.7);
+      }
+
       @media (max-width: 1120px) {
         .layout {
           grid-template-columns: 1fr;
@@ -1775,28 +1944,49 @@ GUI_HTML_TEMPLATE = r"""
         </div>
       </section>
 
-      <section class="workspace-nav" id="workspace-nav" aria-label="Workspace Tabs">
-        <button class="workspace-tab active" data-workspace-tab="workflow" type="button">
-          <span class="workspace-tab-label">Workflow</span>
-          <span class="workspace-tab-meta" id="workspace-meta-workflow">launch + live</span>
-        </button>
-        <button class="workspace-tab" data-workspace-tab="topology" type="button">
-          <span class="workspace-tab-label">Topology</span>
-          <span class="workspace-tab-meta" id="workspace-meta-topology">live graph</span>
-        </button>
-        <button class="workspace-tab" data-workspace-tab="review" type="button">
-          <span class="workspace-tab-label">Review</span>
-          <span class="workspace-tab-meta" id="workspace-meta-review">queue idle</span>
-        </button>
-        <button class="workspace-tab" data-workspace-tab="inspect" type="button">
-          <span class="workspace-tab-label">Inspect</span>
-          <span class="workspace-tab-meta" id="workspace-meta-inspect">status + diagnostics</span>
-        </button>
-      </section>
+      <section class="layout">
+        <!-- Fleet Sidebar (1+n architecture) -->
+        <aside class="fleet-sidebar card">
+          <div class="card-head" style="margin-bottom: 4px; padding-bottom: 4px; border-bottom: none;">
+            <p class="card-kicker" data-i18n="fleet.title">Workstream Fleet</p>
+            <h2 data-i18n="fleet.overview">Overview</h2>
+          </div>
+          <p class="subtle" style="margin-bottom: 12px; margin-top: -6px;" data-i18n="fleet.hint">Select a workstream to manage.</p>
+          <div class="preset-grid" style="grid-template-columns: 1fr; margin-top: 0; gap: 8px;">
+            <button class="preset active" type="button">
+              <b>Main Workstream <span class="status-led is-ok" style="float: right;"></span></b>
+              <span>Host + Guest · 0 pending</span>
+            </button>
+            <button class="preset" type="button" style="opacity: 0.5;">
+              <b>+ New Workstream</b>
+              <span>Click to provision</span>
+            </button>
+          </div>
+        </aside>
 
-      <section class="workspace-strip" id="workspace-strip"></section>
+        <div class="workstream-panel">
+          <section class="workspace-nav" id="workspace-nav" aria-label="Workspace Tabs">
+            <button class="workspace-tab active" data-workspace-tab="workflow" type="button">
+              <span class="workspace-tab-label">Workflow</span>
+              <span class="workspace-tab-meta" id="workspace-meta-workflow">launch + live</span>
+            </button>
+            <button class="workspace-tab" data-workspace-tab="topology" type="button">
+              <span class="workspace-tab-label">Topology</span>
+              <span class="workspace-tab-meta" id="workspace-meta-topology">live graph</span>
+            </button>
+            <button class="workspace-tab" data-workspace-tab="review" type="button">
+              <span class="workspace-tab-label">Review</span>
+              <span class="workspace-tab-meta" id="workspace-meta-review">queue idle</span>
+            </button>
+            <button class="workspace-tab" data-workspace-tab="inspect" type="button">
+              <span class="workspace-tab-label">Inspect</span>
+              <span class="workspace-tab-meta" id="workspace-meta-inspect">status + diagnostics</span>
+            </button>
+          </section>
 
-      <section class="workspace-panels">
+          <section class="workspace-strip" id="workspace-strip"></section>
+
+          <section class="workspace-panels">
         <section class="workspace-panel is-active" data-workspace-panel="workflow">
           <section class="layout">
             <div class="stack">
@@ -1810,11 +2000,11 @@ GUI_HTML_TEMPLATE = r"""
 
             <div class="row">
               <div>
-                <label for="backend" data-i18n="fields.backend">backend</label>
+                <label for="backend" data-i18n="fields.backend" data-tooltip="決定 AI 代理程式要在哪種環境下被喚醒執行。例如獨立進程 (process) 或是常駐在背景終端 (tmux) 中。">backend</label>
                 <select id="backend">__BACKEND_OPTIONS__</select>
               </div>
               <div>
-                <label for="profile" data-i18n="fields.profile">profile</label>
+                <label for="profile" data-i18n="fields.profile" data-tooltip="決定這次連線要套用哪一種特性或預設系統提示策略 (System Prompt)，像是套用特定角色或行為限制。">profile</label>
                 <select id="profile">
                   <option value="generic">generic</option>
                   <option value="codex">codex</option>
@@ -1862,7 +2052,7 @@ GUI_HTML_TEMPLATE = r"""
                   <input id="backend-id" value="default">
                 </div>
                 <div>
-                  <label for="transport" data-i18n="fields.transport">live room transport</label>
+                  <label for="transport" data-i18n="fields.transport" data-tooltip="網頁介面即時接收對話與資料流的通道協議。SSE 耗能低適合單向接收，WebSocket 適合高頻的雙向控制。">live room transport</label>
                   <select id="transport">
                     <option value="sse" data-i18n="transport.sse">SSE</option>
                     <option value="ws" data-i18n="transport.ws">WebSocket</option>
@@ -2195,6 +2385,8 @@ GUI_HTML_TEMPLATE = r"""
           </section>
         </section>
       </section>
+        </div>
+      </section>
     </main>
 
     <script>
@@ -2499,6 +2691,8 @@ GUI_HTML_TEMPLATE = r"""
             autoForwardOff: 'off',
             reviewOn: 'on',
             reviewOff: 'off',
+            autoForwardShort: 'Auto FWD',
+            reviewShort: 'Review Gate',
             launchConfig: 'Launch config'
           },
           relationLanes: {
@@ -2856,6 +3050,8 @@ GUI_HTML_TEMPLATE = r"""
             autoForwardOff: '關閉',
             reviewOn: '開啟',
             reviewOff: '關閉',
+            autoForwardShort: '自動轉發',
+            reviewShort: '審核閘門',
             launchConfig: '啟動設定'
           },
           relationLanes: {
@@ -2990,6 +3186,7 @@ GUI_HTML_TEMPLATE = r"""
       };
 
       const RELATION_CANVAS = { width: 980, height: 428 };
+      const RELATION_NODE_BOX = { width: 180, height: 126 };
       const RELATION_POSITIONS = {
         gui: { x: 150, y: 96 },
         mcp: { x: 150, y: 214 },
@@ -3917,6 +4114,28 @@ GUI_HTML_TEMPLATE = r"""
         return t('relation.' + name);
       }
 
+      function relationLedTone(stateName) {
+        if (stateName === 'active') return 'ok';
+        if (stateName === 'attention' || stateName === 'standby') return 'warn';
+        return 'down';
+      }
+
+      function relationToggleLabel(value, onKey, offKey) {
+        return value ? t('relation.' + onKey) : t('relation.' + offKey);
+      }
+
+      function toggleRelationSetting(name) {
+        if (name === 'auto-forward') {
+          $('auto-forward').checked = !$('auto-forward').checked;
+          syncMetrics();
+          return;
+        }
+        if (name === 'intervention') {
+          $('intervention').checked = !$('intervention').checked;
+          syncMetrics();
+        }
+      }
+
       function setRelationFocus(focus) {
         state.relationFocus = focus || null;
         renderRelationView();
@@ -3981,9 +4200,18 @@ GUI_HTML_TEMPLATE = r"""
         node.setAttribute('role', 'button');
         node.setAttribute('tabindex', '0');
 
+        const head = document.createElement('div');
+        head.className = 'relation-node-head';
+        const stateWrap = document.createElement('div');
+        stateWrap.className = 'relation-node-state';
+        const led = document.createElement('span');
+        led.className = 'status-led is-' + relationLedTone(definition.state);
         const tag = document.createElement('div');
         tag.className = 'relation-node-tag';
         tag.textContent = t('relation.' + definition.state);
+        stateWrap.appendChild(led);
+        stateWrap.appendChild(tag);
+        head.appendChild(stateWrap);
 
         const title = document.createElement('strong');
         title.textContent = definition.title;
@@ -3991,7 +4219,7 @@ GUI_HTML_TEMPLATE = r"""
         const detail = document.createElement('span');
         detail.textContent = definition.detail;
 
-        node.appendChild(tag);
+        node.appendChild(head);
         node.appendChild(title);
         node.appendChild(detail);
 
@@ -4001,33 +4229,101 @@ GUI_HTML_TEMPLATE = r"""
           node.appendChild(code);
         }
 
+        if (Array.isArray(definition.controls) && definition.controls.length) {
+          const actions = document.createElement('div');
+          actions.className = 'relation-node-actions';
+          for (const control of definition.controls) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'relation-node-action is-' + (control.on ? 'on' : 'off');
+            button.dataset.controlAction = control.action;
+            button.dataset.nodeKey = definition.key;
+            button.setAttribute('aria-pressed', control.on ? 'true' : 'false');
+            const label = document.createElement('strong');
+            label.textContent = control.label;
+            const value = document.createElement('em');
+            value.textContent = control.value;
+            button.appendChild(label);
+            button.appendChild(value);
+            actions.appendChild(button);
+          }
+          node.appendChild(actions);
+        }
+
         container.appendChild(node);
       }
 
-      function relationLinkPath(start, end) {
-        const deltaX = end.x - start.x;
-        const control = Math.max(76, Math.min(160, Math.abs(deltaX) * 0.42));
-        const direction = deltaX >= 0 ? 1 : -1;
-        const c1x = start.x + control * direction;
-        const c2x = end.x - control * direction;
-        return 'M' + start.x + ' ' + start.y + ' C ' + c1x + ' ' + start.y + ', ' + c2x + ' ' + end.y + ', ' + end.x + ' ' + end.y;
+      function relationLinkGeometry(definition, start, end) {
+        const halfWidth = RELATION_NODE_BOX.width / 2;
+        const halfHeight = RELATION_NODE_BOX.height / 2;
+        const horizontal = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y);
+        if (!horizontal) {
+          const source = {
+            x: start.x,
+            y: start.y + (end.y >= start.y ? halfHeight : -halfHeight),
+          };
+          const target = {
+            x: end.x,
+            y: end.y - (end.y >= start.y ? halfHeight : -halfHeight),
+          };
+          const drift = definition.routeDrift || (end.x >= start.x ? 24 : -24);
+          const controlY = (source.y + target.y) / 2 + (definition.routeLift || 0);
+          const controlX = source.x + drift;
+          return {
+            source,
+            target,
+            label: { x: ((source.x + target.x) / 2) + drift * 0.35, y: controlY - 10 },
+            d: 'M' + source.x + ' ' + source.y
+              + ' C ' + controlX + ' ' + controlY
+              + ', ' + (target.x - drift) + ' ' + controlY
+              + ', ' + target.x + ' ' + target.y,
+          };
+        }
+        const source = {
+          x: start.x + (end.x >= start.x ? halfWidth : -halfWidth),
+          y: start.y,
+        };
+        const target = {
+          x: end.x - (end.x >= start.x ? halfWidth : -halfWidth),
+          y: end.y,
+        };
+        const spread = Math.max(54, Math.abs(target.x - source.x) * 0.26);
+        const lift = definition.routeLift || 0;
+        const direction = end.x >= start.x ? 1 : -1;
+        const c1x = source.x + spread * direction;
+        const c2x = target.x - spread * direction;
+        const c1y = source.y + lift;
+        const c2y = target.y + lift;
+        return {
+          source,
+          target,
+          label: { x: (source.x + target.x) / 2, y: ((source.y + target.y) / 2) + lift * 0.55 - 8 },
+          d: 'M' + source.x + ' ' + source.y
+            + ' C ' + c1x + ' ' + c1y
+            + ', ' + c2x + ' ' + c2y
+            + ', ' + target.x + ' ' + target.y,
+        };
       }
 
       function addRelationLink(svg, definition) {
         const start = RELATION_POSITIONS[definition.from];
         const end = RELATION_POSITIONS[definition.to];
         if (!start || !end) return;
+        const geometry = relationLinkGeometry(definition, start, end);
 
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.setAttribute('class', 'relation-link-group');
         group.dataset.linkKey = definition.key || '';
+        if (state.relationFocus && state.relationFocus.kind === 'link' && state.relationFocus.key === definition.key) {
+          group.classList.add('is-selected');
+        }
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', relationLinkPath(start, end));
+        path.setAttribute('d', geometry.d);
         path.setAttribute('class', 'relation-link is-' + definition.state);
         group.appendChild(path);
 
-        for (const point of [start, end]) {
+        for (const point of [geometry.source, geometry.target]) {
           const pin = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           pin.setAttribute('cx', String(point.x));
           pin.setAttribute('cy', String(point.y));
@@ -4039,8 +4335,8 @@ GUI_HTML_TEMPLATE = r"""
         if (definition.label) {
           const badge = document.createElementNS('http://www.w3.org/2000/svg', 'g');
           badge.setAttribute('class', 'relation-link-badge is-' + definition.state);
-          const x = (start.x + end.x) / 2 + (definition.dx || 0);
-          const y = (start.y + end.y) / 2 + (definition.dy || -6);
+          const x = geometry.label.x + (definition.dx || 0);
+          const y = geometry.label.y + (definition.dy || 0);
           const width = Math.max(78, definition.label.length * 7.2 + 18);
           const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
           rect.setAttribute('x', String(x - width / 2));
@@ -4103,11 +4399,17 @@ GUI_HTML_TEMPLATE = r"""
       function addRuntimeCard(container, options) {
         const card = document.createElement('section');
         card.className = 'runtime-card is-' + options.state;
+        const head = document.createElement('div');
+        head.className = 'runtime-card-head';
+        const led = document.createElement('span');
+        led.className = 'status-led is-' + relationLedTone(options.state);
         const title = document.createElement('strong');
         title.textContent = options.title;
+        head.appendChild(title);
+        head.appendChild(led);
         const summary = document.createElement('span');
         summary.textContent = options.summary;
-        card.appendChild(title);
+        card.appendChild(head);
         card.appendChild(summary);
         if (options.drift) {
           const drift = document.createElement('span');
@@ -4370,6 +4672,14 @@ GUI_HTML_TEMPLATE = r"""
               ? format('relation.pendingCount', { count: pendingCount })
               : (reviewEnabled ? t('relation.reviewDetail') : t('relation.reviewOff')),
             code: guard && guard.guard_reason ? String(guard.guard_reason) : '',
+            controls: [
+              {
+                action: 'intervention',
+                label: t('relation.reviewShort'),
+                value: relationToggleLabel(bridgeIntervention, 'reviewOn', 'reviewOff'),
+                on: bridgeIntervention,
+              },
+            ],
           },
           {
             key: 'bridge',
@@ -4377,6 +4687,14 @@ GUI_HTML_TEMPLATE = r"""
             title: t('relation.bridge'),
             detail: bridgeActive ? t('relation.bridgeDetail') : t('relation.launchConfig'),
             code: bridgeId,
+            controls: [
+              {
+                action: 'auto-forward',
+                label: t('relation.autoForwardShort'),
+                value: relationToggleLabel(bridgeAutoForward, 'autoForwardOn', 'autoForwardOff'),
+                on: bridgeAutoForward,
+              },
+            ],
           },
           {
             key: 'host',
@@ -4403,8 +4721,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'server',
             label: 'tools/call',
             state: 'active',
-            dx: -14,
-            dy: -14,
+            routeLift: -18,
+            dx: 0,
+            dy: -4,
             detail: t('relation.gui') + ' -> ' + t('relation.server') + ' JSON-RPC',
           },
           {
@@ -4413,8 +4732,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'server',
             label: 'HTTP /mcp',
             state: mcpFocused ? 'active' : 'standby',
-            dx: -10,
-            dy: 16,
+            routeLift: 0,
+            dx: -4,
+            dy: 0,
             detail: t('relation.mcp') + ' endpoint /mcp',
           },
           {
@@ -4423,8 +4743,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'room',
             label: 'room state',
             state: roomActive ? 'active' : 'standby',
-            dx: 14,
-            dy: -12,
+            routeLift: 16,
+            dx: 0,
+            dy: 2,
             detail: roomActive ? roomId : t('relation.none'),
           },
           {
@@ -4433,8 +4754,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'room',
             label: transportLabel,
             state: roomActive ? 'active' : 'standby',
+            routeLift: -34,
             dx: 0,
-            dy: -18,
+            dy: -4,
             detail: format('relation.subscribers', { total: subscribers.total || 0 }),
           },
           {
@@ -4443,8 +4765,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'bridge',
             label: relayLabel,
             state: bridgeActive && roomActive ? (reviewAttention ? 'attention' : 'active') : 'standby',
-            dx: 32,
-            dy: -10,
+            routeLift: -18,
+            dx: 0,
+            dy: -2,
             detail: relationBooleanLabel(bridgeAutoForward, 'autoForwardOn', 'autoForwardOff'),
           },
           {
@@ -4453,8 +4776,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'host',
             label: 'pane A',
             state: hostPane ? (bridgeActive ? 'active' : 'standby') : 'muted',
-            dx: 28,
-            dy: -12,
+            routeLift: -22,
+            dx: 0,
+            dy: -2,
             detail: hostPane || t('metrics.notReady'),
           },
           {
@@ -4463,8 +4787,9 @@ GUI_HTML_TEMPLATE = r"""
             to: 'guest',
             label: 'pane B',
             state: guestPane ? (bridgeActive ? 'active' : 'standby') : 'muted',
-            dx: 28,
-            dy: 16,
+            routeLift: 22,
+            dx: 0,
+            dy: 2,
             detail: bridgeProfile + ' · ' + (guestPane || t('metrics.notReady')),
           },
           {
@@ -4473,8 +4798,10 @@ GUI_HTML_TEMPLATE = r"""
             to: 'review',
             label: reviewLabel,
             state: reviewAttention ? 'attention' : (reviewEnabled ? 'active' : 'standby'),
-            dx: 4,
-            dy: -14,
+            routeLift: 28,
+            routeDrift: -32,
+            dx: 12,
+            dy: 0,
             detail: format('relation.pendingCount', { count: pendingCount }),
           },
           {
@@ -4483,8 +4810,10 @@ GUI_HTML_TEMPLATE = r"""
             to: 'audit',
             label: auditActive ? 'TB2_AUDIT' : t('relation.auditOff'),
             state: auditActive ? 'active' : (preset.showDiagnostics || state.preset === 'mission' ? 'standby' : 'muted'),
-            dx: -12,
-            dy: 18,
+            routeLift: 18,
+            routeDrift: -28,
+            dx: 12,
+            dy: 0,
             detail: auditActive ? String(audit.file || audit.root || '') : t('relation.auditOff'),
           },
         ];
@@ -4893,6 +5222,12 @@ GUI_HTML_TEMPLATE = r"""
         $('pending-select').onchange = () => renderPendingDetail();
         $('pending-edit').addEventListener('input', () => renderReviewSummary());
         $('relation-diagram').addEventListener('click', event => {
+          const action = event.target.closest('.relation-node-action');
+          if (action) {
+            toggleRelationSetting(action.dataset.controlAction || '');
+            setRelationFocus({ kind: 'node', key: action.dataset.nodeKey || '' });
+            return;
+          }
           const node = event.target.closest('.relation-node');
           if (!node) return;
           setRelationFocus({ kind: 'node', key: node.dataset.nodeKey || '' });
@@ -4900,6 +5235,13 @@ GUI_HTML_TEMPLATE = r"""
           focusControlArea(target.targetId, target.tab, target);
         });
         $('relation-diagram').addEventListener('keydown', event => {
+          const action = event.target.closest('.relation-node-action');
+          if (action && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            toggleRelationSetting(action.dataset.controlAction || '');
+            setRelationFocus({ kind: 'node', key: action.dataset.nodeKey || '' });
+            return;
+          }
           if (event.key !== 'Enter' && event.key !== ' ') return;
           const node = event.target.closest('.relation-node');
           if (!node) return;
