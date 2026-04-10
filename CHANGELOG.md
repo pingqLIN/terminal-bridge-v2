@@ -11,11 +11,14 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Regression coverage for dead-process pruning in `process` / `pipe` session views, duplicate `bridge_start` room reuse, forbidden-origin transport requests, and incomplete MCP POST bodies.
 - Machine-readable room event source fields so consumers can distinguish client, terminal, bridge automation, intervention, and control events without parsing `author`.
 - Opt-in append-only JSONL audit trail support for room messages, bridge lifecycle, intervention actions, and direct operator control actions.
+- Machine-readable security posture snapshots across `status`, `doctor`, `/healthz`, and `/mcp`, plus explicit non-loopback bind acknowledgment via `--allow-remote` / `TB2_ALLOW_REMOTE=1`.
+- Release-facing security posture docs and support-tier guidance for local-first, private-network experimental, and public-edge unsupported adoption paths.
 
 ### Changed
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
 - Local HTTP, SSE, and WebSocket control surfaces now enforce localhost-only `Origin` checks and safer request parsing.
 - `tb2 doctor` now surfaces readiness, validation coverage, and next-step guidance alongside backend and client probes.
+- Packaging metadata now declares the README, classifiers, project URLs, and adoption posture more clearly for external consumers.
 - Bridge status now reports auto-forward guard state, and runaway auto-forward flows now switch into intervention until pending review is resolved.
 - `status` now reports audit-trail enablement and destination details so operators can verify persistence state from the active control surface.
 - GUI diagnostics now surface audit enablement and recent persisted entries for the active room / bridge scope.

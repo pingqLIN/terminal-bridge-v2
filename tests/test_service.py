@@ -122,11 +122,21 @@ def test_restart_service_calls_stop_then_start(monkeypatch):
         calls["stop"] = True
         return service.ServiceStatus(False, None, "127.0.0.1", 3189, "/tmp/s", "/tmp/l")
 
-    def _start(*, host: str, port: int, python_exe, force: bool, _previous_state=None, _previous_runtime_active=False):
+    def _start(
+        *,
+        host: str,
+        port: int,
+        python_exe,
+        force: bool,
+        allow_remote: bool = False,
+        _previous_state=None,
+        _previous_runtime_active=False,
+    ):
         calls["start"] = True
         assert host == "127.0.0.1"
         assert port == 3201
         assert force is True
+        assert allow_remote is False
         return service.ServiceStatus(True, 1, host, port, "/tmp/s", "/tmp/l")
 
     monkeypatch.setattr(service, "stop_service", _stop)
@@ -200,7 +210,11 @@ def test_restart_service_discards_runtime_state_payload(tmp_path, monkeypatch):
 def test_restart_service_reuses_previous_binding_when_args_omitted(monkeypatch):
     calls = {}
 
-    monkeypatch.setattr(service, "_load_state", lambda path: {"host": "0.0.0.0", "port": 4567})
+    monkeypatch.setattr(
+        service,
+        "_load_state",
+        lambda path: {"host": "0.0.0.0", "port": 4567, "config": {"allow_remote": True}},
+    )
     monkeypatch.setattr(
         service,
         "status_service",
@@ -212,10 +226,20 @@ def test_restart_service_reuses_previous_binding_when_args_omitted(monkeypatch):
         lambda: service.ServiceStatus(False, None, "0.0.0.0", 4567, "/tmp/s", "/tmp/l"),
     )
 
-    def _start(*, host: str, port: int, python_exe, force: bool, _previous_state=None, _previous_runtime_active=False):
+    def _start(
+        *,
+        host: str,
+        port: int,
+        python_exe,
+        force: bool,
+        allow_remote: bool = False,
+        _previous_state=None,
+        _previous_runtime_active=False,
+    ):
         calls["host"] = host
         calls["port"] = port
         calls["force"] = force
+        calls["allow_remote"] = allow_remote
         calls["previous_state"] = _previous_state
         calls["previous_runtime_active"] = _previous_runtime_active
         return service.ServiceStatus(True, 3579, host, port, "/tmp/s", "/tmp/l")
@@ -229,8 +253,9 @@ def test_restart_service_reuses_previous_binding_when_args_omitted(monkeypatch):
     assert calls["host"] == "0.0.0.0"
     assert calls["port"] == 4567
     assert calls["force"] is True
+    assert calls["allow_remote"] is True
     assert calls["previous_runtime_active"] is True
-    assert calls["previous_state"] == {"host": "0.0.0.0", "port": 4567}
+    assert calls["previous_state"] == {"host": "0.0.0.0", "port": 4567, "config": {"allow_remote": True}}
 
 
 def test_restart_service_preserves_audit_env_overrides(tmp_path, monkeypatch):
@@ -309,6 +334,7 @@ def test_restart_service_treats_stale_state_as_fresh_start(tmp_path, monkeypatch
                 "port": 4567,
                 "started_at": 123.0,
                 "config": {
+                    "allow_remote": True,
                     "env_overrides": {
                         "TB2_AUDIT": "1",
                     }
@@ -480,6 +506,7 @@ def test_runtime_contract_reads_service_state_metadata(tmp_path, monkeypatch):
     assert runtime["restart_behavior"] == "best_effort_restore"
     assert runtime["recovery_source"] == "service_state_snapshot"
     assert runtime["workstream_count"] == 0
+    assert runtime["security_posture"]["support_tier"] == "local-first-supported"
 
 
 def test_runtime_contract_counts_persisted_workstreams(tmp_path, monkeypatch):
@@ -549,3 +576,39 @@ def test_persist_runtime_snapshot_updates_service_state(tmp_path, monkeypatch):
     assert saved["runtime"]["continuity"]["mode"] == "restart_restored"
     assert saved["runtime"]["continuity"]["runtime_restored"] is True
     assert saved["workstreams"][0]["workstream_id"] == "main-flow"
+
+
+def test_start_service_rejects_non_loopback_without_allow_remote(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+
+    with pytest.raises(RuntimeError, match="non-loopback bind requires explicit acknowledgment"):
+        service.start_service(host="0.0.0.0", port=3190)
+
+
+def test_runtime_contract_reads_remote_allowance_from_service_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": 2468,
+                "host": "10.0.0.5",
+                "port": 3189,
+                "config": {
+                    "allow_remote": True,
+                    "env_overrides": {},
+                },
+                "runtime": {
+                    "launch_mode": "service",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runtime = service.runtime_contract()
+
+    assert runtime["security_posture"]["bind_scope"] == "private-network"
+    assert runtime["security_posture"]["remote_access_acknowledged"] is True

@@ -2641,7 +2641,8 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeAuditOn: 'Audit on',
             statusBadgeAuditOff: 'Audit off',
             statusBadgeAuditRaw: 'Audit raw text',
-            statusBadgeAuditRawBlocked: 'Audit raw blocked'
+            statusBadgeAuditRawBlocked: 'Audit raw blocked',
+            statusBadgeSecurity: 'Security {tier}'
           },
           auditEvents: {
             all: 'all events'
@@ -3012,7 +3013,8 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeAuditOn: 'Audit 已啟用',
             statusBadgeAuditOff: 'Audit 未啟用',
             statusBadgeAuditRaw: 'Audit 含 raw text',
-            statusBadgeAuditRawBlocked: 'Audit raw 已阻擋'
+            statusBadgeAuditRawBlocked: 'Audit raw 已阻擋',
+            statusBadgeSecurity: 'Security {tier}'
           },
           auditEvents: {
             all: '全部事件'
@@ -4157,6 +4159,9 @@ GUI_HTML_TEMPLATE = r"""
         if (status && status.audit && status.audit.enabled && status.audit.redaction && status.audit.redaction.stores_raw_text) {
           labels.push(t('cards.statusBadgeAuditRaw'));
         }
+        if (status && status.security && status.security.support_tier) {
+          labels.push(format('cards.statusBadgeSecurity', { tier: status.security.support_tier }));
+        }
         return labels;
       }
 
@@ -4164,6 +4169,13 @@ GUI_HTML_TEMPLATE = r"""
         const box = $('status-badges');
         box.innerHTML = '';
         renderWorkstreamFleet(status);
+        const note = $('status-note');
+        if (note) {
+          const warnings = Array.isArray(status && status.security && status.security.warnings)
+            ? status.security.warnings
+            : [];
+          note.textContent = warnings.length ? warnings[0] : t('cards.statusNote');
+        }
         const detail = inferBridgeDetail(status);
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
         const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];

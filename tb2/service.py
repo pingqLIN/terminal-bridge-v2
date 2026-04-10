@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .security import allow_remote_from_env, build_security_posture, validate_server_binding
+
 _STATE_SCHEMA_VERSION = 1
 _RUNTIME_PERSISTENCE_DIRECT = "memory_only"
 _RUNTIME_RESTART_BEHAVIOR_DIRECT = "state_lost"
@@ -46,6 +48,7 @@ _AUDIT_ENV_KEYS = (
     "TB2_AUDIT_MAX_BYTES",
     "TB2_AUDIT_MAX_FILES",
     "TB2_AUDIT_TEXT_MODE",
+    "TB2_ALLOW_REMOTE",
 )
 
 
@@ -95,6 +98,7 @@ def start_service(
     port: int = 3189,
     python_exe: Optional[str] = None,
     force: bool = False,
+    allow_remote: bool = False,
     _previous_state: Optional[Dict[str, object]] = None,
     _previous_runtime_active: bool = False,
 ) -> ServiceStatus:
@@ -111,6 +115,8 @@ def start_service(
         if _pid_alive(current.pid):
             raise RuntimeError(f"failed to stop existing tb2 service (pid={current.pid})")
 
+    effective_allow_remote = bool(allow_remote or allow_remote_from_env())
+    validate_server_binding(host, allow_remote=effective_allow_remote)
     cmd = [
         python_exe or sys.executable,
         "-m",
@@ -121,6 +127,8 @@ def start_service(
         "--port",
         str(port),
     ]
+    if effective_allow_remote:
+        cmd.append("--allow-remote")
     env_overrides = _service_env_overrides(previous_state=previous_state)
     proc = _spawn_detached(cmd=cmd, log_file=paths.log_file, env=_launch_env(env_overrides))
     _save_state(
@@ -131,6 +139,7 @@ def start_service(
             port=int(port),
             cmd=cmd,
             env_overrides=env_overrides,
+            allow_remote=effective_allow_remote,
             previous_state=previous_state,
             previous_runtime_active=_previous_runtime_active,
         ),
@@ -175,6 +184,7 @@ def restart_service(
     host: Optional[str] = None,
     port: Optional[int] = None,
     python_exe: Optional[str] = None,
+    allow_remote: Optional[bool] = None,
 ) -> ServiceStatus:
     """Restart the background tb2 service."""
     paths = ServicePaths.discover()
@@ -182,12 +192,16 @@ def restart_service(
     current = status_service(paths=paths)
     previous_host = str(previous_state.get("host", current.host))
     previous_port = _as_port(previous_state.get("port"), default=current.port)
+    previous_config = previous_state.get("config")
+    previous_config_dict = previous_config if isinstance(previous_config, dict) else {}
+    previous_allow_remote = bool(previous_config_dict.get("allow_remote", False))
     stop_service()
     return start_service(
         host=host or previous_host,
         port=previous_port if port is None else int(port),
         python_exe=python_exe,
         force=True,
+        allow_remote=previous_allow_remote if allow_remote is None else bool(allow_remote),
         _previous_state=previous_state,
         _previous_runtime_active=current.running,
     )
@@ -228,6 +242,7 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
     state = _load_state(p.state_file)
     runtime = state.get("runtime")
     if not isinstance(runtime, dict):
+        posture = build_security_posture("127.0.0.1")
         return {
             "state_persistence": _RUNTIME_PERSISTENCE_DIRECT,
             "restart_behavior": _RUNTIME_RESTART_BEHAVIOR_DIRECT,
@@ -242,11 +257,18 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
                 "previous_started_at": None,
             },
             "workstream_count": 0,
+            "security_posture": posture.to_dict(),
         }
     continuity = runtime.get("continuity")
     continuity_dict = continuity if isinstance(continuity, dict) else {}
     launch_mode = str(runtime.get("launch_mode", _SERVICE_LAUNCH_MODE))
     defaults = _runtime_defaults(launch_mode)
+    config = state.get("config")
+    config_dict = config if isinstance(config, dict) else {}
+    posture = build_security_posture(
+        str(state.get("host", "127.0.0.1")),
+        allow_remote=bool(config_dict.get("allow_remote", False)),
+    )
     workstreams = state.get("workstreams")
     workstream_items = workstreams if isinstance(workstreams, list) else []
     return {
@@ -263,6 +285,7 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
             "previous_started_at": _as_float(continuity_dict.get("previous_started_at")),
         },
         "workstream_count": len(workstream_items),
+        "security_posture": posture.to_dict(),
     }
 
 
@@ -478,6 +501,7 @@ def _build_state(
     port: int,
     cmd: List[str],
     env_overrides: Dict[str, str],
+    allow_remote: bool,
     previous_state: Dict[str, object],
     previous_runtime_active: bool,
 ) -> Dict[str, object]:
@@ -493,6 +517,7 @@ def _build_state(
         "cmd": cmd,
         "config": {
             "env_overrides": env_overrides,
+            "allow_remote": bool(allow_remote),
         },
         "runtime": {
             "launch_mode": _SERVICE_LAUNCH_MODE,

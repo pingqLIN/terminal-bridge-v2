@@ -65,12 +65,14 @@ class TestBuildParser:
         args = p.parse_args(["server"])
         assert args.host == "127.0.0.1"
         assert args.port == 3189
+        assert args.allow_remote is False
 
     def test_gui_defaults(self):
         p = build_parser()
         args = p.parse_args(["gui"])
         assert args.host == "127.0.0.1"
         assert args.port == 3189
+        assert args.allow_remote is False
         assert args.no_browser is False
 
     def test_backend_choices(self):
@@ -90,6 +92,7 @@ class TestBuildParser:
         assert args.service_cmd == "start"
         assert args.host == "127.0.0.1"
         assert args.port == 3189
+        assert args.allow_remote is False
         assert args.force is False
 
     def test_service_logs_defaults(self):
@@ -283,7 +286,7 @@ class TestGuiCommand:
         args = p.parse_args(["gui", "--host", "127.0.0.1", "--port", "3199", "--no-browser"])
         result = cmd_gui(MagicMock(), args)
         assert result == 0
-        mock_run_server.assert_called_once_with(host="127.0.0.1", port=3199)
+        mock_run_server.assert_called_once_with(host="127.0.0.1", port=3199, allow_remote=False)
         mock_open.assert_not_called()
 
 
@@ -338,7 +341,7 @@ class TestServiceCommand:
         }
         result = args.fn(MagicMock(), args)
         assert result == 0
-        mock_start.assert_called_once_with(host="127.0.0.1", port=3199, python_exe="", force=False)
+        mock_start.assert_called_once_with(host="127.0.0.1", port=3199, python_exe="", force=False, allow_remote=False)
 
     @patch("tb2.service.stop_service")
     def test_service_stop_dispatch(self, mock_stop):
@@ -370,7 +373,7 @@ class TestServiceCommand:
         }
         result = args.fn(MagicMock(), args)
         assert result == 0
-        mock_restart.assert_called_once_with(host="127.0.0.1", port=3200, python_exe="")
+        mock_restart.assert_called_once_with(host="127.0.0.1", port=3200, python_exe="", allow_remote=None)
 
     @patch("tb2.service.restart_service")
     def test_service_restart_dispatch_preserves_previous_binding_when_omitted(self, mock_restart):
@@ -386,7 +389,7 @@ class TestServiceCommand:
         }
         result = args.fn(MagicMock(), args)
         assert result == 0
-        mock_restart.assert_called_once_with(host=None, port=None, python_exe="")
+        mock_restart.assert_called_once_with(host=None, port=None, python_exe="", allow_remote=None)
 
     @patch("tb2.service.tail_log")
     def test_service_logs_dispatch(self, mock_tail, capsys):

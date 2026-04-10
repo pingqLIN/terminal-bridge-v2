@@ -89,7 +89,7 @@ def cmd_profiles(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
 def cmd_server(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     from .server import run_server
-    run_server(host=args.host, port=args.port)
+    run_server(host=args.host, port=args.port, allow_remote=bool(args.allow_remote))
     return 0
 
 
@@ -105,7 +105,7 @@ def cmd_gui(_backend: TmuxBackend, args: argparse.Namespace) -> int:
         timer.daemon = True
         timer.start()
 
-    run_server(host=args.host, port=args.port)
+    run_server(host=args.host, port=args.port, allow_remote=bool(args.allow_remote))
     return 0
 
 
@@ -119,6 +119,7 @@ def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
             port=args.port,
             python_exe=args.python,
             force=args.force,
+            allow_remote=bool(args.allow_remote),
         )
         print(json.dumps({"action": "start", **st.to_dict()}, ensure_ascii=False))
         return 0
@@ -133,6 +134,7 @@ def cmd_service(_backend: TmuxBackend, args: argparse.Namespace) -> int:
             host=args.host,
             port=args.port,
             python_exe=args.python,
+            allow_remote=args.allow_remote,
         )
         print(json.dumps({"action": "restart", **st.to_dict()}, ensure_ascii=False))
         return 0
@@ -434,12 +436,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("server", help="start MCP HTTP server")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=3189)
+    s.add_argument("--allow-remote", action="store_true", help="explicitly acknowledge non-loopback bind risk")
     s.set_defaults(fn=cmd_server)
 
     # gui
     s = sub.add_parser("gui", help="start web GUI server")
     s.add_argument("--host", default="127.0.0.1")
     s.add_argument("--port", type=int, default=3189)
+    s.add_argument("--allow-remote", action="store_true", help="explicitly acknowledge non-loopback bind risk")
     s.add_argument("--no-browser", action="store_true", help="do not open browser automatically")
     s.set_defaults(fn=cmd_gui)
 
@@ -451,6 +455,7 @@ def build_parser() -> argparse.ArgumentParser:
     s_start.add_argument("--host", default="127.0.0.1")
     s_start.add_argument("--port", type=int, default=3189)
     s_start.add_argument("--python", default="", help="python executable to launch")
+    s_start.add_argument("--allow-remote", action="store_true", help="explicitly acknowledge non-loopback bind risk")
     s_start.add_argument("--force", action="store_true", help="stop existing instance first")
     s_start.set_defaults(fn=cmd_service)
 
@@ -465,6 +470,7 @@ def build_parser() -> argparse.ArgumentParser:
     s_restart.add_argument("--host", default=None)
     s_restart.add_argument("--port", type=int, default=None)
     s_restart.add_argument("--python", default="", help="python executable to launch")
+    s_restart.add_argument("--allow-remote", action="store_true", default=None, help="explicitly acknowledge non-loopback bind risk")
     s_restart.set_defaults(fn=cmd_service)
 
     s_logs = ss.add_parser("logs", help="show service logs")

@@ -56,7 +56,8 @@ const messages = {
   'cards.statusBadgeAuditOn': 'Audit on',
   'cards.statusBadgeAuditOff': 'Audit off',
   'cards.statusBadgeAuditRaw': 'Audit raw text',
-  'cards.statusBadgeAuditRawBlocked': 'Audit raw blocked'
+  'cards.statusBadgeAuditRawBlocked': 'Audit raw blocked',
+  'cards.statusBadgeSecurity': 'Security {tier}'
 };
 function t(path) {
   return messages[path] || path;
@@ -390,6 +391,7 @@ class TestStatusHandler:
         assert result["audit"]["redaction"]["raw_text_opt_in_acknowledged"] is False
         assert result["audit"]["redaction"]["raw_text_opt_in_blocked"] is True
         assert result["audit"]["redaction"]["raw_text_opt_in_env"] == "TB2_AUDIT_ALLOW_FULL_TEXT"
+        assert result["security"]["support_tier"] == "local-first-supported"
 
 
 class TestAuditTrail:
@@ -1560,6 +1562,7 @@ class TestGuiRouting:
         assert "function statusSummaryLabels(status, detail, subscribers)" in html
         assert "cards.statusBadgeAuditRaw" in html
         assert "cards.statusBadgeAuditRawBlocked" in html
+        assert "cards.statusBadgeSecurity" in html
         assert "status.audit.redaction && status.audit.redaction.raw_text_opt_in_blocked" in html
         assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html
@@ -1612,6 +1615,9 @@ class TestGuiRouting:
                     raw_text_opt_in_blocked: true,
                     stores_raw_text: false
                   }
+                },
+                security: {
+                  support_tier: 'private-network-experimental'
                 }
               },
               {
@@ -1631,6 +1637,7 @@ class TestGuiRouting:
         assert "Subs 1 (sse 0 / ws 1)" in labels
         assert "Audit on" in labels
         assert "Audit raw blocked" in labels
+        assert "Security private-network-experimental" in labels
         assert "Audit raw text" not in labels
 
     @patch("tb2.gui.default_backend_name", return_value="tmux")
@@ -1652,6 +1659,7 @@ class TestGuiRouting:
         payload = json.loads(body.decode("utf-8"))
         assert payload["ok"] is True
         assert payload["endpoint"] == "/mcp"
+        assert payload["security"]["support_tier"] == "local-first-supported"
 
     def test_get_unknown_path(self):
         code, content_type, body = server_mod._handle_get_path("/missing")
@@ -1687,6 +1695,10 @@ class TestValidationHelpers:
     def test_origin_allowed_rejects_non_local(self):
         assert not server_mod._origin_allowed("https://evil.example")
         assert not server_mod._origin_allowed("null")
+
+    def test_run_server_rejects_non_loopback_without_ack(self):
+        with pytest.raises(RuntimeError, match="non-loopback bind requires explicit acknowledgment"):
+            server_mod.run_server(host="0.0.0.0", port=3189)
 
     def test_parse_room_stream_request_rejects_invalid_params(self):
         room_id, after_id, limit, error = server_mod._parse_room_stream_request(

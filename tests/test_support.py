@@ -38,6 +38,8 @@ class TestDoctorReport:
         assert "recommended_backend" in report
         assert report["validation_snapshot"]
         assert report["readiness"]["transport"] == "ready"
+        assert report["security_posture"]["support_tier"] == "local-first-supported"
+        assert report["adoption"]["support_tiers"]
         assert report["next_steps"]
 
     def test_render_doctor_contains_sections(self):
@@ -63,6 +65,24 @@ class TestDoctorReport:
                 "recommended_backend": "process",
                 "detail": "1.0.0",
             }],
+            "security_posture": {
+                "host": "127.0.0.1",
+                "bind_scope": "loopback",
+                "support_tier": "local-first-supported",
+                "approval_boundary": "workflow_only",
+                "origin_policy": "localhost_only",
+                "authn": {"mode": "none"},
+                "warnings": [],
+            },
+            "adoption": {
+                "support_tiers": [
+                    {
+                        "tier": "local-first-supported",
+                        "status": "supported",
+                        "summary": "loopback local control plane",
+                    }
+                ],
+            },
             "recommended_clients": ["codex"],
             "next_steps": ["Use `process`.", "Run `python -m tb2 init --session demo`."],
         })
@@ -71,5 +91,7 @@ class TestDoctorReport:
         assert "Backends:" in text
         assert "Transports:" in text
         assert "Supported CLI tools:" in text
+        assert "Security posture:" in text
+        assert "Adoption tiers:" in text
         assert "Ready-to-use profiles: codex" in text
         assert "Next steps:" in text

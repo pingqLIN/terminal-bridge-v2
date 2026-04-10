@@ -26,6 +26,7 @@ from .diff import diff_new_lines, strip_prompt_tail
 from .intervention import Action, InterventionLayer
 from .osutils import default_backend_name
 from .profile import get_profile, list_profiles, strip_ansi
+from .security import build_security_posture, validate_server_binding
 from .support import doctor_report
 from .gui import build_gui_html
 from .room import Room, RoomMessage, RoomSubscription, cleanup_stale, create_room, delete_room, get_room, list_rooms, validate_room_id
@@ -284,6 +285,11 @@ _transport_lock = threading.Lock()
 _sse_subscribers: Dict[str, int] = {}
 _ws_subscribers: Dict[str, int] = {}
 _ws_clients = 0
+_server_context: Dict[str, Any] = {
+    "host": "127.0.0.1",
+    "port": 3189,
+    "allow_remote": False,
+}
 
 _MAX_BODY_BYTES = 4 * 1024 * 1024
 _HTTP_READ_TIMEOUT_SECONDS = 5.0
@@ -368,6 +374,13 @@ def _origin_allowed(origin: str) -> bool:
         return False
     host = (parsed.hostname or "").lower()
     return host in _LOCAL_ORIGIN_HOSTS
+
+
+def _server_security_payload() -> Dict[str, Any]:
+    return build_security_posture(
+        str(_server_context.get("host", "127.0.0.1")),
+        allow_remote=bool(_server_context.get("allow_remote", False)),
+    ).to_dict()
 
 
 def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
@@ -1294,6 +1307,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         "transports": transports,
         "audit": _audit_trail.describe(),
         "runtime": runtime_contract(),
+        "security": _server_security_payload(),
     }
 
 
@@ -1572,7 +1586,7 @@ def _handle_get_path(path: str) -> Tuple[int, str, bytes]:
         return 200, "text/html; charset=utf-8", html
 
     if path == "/healthz":
-        return 200, "application/json", _json_bytes({"ok": True})
+        return 200, "application/json", _json_bytes({"ok": True, "security": _server_security_payload()})
 
     if path == "/mcp":
         return 200, "application/json", _json_bytes({
@@ -1582,6 +1596,7 @@ def _handle_get_path(path: str) -> Tuple[int, str, bytes]:
             "ui": "/",
             "rooms_stream": "/rooms/{room_id}/stream",
             "websocket": "/ws",
+            "security": _server_security_payload(),
         })
 
     return 404, "application/json", _json_bytes({
@@ -2005,7 +2020,11 @@ class MCPHandler(BaseHTTPRequestHandler):
         pass  # Quiet by default.
 
 
-def run_server(host: str = "127.0.0.1", port: int = 3189) -> None:
+def run_server(host: str = "127.0.0.1", port: int = 3189, *, allow_remote: bool = False) -> None:
+    validate_server_binding(host, allow_remote=allow_remote)
+    _server_context["host"] = host
+    _server_context["port"] = int(port)
+    _server_context["allow_remote"] = bool(allow_remote)
     _restore_workstreams_from_service_state()
     server = ThreadingHTTPServer((host, port), MCPHandler)
     print(f"[tb2-server] listening on {host}:{port}/mcp")

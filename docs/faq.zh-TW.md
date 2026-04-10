@@ -18,7 +18,11 @@
 
 ## service 適合直接暴露到公網嗎？
 
-不適合。建議預設只綁定 `127.0.0.1`。如果真的要暴露到 localhost 以外，應把它視為敏感控制面，另外加上明確的網路與存取防護。
+不適合。建議預設只綁定 `127.0.0.1`。如果真的要暴露到 localhost 以外，現在必須明確加上 `--allow-remote`，並把它視為放在外部網路控管後面的敏感控制面。
+
+## 為什麼 non-loopback bind 現在需要 `--allow-remote`？
+
+因為產品姿態仍是 local-first。這個 flag 代表 operator 明確知道自己正在離開預設支援的 loopback 路徑，進入 private-network experimental 模式。
 
 ## approval gate 是強制性的安全邊界嗎？
 

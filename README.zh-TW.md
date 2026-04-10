@@ -56,6 +56,14 @@ TB2 特別適合這類情境：
 - 可對外公開暴露的 remote control plane
 - 具備強制 approval / authorization 邊界的系統
 
+## 支援分級
+
+| Tier | 狀態 | 適用情境 |
+| --- | --- | --- |
+| `local-first-supported` | supported | 同一台受信任主機上的 loopback operator workflow |
+| `private-network-experimental` | experimental | 有明確 `--allow-remote` 確認，且外部另有控制的私網存取 |
+| `public-edge-unsupported` | unsupported | 直接對外網暴露，或期待 TB2 自己就是硬 auth 邊界 |
+
 ## 為什麼團隊會選 TB2
 
 | 決策問題 | TB2 的回答 |
@@ -145,6 +153,8 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 
 打開 `http://127.0.0.1:3189/`。
 
+如果你是刻意要綁到 loopback 以外，請加上 `--allow-remote`，並把它視為 `private-network-experimental`。
+
 ### MCP 優先
 
 ```bash
@@ -156,6 +166,12 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 - Codex CLI：`codex mcp add tb2 --url http://127.0.0.1:3189/mcp`
 - Claude Code：`claude mcp add --transport http -s user tb2 http://127.0.0.1:3189/mcp`
 - Gemini CLI：`gemini mcp add tb2 http://127.0.0.1:3189/mcp --transport http --scope user`
+
+若要綁到非 loopback 位址，現在必須明確確認：
+
+```bash
+python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
+```
 
 ## 依角色選入口
 
@@ -208,6 +224,7 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 - [平台行為說明](docs/platform-behavior.zh-TW.md)
 - [平台相容矩陣](docs/platforms/compatibility-matrix.zh-TW.md)
 - [標準操作手冊](docs/platforms/standard-operations.zh-TW.md)
+- [安全姿態](docs/security-posture.zh-TW.md)
 
 ### 架構與整合
 
@@ -231,6 +248,7 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 
 - 把 TB2 視為 local-first、high-trust、operator-grade 工具，不是可公開暴露的控制服務。
 - server binding 預設維持在 `127.0.0.1`。
+- 如果要綁到 non-loopback 位址，現在必須明確加上 `--allow-remote`。
 - Browser `Origin` 驗證只接受 localhost 類型來源，因此 GUI 與 MCP 存取應維持在 loopback。
 - MCP endpoint 與 browser console 都應視為敏感的本地控制面。
 - approval gate 與 `intervention` 比較像受監督 workflow 控制，不應視為安全邊界。

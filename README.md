@@ -54,6 +54,14 @@ TB2 is not designed to be:
 - a publicly exposed remote control plane
 - a hard-enforced approval or authorization boundary
 
+## Support Tiers
+
+| Tier | Status | Intended use |
+| --- | --- | --- |
+| `local-first-supported` | supported | loopback-only operator workflows on one trusted machine |
+| `private-network-experimental` | experimental | private-network access with explicit `--allow-remote` acknowledgment and external controls |
+| `public-edge-unsupported` | unsupported | internet-facing exposure or any expectation that TB2 itself is a hard auth boundary |
+
 ## Why Teams Choose TB2
 
 | Decision point | TB2 answer |
@@ -143,6 +151,8 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 
 Open `http://127.0.0.1:3189/`.
 
+If you intentionally bind beyond loopback, add `--allow-remote` and treat the deployment as `private-network-experimental`.
+
 ### MCP-first
 
 ```bash
@@ -154,6 +164,12 @@ Then register:
 - Codex CLI: `codex mcp add tb2 --url http://127.0.0.1:3189/mcp`
 - Claude Code: `claude mcp add --transport http -s user tb2 http://127.0.0.1:3189/mcp`
 - Gemini CLI: `gemini mcp add tb2 http://127.0.0.1:3189/mcp --transport http --scope user`
+
+Non-loopback MCP binding now requires explicit acknowledgment:
+
+```bash
+python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
+```
 
 ## Choose Your Role
 
@@ -206,6 +222,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 - [Platform Behavior Notes](docs/platform-behavior.md)
 - [Platform Compatibility Matrix](docs/platforms/compatibility-matrix.md)
 - [Standard Operations](docs/platforms/standard-operations.md)
+- [Security Posture](docs/security-posture.md)
 
 ### Architecture and integration
 
@@ -229,6 +246,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 
 - Treat TB2 as local-first, high-trust, operator-grade tooling rather than a public control service.
 - Keep server binding on `127.0.0.1` unless you fully trust the network path.
+- If you bind to a non-loopback address, TB2 now requires explicit `--allow-remote` acknowledgment.
 - Browser-origin checks are intentionally limited to localhost-style origins, so keep GUI and MCP access on loopback.
 - Treat the MCP endpoint and browser console as sensitive local control surfaces.
 - Approval gates and `intervention` flows support supervised delivery, but they are workflow controls rather than a security boundary.

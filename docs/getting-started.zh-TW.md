@@ -80,6 +80,8 @@ python -m tb2 gui --host 127.0.0.1 --port 3189
 4. 若需要人工審核，再切到 `Approval Gate`。
 5. 如果 status 卡片顯示 auto-forward guard 已阻擋，請先把待審佇列 review 完，讓 delivery re-arm。
 
+如果你是刻意要把 GUI 綁到 loopback 以外，請加上 `--allow-remote`，並把這種部署視為 `private-network-experimental`。
+
 ### 第一個 MCP session
 
 ```bash
@@ -97,6 +99,12 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 7. 需要 durable incident context 時，再用 `audit_recent`
 8. `bridge_stop`
 
+若要綁到非 loopback 位址，現在必須明確確認：
+
+```bash
+python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
+```
+
 ### 第一個 audit-enabled service session
 
 ```bash
@@ -107,6 +115,8 @@ python -m tb2 service audit --lines 10
 
 當你希望從第一輪就保留 durable operator 與 bridge events 時，請走這條路徑。
 這不會改變目前的 restart 契約：`service stop` 或 `service restart` 後，live room / bridge / pending intervention state 仍會遺失。
+
+如果 service host 不是 loopback，也請加上 `--allow-remote`，並把真正的 trust boundary 放在外部網路控管上。
 
 ## 5. 先理解 handoff 契約
 
@@ -160,3 +170,4 @@ MSG: ready for review on the shell fallback patch
 - [角色導向指南](role-guides.zh-TW.md)
 - [平台相容矩陣](platforms/compatibility-matrix.zh-TW.md)
 - [MCP 用戶端設定](mcp-client-setup.zh-TW.md)
+- [安全姿態](security-posture.zh-TW.md)

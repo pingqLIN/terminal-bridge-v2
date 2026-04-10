@@ -80,6 +80,8 @@ Open `http://127.0.0.1:3189/`, then:
 4. Switch to `Approval Gate` if you want human review before delivery.
 5. If the status card shows the auto-forward guard as blocked, clear the pending queue through review to re-arm delivery.
 
+If you intentionally bind the GUI beyond loopback, add `--allow-remote` and treat that deployment as `private-network-experimental`.
+
 ### First MCP session
 
 ```bash
@@ -97,6 +99,12 @@ Register the MCP endpoint in your client, then use this sequence:
 7. `audit_recent` when you need persisted incident context
 8. `bridge_stop`
 
+Non-loopback MCP binding now requires explicit acknowledgment:
+
+```bash
+python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
+```
+
 ### First audit-enabled service session
 
 ```bash
@@ -107,6 +115,8 @@ python -m tb2 service audit --lines 10
 
 Use this path when you want durable operator and bridge events from the first run.
 It does not change the current restart contract: live room / bridge / pending intervention state is still lost after `service stop` or `service restart`.
+
+If the service host is not loopback, add `--allow-remote` and make sure external network controls carry the actual trust boundary.
 
 ## 5. Understand the handoff contract
 
@@ -160,3 +170,4 @@ Rules:
 - [Role Guides](role-guides.md)
 - [Platform Compatibility Matrix](platforms/compatibility-matrix.md)
 - [MCP Client Setup](mcp-client-setup.md)
+- [Security Posture](security-posture.md)

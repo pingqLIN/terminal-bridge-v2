@@ -18,7 +18,11 @@ Compatibility and fallback. `room_poll` stays useful for tests, degraded environ
 
 ## Is the service safe to expose publicly?
 
-No. The recommended default is local-only binding on `127.0.0.1`. If you expose it beyond localhost, treat it as a sensitive control surface and put proper network controls in front of it.
+No. The recommended default is local-only binding on `127.0.0.1`. If you expose it beyond localhost, TB2 now requires explicit `--allow-remote` acknowledgment and you should treat it as a sensitive control surface behind external network controls.
+
+## Why does TB2 require `--allow-remote` on non-loopback binds?
+
+Because the product posture is still local-first. The flag is an operator acknowledgment that you are leaving the supported loopback path and entering a private-network experimental mode.
 
 ## Are approval gates a hard security boundary?
 

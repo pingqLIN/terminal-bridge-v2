@@ -26,3 +26,9 @@ Please include:
 ## Maintainer note
 
 This project currently uses a lightweight support model. Clear reproduction details help a lot and usually lead to faster triage.
+
+Current support tiers:
+
+- `local-first-supported`: best-effort support for loopback operator workflows
+- `private-network-experimental`: narrower support, with the expectation that external network controls are part of the deployment
+- `public-edge-unsupported`: not a supported operating model

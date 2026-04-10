@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Sequence, Tuple
 
 from .osutils import default_backend_name
+from .security import build_security_posture
 
 
 @dataclass(frozen=True)
@@ -295,6 +296,7 @@ def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
         recommended_backend=suggested,
         recommended_clients=recommended,
     )
+    posture = build_security_posture("127.0.0.1")
     return {
         "platform": platform.system(),
         "python": platform.python_version(),
@@ -309,6 +311,27 @@ def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
         "profiles": profile_rows(),
         "validation_snapshot": list(VALIDATION_SNAPSHOT),
         "readiness": readiness,
+        "security_posture": posture.to_dict(),
+        "adoption": {
+            "recommended_path": "loopback-local-control-plane",
+            "support_tiers": [
+                {
+                    "tier": "local-first-supported",
+                    "status": "supported",
+                    "summary": "Same-host loopback operator workflows on trusted local machines.",
+                },
+                {
+                    "tier": "private-network-experimental",
+                    "status": "experimental",
+                    "summary": "Operator-managed private-network use with explicit remote acknowledgment and external controls.",
+                },
+                {
+                    "tier": "public-edge-unsupported",
+                    "status": "unsupported",
+                    "summary": "Internet-facing exposure or expectations of a hard authorization boundary.",
+                },
+            ],
+        },
         "recommended_backend": suggested,
         "recommended_clients": [client["profile"] for client in recommended],
         "next_steps": _next_steps(
@@ -319,6 +342,7 @@ def doctor_report(*, distro: str | None = None) -> Dict[str, Any]:
 
 
 def render_doctor(report: Dict[str, Any]) -> str:
+    posture = report.get("security_posture", {})
     lines = [
         f"platform: {report['platform']}",
         f"python:   {report['python']}",
@@ -365,6 +389,34 @@ def render_doctor(report: Dict[str, Any]) -> str:
         lines.append(
             "Ready-to-use profiles: " + ", ".join(report["recommended_clients"])
         )
+    if posture:
+        lines.extend([
+            "",
+            "Security posture:",
+            (
+                f"  - host={posture.get('host', '127.0.0.1')}  "
+                f"scope={posture.get('bind_scope', 'loopback')}  "
+                f"tier={posture.get('support_tier', 'local-first-supported')}"
+            ),
+            (
+                f"  - approval={posture.get('approval_boundary', 'workflow_only')}  "
+                f"origin={posture.get('origin_policy', 'localhost_only')}  "
+                f"auth={posture.get('authn', {}).get('mode', 'none')}"
+            ),
+        ])
+        for warning in posture.get("warnings", []):
+            lines.append(f"  - warning: {warning}")
+    adoption = report.get("adoption", {})
+    support_tiers = adoption.get("support_tiers", [])
+    if support_tiers:
+        lines.extend([
+            "",
+            "Adoption tiers:",
+        ])
+        for item in support_tiers:
+            lines.append(
+                f"  - {item['tier']}: {item['status']}  {item['summary']}"
+            )
     if report.get("next_steps"):
         lines.append("")
         lines.append("Next steps:")

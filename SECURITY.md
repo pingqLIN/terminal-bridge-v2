@@ -6,8 +6,8 @@
 
 | Version | Supported |
 | --- | --- |
-| `0.1.x` | Yes |
-| `< 0.1.0` | No |
+| `0.2.x` | Yes |
+| `< 0.2.0` | No |
 
 ## Reporting a Vulnerability
 
@@ -33,6 +33,7 @@ Recommended path:
 Please report issues such as:
 
 - unauthenticated remote control exposure
+- non-loopback bind behavior that bypasses explicit `--allow-remote` acknowledgment
 - privilege escalation through local service defaults
 - credential, secret, or token leakage
 - unsafe transport behavior that bypasses documented guardrails
