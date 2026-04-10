@@ -2429,11 +2429,17 @@ GUI_HTML_TEMPLATE = r"""
             hint: 'Select a workstream to manage.',
             empty: 'No active workstreams yet.',
             count: '{count} workstreams',
+            countAlerts: '{count} workstreams · {warn} warn · {critical} critical',
             pending: '{count} pending',
             idle: 'idle',
             stateLive: 'live',
             stateRestored: 'restored',
-            stateDegraded: 'degraded'
+            stateDegraded: 'degraded',
+            healthOk: 'healthy',
+            healthWarn: 'warn',
+            healthCritical: 'critical',
+            escalateReview: 'review',
+            escalateIntervene: 'intervene'
           },
           strip: {
             preset: 'Preset',
@@ -2642,7 +2648,9 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeAuditOff: 'Audit off',
             statusBadgeAuditRaw: 'Audit raw text',
             statusBadgeAuditRawBlocked: 'Audit raw blocked',
-            statusBadgeSecurity: 'Security {tier}'
+            statusBadgeSecurity: 'Security {tier}',
+            statusBadgeHealth: 'Health {state}',
+            statusBadgeEscalation: 'Escalation {mode}'
           },
           auditEvents: {
             all: 'all events'
@@ -2801,11 +2809,17 @@ GUI_HTML_TEMPLATE = r"""
             hint: '選擇一條 workstream 進行操作。',
             empty: '目前還沒有 active workstream。',
             count: '{count} 條 workstream',
+            countAlerts: '{count} 條 workstream · {warn} 條警示 · {critical} 條嚴重',
             pending: '{count} 筆待審',
             idle: '閒置',
             stateLive: '運行中',
             stateRestored: '已恢復',
-            stateDegraded: '降級'
+            stateDegraded: '降級',
+            healthOk: '健康',
+            healthWarn: '警示',
+            healthCritical: '嚴重',
+            escalateReview: '需審核',
+            escalateIntervene: '需介入'
           },
           strip: {
             preset: 'Preset',
@@ -3014,7 +3028,9 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeAuditOff: 'Audit 未啟用',
             statusBadgeAuditRaw: 'Audit 含 raw text',
             statusBadgeAuditRawBlocked: 'Audit raw 已阻擋',
-            statusBadgeSecurity: 'Security {tier}'
+            statusBadgeSecurity: 'Security {tier}',
+            statusBadgeHealth: '健康度 {state}',
+            statusBadgeEscalation: '升級 {mode}'
           },
           auditEvents: {
             all: '全部事件'
@@ -3319,6 +3335,20 @@ GUI_HTML_TEMPLATE = r"""
         if (name === 'restored') return t('fleet.stateRestored');
         if (name === 'degraded') return t('fleet.stateDegraded');
         return t('fleet.stateLive');
+      }
+
+      function workstreamHealthLabel(health) {
+        const stateName = health && health.state ? String(health.state) : 'ok';
+        if (stateName === 'critical') return t('fleet.healthCritical');
+        if (stateName === 'warn') return t('fleet.healthWarn');
+        return t('fleet.healthOk');
+      }
+
+      function workstreamEscalationLabel(health) {
+        const escalation = health && health.escalation ? String(health.escalation) : 'observe';
+        if (escalation === 'intervene') return t('fleet.escalateIntervene');
+        if (escalation === 'review') return t('fleet.escalateReview');
+        return '';
       }
 
       function inferWorkstream(status) {
@@ -4111,7 +4141,15 @@ GUI_HTML_TEMPLATE = r"""
         if (!box || !meta) return;
         const workstreams = workstreamsFromStatus(status);
         box.innerHTML = '';
-        meta.textContent = workstreams.length ? format('fleet.count', { count: workstreams.length }) : t('fleet.empty');
+        if (status && status.fleet && (status.fleet.warn || status.fleet.critical)) {
+          meta.textContent = format('fleet.countAlerts', {
+            count: workstreams.length,
+            warn: Number(status.fleet.warn || 0),
+            critical: Number(status.fleet.critical || 0)
+          });
+        } else {
+          meta.textContent = workstreams.length ? format('fleet.count', { count: workstreams.length }) : t('fleet.empty');
+        }
         if (!workstreams.length) return;
         const selected = inferWorkstream(status);
         if (selected) applyWorkstreamSelection(selected);
@@ -4125,7 +4163,10 @@ GUI_HTML_TEMPLATE = r"""
           const roomId = String(item.room_id || '');
           const pending = Number(item.pending_count || 0) || 0;
           const pendingLabel = pending > 0 ? format('fleet.pending', { count: pending }) : t('fleet.idle');
-          detail.textContent = workstreamStateLabel(String(item.state || 'live')) + ' · ' + pendingLabel + ' · ' + roomId;
+          const health = item.health || null;
+          const escalation = workstreamEscalationLabel(health);
+          const healthLabel = workstreamHealthLabel(health);
+          detail.textContent = workstreamStateLabel(String(item.state || 'live')) + ' · ' + healthLabel + (escalation ? ' · ' + escalation : '') + ' · ' + pendingLabel + ' · ' + roomId;
           button.appendChild(title);
           button.appendChild(detail);
           button.onclick = () => run(async () => {
@@ -4141,6 +4182,14 @@ GUI_HTML_TEMPLATE = r"""
 
       function statusSummaryLabels(status, detail, subscribers) {
         const guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
+        const healthState = detail && detail.health && detail.health.state ? String(detail.health.state) : 'ok';
+        const healthLabel = healthState === 'critical'
+          ? t('fleet.healthCritical')
+          : (healthState === 'warn' ? t('fleet.healthWarn') : t('fleet.healthOk'));
+        const escalationMode = detail && detail.health && detail.health.escalation ? String(detail.health.escalation) : 'observe';
+        const escalationLabel = escalationMode === 'intervene'
+          ? t('fleet.escalateIntervene')
+          : (escalationMode === 'review' ? t('fleet.escalateReview') : '');
         const labels = [
           guard && guard.blocked ? t('cards.statusBadgeGuarded') : t('cards.statusBadgeReady'),
           format('cards.statusBadgePending', { count: detail ? detail.pending_count : 0 }),
@@ -4162,6 +4211,12 @@ GUI_HTML_TEMPLATE = r"""
         if (status && status.security && status.security.support_tier) {
           labels.push(format('cards.statusBadgeSecurity', { tier: status.security.support_tier }));
         }
+        if (detail && detail.health && detail.health.state && detail.health.state !== 'ok') {
+          labels.push(format('cards.statusBadgeHealth', { state: healthLabel }));
+        }
+        if (detail && detail.health && detail.health.escalation && detail.health.escalation !== 'observe' && escalationLabel) {
+          labels.push(format('cards.statusBadgeEscalation', { mode: escalationLabel }));
+        }
         return labels;
       }
 
@@ -4171,10 +4226,14 @@ GUI_HTML_TEMPLATE = r"""
         renderWorkstreamFleet(status);
         const note = $('status-note');
         if (note) {
+          const active = inferBridgeDetail(status);
+          const alertSummary = active && active.health && active.health.summary && active.health.state !== 'ok'
+            ? String(active.health.summary)
+            : '';
           const warnings = Array.isArray(status && status.security && status.security.warnings)
             ? status.security.warnings
             : [];
-          note.textContent = warnings.length ? warnings[0] : t('cards.statusNote');
+          note.textContent = alertSummary || (warnings.length ? warnings[0] : t('cards.statusNote'));
         }
         const detail = inferBridgeDetail(status);
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';

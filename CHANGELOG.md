@@ -13,6 +13,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Opt-in append-only JSONL audit trail support for room messages, bridge lifecycle, intervention actions, and direct operator control actions.
 - Machine-readable security posture snapshots across `status`, `doctor`, `/healthz`, and `/mcp`, plus explicit non-loopback bind acknowledgment via `--allow-remote` / `TB2_ALLOW_REMOTE=1`.
 - Release-facing security posture docs and support-tier guidance for local-first, private-network experimental, and public-edge unsupported adoption paths.
+- Per-workstream health, alert severity, escalation, and silent-stream detection surfaced through `status.workstreams[*].health` and `status.fleet`.
+- `audit_recent` now accepts `workstream_id` for fleet-safe governance review.
 
 ### Changed
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.

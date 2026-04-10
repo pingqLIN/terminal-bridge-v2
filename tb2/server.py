@@ -52,7 +52,8 @@ class Bridge:
                  profile_name: str = "generic",
                  poll_ms: int = 400, lines: int = 200,
                  auto_forward: bool = False, intervention: bool = False,
-                 restored: bool = False):
+                 restored: bool = False,
+                 last_activity_at: Optional[float] = None):
         self.workstream_id = workstream_id or bridge_id
         self.bridge_id = bridge_id
         self.backend = backend
@@ -78,6 +79,7 @@ class Bridge:
         self._min_poll: float = 100.0
         self._max_poll: float = 3000.0
         self.state = "restored" if restored else "live"
+        self.last_activity_at = float(last_activity_at if last_activity_at is not None else time.time())
 
     def worker(self) -> None:
         profile = get_profile(self.profile_name)
@@ -118,9 +120,11 @@ class Bridge:
     def _process_new_lines(self, tag: str, from_pane: str, to_pane: str,
                            new_lines: list, profile: Any) -> None:
         source_role = "pane_a" if tag == "A" else "pane_b"
+        activity_seen = False
         for ln in new_lines:
             if not ln.strip():
                 continue
+            activity_seen = True
             text = strip_ansi(ln) if profile.strip_ansi else ln
             _post_room_message(
                 self.room,
@@ -196,6 +200,9 @@ class Bridge:
                             trusted=True,
                         )
                         _sync_workstream_from_bridge(self)
+        if activity_seen:
+            self.last_activity_at = time.time()
+            _set_workstream(_bridge_workstream_record(self))
 
     def _arm_auto_forward_guard(self, tag: str, from_pane: str, to_pane: str, text: str) -> None:
         if self.intervention_layer.active:
@@ -451,6 +458,7 @@ def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = 
         pending=list(pending) if isinstance(pending, list) else [],
         auto_forward_guard=bridge.auto_forward_guard(),
         restore_error=restore_error,
+        last_activity_at=bridge.last_activity_at,
     )
 
 
@@ -522,6 +530,7 @@ def _restore_workstreams_from_service_state() -> None:
             auto_forward=record.auto_forward,
             intervention=record.intervention,
             restored=True,
+            last_activity_at=record.last_activity_at,
         )
         bridge.intervention_layer.restore({
             "active": record.intervention,
@@ -729,6 +738,7 @@ def _transport_snapshot() -> Dict[str, Any]:
 def _deliver_pending(bridge: Bridge, msg: Any) -> None:
     text = msg.edited_text if msg.edited_text else msg.text
     bridge.backend.send(msg.to_pane, text, enter=True)
+    bridge.last_activity_at = time.time()
     _post_room_message(
         bridge.room,
         author="bridge",
@@ -841,11 +851,17 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 elif deliver in ("a", "A"):
                     bridge.backend.send(bridge.pane_a, msg.text, enter=True)
+                    bridge.last_activity_at = time.time()
+                    _sync_workstream_from_bridge(bridge)
                 elif deliver in ("b", "B"):
                     bridge.backend.send(bridge.pane_b, msg.text, enter=True)
+                    bridge.last_activity_at = time.time()
+                    _sync_workstream_from_bridge(bridge)
                 elif str(deliver).lower() == "both":
                     bridge.backend.send(bridge.pane_a, msg.text, enter=True)
                     bridge.backend.send(bridge.pane_b, msg.text, enter=True)
+                    bridge.last_activity_at = time.time()
+                    _sync_workstream_from_bridge(bridge)
                 else:
                     deliver_error = "deliver must be one of: a, b, both"
             except Exception as exc:
@@ -1171,6 +1187,8 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
             source_role="intervention",
             trusted=True,
         )
+    if rejected:
+        bridge.last_activity_at = time.time()
     _maybe_rearm_auto_forward_guard(bridge)
     _audit(
         "intervention.rejected",
@@ -1211,6 +1229,7 @@ def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
     for pane in panes:
         try:
             bridge.backend.send(pane, "\x03", enter=False)
+            bridge.last_activity_at = time.time()
             _post_room_message(
                 bridge.room,
                 author="bridge",
@@ -1248,6 +1267,9 @@ def handle_doctor(args: Dict[str, Any]) -> Dict[str, Any]:
 def handle_audit_recent(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         limit = _parse_int(args.get("limit"), name="limit", default=50, minimum=1, maximum=200)
+        workstream_id = str(args.get("workstream_id", "") or "").strip() or None
+        if workstream_id is not None:
+            workstream_id = validate_workstream_id(workstream_id)
         room_id = str(args.get("room_id", "") or "").strip() or None
         if room_id is not None:
             room_id = validate_room_id(room_id)
@@ -1256,6 +1278,12 @@ def handle_audit_recent(args: Dict[str, Any]) -> Dict[str, Any]:
             bridge_id = _validate_bridge_id(bridge_id)
     except ValueError as exc:
         return {"error": str(exc)}
+    if workstream_id is not None:
+        record = _get_workstream(workstream_id)
+        if record is None:
+            return {"error": f"workstream not found: {workstream_id}"}
+        if room_id is None:
+            room_id = record.room_id
     event = str(args.get("event", "") or "").strip() or None
     events = _audit_trail.recent(
         limit=limit,
@@ -1267,6 +1295,12 @@ def handle_audit_recent(args: Dict[str, Any]) -> Dict[str, Any]:
         "events": events,
         "count": len(events),
         "audit": _audit_trail.describe(),
+        "scope": {
+            "workstream_id": workstream_id,
+            "room_id": room_id,
+            "bridge_id": bridge_id,
+            "event": event,
+        },
     }
 
 
@@ -1303,6 +1337,12 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
             "restored": sum(1 for item in workstreams if item["state"] == "restored"),
             "degraded": sum(1 for item in workstreams if item["state"] == "degraded"),
             "pending": sum(int(item["pending_count"]) for item in workstreams),
+            "healthy": sum(1 for item in workstreams if item["health"]["state"] == "ok"),
+            "warn": sum(1 for item in workstreams if item["health"]["state"] == "warn"),
+            "critical": sum(1 for item in workstreams if item["health"]["state"] == "critical"),
+            "alerts": sum(int(item["health"]["alert_count"]) for item in workstreams),
+            "review": sum(1 for item in workstreams if item["health"]["escalation"] == "review"),
+            "intervene": sum(1 for item in workstreams if item["health"]["escalation"] == "intervene"),
         },
         "transports": transports,
         "audit": _audit_trail.describe(),
@@ -1438,6 +1478,7 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
     "audit_recent": {
         "type": "object",
         "properties": {
+            "workstream_id": {"type": "string"},
             "room_id": {"type": "string"},
             "bridge_id": {"type": "string"},
             "event": {"type": "string"},

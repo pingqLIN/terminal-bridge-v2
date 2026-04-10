@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 
 
 _WORKSTREAM_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+_SEVERITY_ORDER = {"ok": 0, "warn": 1, "critical": 2}
+_ESCALATION_ORDER = {"observe": 0, "review": 1, "intervene": 2}
+_PENDING_WARN_THRESHOLD = 3
+_PENDING_CRITICAL_THRESHOLD = 8
 
 
 def validate_workstream_id(workstream_id: str) -> str:
@@ -20,6 +24,25 @@ def validate_workstream_id(workstream_id: str) -> str:
     if not _WORKSTREAM_ID_RE.fullmatch(value):
         raise ValueError("invalid workstream_id")
     return value
+
+
+def _health_alert(
+    code: str,
+    *,
+    severity: str,
+    summary: str,
+    escalation: str,
+    detail: Optional[str] = None,
+) -> Dict[str, Any]:
+    payload = {
+        "code": code,
+        "severity": severity,
+        "summary": summary,
+        "escalation": escalation,
+    }
+    if detail:
+        payload["detail"] = detail
+    return payload
 
 
 @dataclass(frozen=True)
@@ -83,11 +106,99 @@ class WorkstreamRecord:
     pending: List[Dict[str, Any]] = field(default_factory=list)
     auto_forward_guard: Dict[str, Any] = field(default_factory=dict)
     restore_error: Optional[str] = None
+    last_activity_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
 
     @property
     def bridge_active(self) -> bool:
         return self.state in {"live", "restored"}
+
+    def silent_threshold_seconds(self) -> float:
+        base = max(30.0, (float(self.poll_ms) / 1000.0) * 25.0)
+        return min(300.0, base)
+
+    def health_payload(self, *, now: Optional[float] = None) -> Dict[str, Any]:
+        current_time = float(now if now is not None else time.time())
+        age_seconds = max(0.0, current_time - float(self.last_activity_at))
+        silent_threshold = self.silent_threshold_seconds()
+        alerts: List[Dict[str, Any]] = []
+
+        if self.state == "degraded":
+            alerts.append(
+                _health_alert(
+                    "restore_failed",
+                    severity="critical",
+                    summary="restore failed; workstream degraded",
+                    escalation="intervene",
+                    detail=self.restore_error,
+                )
+            )
+
+        guard_blocked = bool(self.auto_forward_guard.get("blocked"))
+        guard_reason = str(self.auto_forward_guard.get("guard_reason") or "").strip()
+        if guard_blocked:
+            alerts.append(
+                _health_alert(
+                    "guard_blocked",
+                    severity="warn",
+                    summary="auto-forward guard is blocking delivery",
+                    escalation="review",
+                    detail=guard_reason or None,
+                )
+            )
+
+        pending_count = len(self.pending)
+        if pending_count >= _PENDING_CRITICAL_THRESHOLD:
+            alerts.append(
+                _health_alert(
+                    "pending_backlog",
+                    severity="critical",
+                    summary=f"pending review backlog is high ({pending_count})",
+                    escalation="intervene",
+                )
+            )
+        elif pending_count >= _PENDING_WARN_THRESHOLD:
+            alerts.append(
+                _health_alert(
+                    "pending_backlog",
+                    severity="warn",
+                    summary=f"pending review backlog is building ({pending_count})",
+                    escalation="review",
+                )
+            )
+
+        if self.bridge_active and age_seconds >= silent_threshold:
+            severity = "critical" if age_seconds >= silent_threshold * 2.0 else "warn"
+            escalation = "intervene" if severity == "critical" else "review"
+            alerts.append(
+                _health_alert(
+                    "silent_stream",
+                    severity=severity,
+                    summary=f"no workstream activity for {int(age_seconds)}s",
+                    escalation=escalation,
+                    detail=f"threshold {int(silent_threshold)}s",
+                )
+            )
+
+        severity = "ok"
+        escalation = "observe"
+        for alert in alerts:
+            if _SEVERITY_ORDER[alert["severity"]] > _SEVERITY_ORDER[severity]:
+                severity = str(alert["severity"])
+            if _ESCALATION_ORDER[alert["escalation"]] > _ESCALATION_ORDER[escalation]:
+                escalation = str(alert["escalation"])
+        summary = alerts[0]["summary"] if alerts else "healthy"
+
+        return {
+            "state": severity,
+            "summary": summary,
+            "alerts": alerts,
+            "alert_count": len(alerts),
+            "escalation": escalation,
+            "last_activity_at": self.last_activity_at,
+            "last_activity_age_seconds": round(age_seconds, 3),
+            "silent_threshold_seconds": round(silent_threshold, 3),
+        }
 
     def to_status_payload(self) -> Dict[str, Any]:
         return {
@@ -108,6 +219,8 @@ class WorkstreamRecord:
             "state": self.state,
             "bridge_active": self.bridge_active,
             "restore_error": self.restore_error,
+            "last_activity_at": self.last_activity_at,
+            "health": self.health_payload(),
             "updated_at": self.updated_at,
         }
 
@@ -134,5 +247,6 @@ class WorkstreamRecord:
             pending=list(payload.get("pending", [])),
             auto_forward_guard=dict(payload.get("auto_forward_guard", {})),
             restore_error=str(payload.get("restore_error")) if payload.get("restore_error") is not None else None,
+            last_activity_at=float(payload.get("last_activity_at", payload.get("updated_at", time.time()))),
             updated_at=float(payload.get("updated_at", time.time())),
         )

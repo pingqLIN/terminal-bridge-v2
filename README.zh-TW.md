@@ -115,6 +115,9 @@ TB2 特別適合這類情境：
 - audit client 應把 `status.audit.redaction.requested_mode`、實際生效的 `mode`、`raw_text_opt_in_acknowledged` 與 `raw_text_opt_in_blocked` 視為持久化文字策略的 machine-readable policy boundary
 - 目前 live runtime state 仍是記憶體態，因此 `tb2 service stop` / `restart` 只會保留 audit history 與 managed-service audit policy 輸入，不會保留 active rooms、bridges、pending interventions
 - `status.runtime` 現在也會透過 `launch_mode`、`snapshot_schema_version`、`continuity` metadata 區分 direct local run、service-managed fresh start，或 restart 後 state lost 的情境
+- `status.workstreams[*].health` 現在會公開每條 workstream 的 severity、alert summary、escalation 與 silent-stream 偵測
+- `status.fleet` 現在會聚合 `healthy`、`warn`、`critical` 與 escalation 數量，方便快速隔離出有風險的工作線
+- `audit_recent` 現在也可直接接受 `workstream_id`，讓治理與回溯不必再先轉成 bridge / room
 
 ## 快速安裝
 

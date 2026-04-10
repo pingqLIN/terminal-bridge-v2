@@ -57,7 +57,14 @@ const messages = {
   'cards.statusBadgeAuditOff': 'Audit off',
   'cards.statusBadgeAuditRaw': 'Audit raw text',
   'cards.statusBadgeAuditRawBlocked': 'Audit raw blocked',
-  'cards.statusBadgeSecurity': 'Security {tier}'
+  'cards.statusBadgeSecurity': 'Security {tier}',
+  'cards.statusBadgeHealth': 'Health {state}',
+  'cards.statusBadgeEscalation': 'Escalation {mode}',
+  'fleet.healthOk': 'healthy',
+  'fleet.healthWarn': 'warn',
+  'fleet.healthCritical': 'critical',
+  'fleet.escalateReview': 'review',
+  'fleet.escalateIntervene': 'intervene'
 };
 function t(path) {
   return messages[path] || path;
@@ -342,9 +349,37 @@ class TestStatusHandler:
         assert result["bridge_details"][0]["profile"] == "codex"
         assert result["workstreams"][0]["workstream_id"] == "main-flow"
         assert result["workstreams"][0]["bridge_active"] is True
+        assert result["workstreams"][0]["health"]["state"] == "ok"
         assert result["fleet"]["count"] == 1
         assert result["fleet"]["live"] == 1
+        assert result["fleet"]["healthy"] == 1
+        assert result["fleet"]["alerts"] == 0
         server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_status_detects_silent_workstream_health(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        server_mod.handle_bridge_start({
+            "pane_a": "silent:a",
+            "pane_b": "silent:b",
+            "room_id": "silent-room",
+            "bridge_id": "silent-bridge",
+            "workstream_id": "silent-main",
+        })
+        bridge = server_mod._get_bridge("silent-bridge")
+        assert bridge is not None
+        bridge.last_activity_at -= 1000.0
+        server_mod._set_workstream(server_mod._bridge_workstream_record(bridge))
+
+        result = server_mod.handle_status({})
+
+        assert result["workstreams"][0]["health"]["state"] == "critical"
+        assert result["workstreams"][0]["health"]["alerts"][0]["code"] == "silent_stream"
+        assert result["fleet"]["critical"] == 1
+        assert result["fleet"]["intervene"] == 1
+        server_mod.handle_bridge_stop({"bridge_id": "silent-bridge"})
 
     def test_status_surfaces_service_runtime_metadata(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
@@ -603,6 +638,38 @@ class TestWorkstreamHandlers:
         assert result["audit"]["redaction"]["stores_raw_text"] is False
         assert result["events"][0]["event"] == "operator.room_post"
         assert result["events"][0]["message_id"] == 1
+
+    @patch.object(server_mod, "_make_backend")
+    def test_audit_recent_resolves_workstream_id(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:a",
+            "pane_b": "ws:b",
+            "room_id": "ws-audit-room",
+            "bridge_id": "ws-audit-bridge",
+            "workstream_id": "ws-audit-main",
+        })
+        server_mod.handle_room_post({
+            "room_id": "ws-audit-room",
+            "author": "human-operator",
+            "text": "review this",
+        })
+
+        result = server_mod.handle_audit_recent({
+            "workstream_id": "ws-audit-main",
+            "event": "operator.room_post",
+            "limit": 5,
+        })
+
+        assert result["count"] == 1
+        assert result["scope"]["workstream_id"] == "ws-audit-main"
+        assert result["scope"]["room_id"] == "ws-audit-room"
+        assert result["events"][0]["event"] == "operator.room_post"
 
     @patch.object(server_mod, "_make_backend")
     def test_audit_recent_masks_room_terminal_and_intervention_text(self, mock_factory, tmp_path, monkeypatch):
@@ -1413,6 +1480,7 @@ class TestMCPProtocol:
         assert "id" in approve["properties"]
         assert "edited_text" in approve["properties"]
         audit_recent = tools["audit_recent"]["inputSchema"]
+        assert audit_recent["properties"]["workstream_id"]["type"] == "string"
         assert audit_recent["properties"]["event"]["type"] == "string"
         assert audit_recent["properties"]["limit"]["maximum"] == 200
 
@@ -1563,6 +1631,8 @@ class TestGuiRouting:
         assert "cards.statusBadgeAuditRaw" in html
         assert "cards.statusBadgeAuditRawBlocked" in html
         assert "cards.statusBadgeSecurity" in html
+        assert "cards.statusBadgeHealth" in html
+        assert "cards.statusBadgeEscalation" in html
         assert "status.audit.redaction && status.audit.redaction.raw_text_opt_in_blocked" in html
         assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html
@@ -1621,6 +1691,10 @@ class TestGuiRouting:
                 }
               },
               {
+                health: {
+                  state: 'critical',
+                  escalation: 'intervene'
+                },
                 pending_count: 2,
                 auto_forward_guard: { blocked: true }
               },
@@ -1638,6 +1712,8 @@ class TestGuiRouting:
         assert "Audit on" in labels
         assert "Audit raw blocked" in labels
         assert "Security private-network-experimental" in labels
+        assert "Health critical" in labels
+        assert "Escalation intervene" in labels
         assert "Audit raw text" not in labels
 
     @patch("tb2.gui.default_backend_name", return_value="tmux")

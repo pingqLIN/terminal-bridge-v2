@@ -15,11 +15,13 @@ description: 2026-04-10 terminal-bridge-v2 專案現況審核、git 分支評估
 - `Phase 3`：GUI fleet sidebar 已接上真實 workstream data，selected scope 會驅動 review/status/audit；同時 runtime/workstream 型別已從 server 單檔抽出到獨立模組
 - `Phase 4`：security posture 已落成 machine-readable contract，並加入 non-loopback `--allow-remote` guardrail
 - `Phase 5`：packaging metadata、support tier、getting-started / FAQ / security posture 文件已收斂到目前實際完成度
+- `Phase 6`：per-workstream health / alert / escalation 已正式進入 runtime、fleet summary、GUI 與 audit scope
 
 本文件保留的是當時的審核基線與原始計畫。交付摘要請改看：
 
 - [phase-1-3-delivery-report-2026-04-10.zh-TW.md](./phase-1-3-delivery-report-2026-04-10.zh-TW.md)
 - [phase-4-5-delivery-report-2026-04-10.zh-TW.md](./phase-4-5-delivery-report-2026-04-10.zh-TW.md)
+- [phase-6-delivery-report-2026-04-10.zh-TW.md](./phase-6-delivery-report-2026-04-10.zh-TW.md)
 
 ## 1. 專案狀態快照
 

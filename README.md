@@ -113,6 +113,9 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - audit clients should treat `status.audit.redaction.requested_mode`, the effective `mode`, `raw_text_opt_in_acknowledged`, and `raw_text_opt_in_blocked` as the machine-readable policy boundary for durable text storage
 - live runtime state is still memory-only for now, so `tb2 service stop` / `restart` preserves audit history and managed-service audit policy inputs, but not active rooms, bridges, or pending interventions
 - `status.runtime` now distinguishes direct local runs from service-managed fresh starts or restart-after-loss flows via `launch_mode`, `snapshot_schema_version`, and `continuity` metadata
+- `status.workstreams[*].health` now surfaces per-workstream severity, alert summaries, escalation level, and silent-stream detection
+- `status.fleet` now aggregates `healthy`, `warn`, `critical`, and escalation counts so one noisy workstream is easier to isolate
+- `audit_recent` now accepts `workstream_id` for fleet-safe governance review
 
 ## Quick Install
 
