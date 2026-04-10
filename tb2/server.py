@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import re
 import socket
 import struct
@@ -28,7 +29,14 @@ from .profile import get_profile, list_profiles, strip_ansi
 from .support import doctor_report
 from .gui import build_gui_html
 from .room import Room, RoomMessage, RoomSubscription, cleanup_stale, create_room, delete_room, get_room, list_rooms, validate_room_id
-from .service import runtime_contract
+from .service import (
+    _CONTINUITY_RESTART_LOST,
+    _CONTINUITY_RESTORED,
+    load_runtime_state,
+    persist_runtime_snapshot,
+    runtime_contract,
+)
+from .workstream import BackendSpec, WorkstreamRecord, validate_workstream_id
 
 
 # ---------------------------------------------------------------------------
@@ -38,11 +46,16 @@ from .service import runtime_contract
 class Bridge:
     def __init__(self, bridge_id: str, backend: TmuxBackend, room: Room,
                  pane_a: str, pane_b: str, *,
+                 workstream_id: Optional[str] = None,
+                 backend_spec: Optional[BackendSpec] = None,
                  profile_name: str = "generic",
                  poll_ms: int = 400, lines: int = 200,
-                 auto_forward: bool = False, intervention: bool = False):
+                 auto_forward: bool = False, intervention: bool = False,
+                 restored: bool = False):
+        self.workstream_id = workstream_id or bridge_id
         self.bridge_id = bridge_id
         self.backend = backend
+        self.backend_spec = backend_spec or BackendSpec(kind=default_backend_name())
         self.room = room
         self.pane_a = pane_a
         self.pane_b = pane_b
@@ -63,6 +76,7 @@ class Bridge:
         self._current_poll: float = float(poll_ms)
         self._min_poll: float = 100.0
         self._max_poll: float = 3000.0
+        self.state = "restored" if restored else "live"
 
     def worker(self) -> None:
         profile = get_profile(self.profile_name)
@@ -162,6 +176,7 @@ class Bridge:
                                 source_role="automation",
                                 trusted=True,
                             )
+                        _sync_workstream_from_bridge(self)
                     else:
                         self._reset_auto_forward_guard()
                         _post_room_message(
@@ -179,6 +194,7 @@ class Bridge:
                             source_role="intervention",
                             trusted=True,
                         )
+                        _sync_workstream_from_bridge(self)
 
     def _arm_auto_forward_guard(self, tag: str, from_pane: str, to_pane: str, text: str) -> None:
         if self.intervention_layer.active:
@@ -261,6 +277,8 @@ class Bridge:
 
 _bridges_lock = threading.Lock()
 _bridges: Dict[str, Bridge] = {}
+_workstreams_lock = threading.Lock()
+_workstreams: Dict[str, WorkstreamRecord] = {}
 
 _transport_lock = threading.Lock()
 _sse_subscribers: Dict[str, int] = {}
@@ -292,7 +310,8 @@ def _cleanup_daemon() -> None:
             stale = [bid for bid, b in _bridges.items() if get_room(b.room.room_id) is None]
             for bid in stale:
                 _bridges[bid].stop.set()
-                del _bridges[bid]
+                bridge = _bridges.pop(bid)
+                _drop_workstream(bridge.workstream_id)
 
 
 _cleanup_thread = threading.Thread(target=_cleanup_daemon, daemon=True)
@@ -384,8 +403,135 @@ def _get_bridge(bridge_id: str) -> Optional[Bridge]:
         return _bridges.get(bridge_id)
 
 
+def _set_workstream(record: WorkstreamRecord) -> None:
+    record.updated_at = time.time()
+    with _workstreams_lock:
+        _workstreams[record.workstream_id] = record
+
+
+def _get_workstream(workstream_id: str) -> Optional[WorkstreamRecord]:
+    with _workstreams_lock:
+        return _workstreams.get(workstream_id)
+
+
+def _drop_workstream(workstream_id: str) -> None:
+    with _workstreams_lock:
+        _workstreams.pop(workstream_id, None)
+
+
+def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = None) -> WorkstreamRecord:
+    snapshot = bridge.intervention_layer.snapshot()
+    pending = snapshot.get("pending")
+    return WorkstreamRecord(
+        workstream_id=bridge.workstream_id,
+        bridge_id=bridge.bridge_id,
+        room_id=bridge.room.room_id,
+        pane_a=bridge.pane_a,
+        pane_b=bridge.pane_b,
+        profile=bridge.profile_name,
+        auto_forward=bridge.auto_forward,
+        intervention=bridge.intervention_layer.active,
+        poll_ms=bridge.poll_ms,
+        lines=bridge.lines,
+        backend=bridge.backend_spec,
+        state=bridge.state,
+        pending=list(pending) if isinstance(pending, list) else [],
+        auto_forward_guard=bridge.auto_forward_guard(),
+        restore_error=restore_error,
+    )
+
+
+def _workstream_status_payloads() -> List[Dict[str, Any]]:
+    with _workstreams_lock:
+        records = list(_workstreams.values())
+    return [record.to_status_payload() for record in sorted(records, key=lambda item: item.workstream_id)]
+
+
+def _sync_workstream_from_bridge(bridge: Bridge, *, restore_error: Optional[str] = None) -> None:
+    _set_workstream(_bridge_workstream_record(bridge, restore_error=restore_error))
+    _persist_workstream_snapshot()
+
+
+def _persist_workstream_snapshot(continuity: Optional[Dict[str, Any]] = None) -> None:
+    persist_runtime_snapshot(
+        workstreams=[record.to_snapshot_payload() for record in _workstream_records()],
+        continuity=continuity,
+    )
+
+
+def _workstream_records() -> List[WorkstreamRecord]:
+    with _workstreams_lock:
+        return list(_workstreams.values())
+
+
+def _restore_workstreams_from_service_state() -> None:
+    state = load_runtime_state()
+    runtime = state.get("runtime")
+    if not isinstance(runtime, dict):
+        return
+    if str(runtime.get("launch_mode", "")) != "service":
+        return
+    if state.get("pid") != os.getpid():
+        return
+    snapshots = state.get("workstreams")
+    if not isinstance(snapshots, list) or not snapshots:
+        return
+
+    restored_any = False
+    for item in snapshots:
+        if not isinstance(item, dict):
+            continue
+        try:
+            record = WorkstreamRecord.from_snapshot(item)
+        except Exception:
+            continue
+        room = create_room(record.room_id)
+        backend = _make_backend(record.backend.to_backend_args())
+        try:
+            backend.capture_both(record.pane_a, record.pane_b, record.lines)
+        except Exception as exc:
+            record.state = "degraded"
+            record.restore_error = str(exc)
+            _set_workstream(record)
+            continue
+
+        bridge = Bridge(
+            record.bridge_id,
+            backend,
+            room,
+            record.pane_a,
+            record.pane_b,
+            workstream_id=record.workstream_id,
+            backend_spec=record.backend,
+            profile_name=record.profile,
+            poll_ms=record.poll_ms,
+            lines=record.lines,
+            auto_forward=record.auto_forward,
+            intervention=record.intervention,
+            restored=True,
+        )
+        bridge.intervention_layer.restore({
+            "active": record.intervention,
+            "counter": max([int(msg.get("id", 0)) for msg in record.pending if isinstance(msg, dict)] + [0]),
+            "pending": record.pending,
+        })
+        with _bridges_lock:
+            _bridges[bridge.bridge_id] = bridge
+        t = threading.Thread(target=bridge.worker, daemon=True, name=f"bridge-{bridge.bridge_id}")
+        t.start()
+        _set_workstream(_bridge_workstream_record(bridge))
+        restored_any = True
+
+    continuity = dict(runtime.get("continuity", {})) if isinstance(runtime.get("continuity"), dict) else {}
+    if restored_any and continuity.get("mode") == _CONTINUITY_RESTART_LOST:
+        continuity["mode"] = _CONTINUITY_RESTORED
+        continuity["runtime_restored"] = True
+    _persist_workstream_snapshot(continuity if continuity else None)
+
+
 def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
     return {
+        "workstream_id": bridge.workstream_id,
         "bridge_id": bridge.bridge_id,
         "room_id": bridge.room.room_id,
         "pane_a": bridge.pane_a,
@@ -395,10 +541,31 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
         "intervention": bridge.intervention_layer.active,
         "pending_count": len(bridge.intervention_layer.list_pending()),
         "auto_forward_guard": bridge.auto_forward_guard(),
+        "backend": bridge.backend_spec.to_dict(),
+        "poll_ms": bridge.poll_ms,
+        "lines": bridge.lines,
+        "state": bridge.state,
     }
 
 
 def _resolve_bridge(args: Dict[str, Any]) -> Tuple[Optional[str], Optional[Bridge], Optional[Dict[str, Any]]]:
+    requested_workstream_id = str(args.get("workstream_id", "") or "").strip()
+    if requested_workstream_id:
+        try:
+            requested_workstream_id = validate_workstream_id(requested_workstream_id)
+        except ValueError as exc:
+            return None, None, {"error": str(exc)}
+        record = _get_workstream(requested_workstream_id)
+        if record is None:
+            return None, None, {"error": f"workstream not found: {requested_workstream_id}"}
+        bridge = _get_bridge(record.bridge_id)
+        if bridge:
+            return bridge.bridge_id, bridge, None
+        return None, None, {
+            "error": f"workstream {requested_workstream_id} has no active bridge",
+            "workstream": record.to_status_payload(),
+        }
+
     requested_bridge_id = str(args.get("bridge_id", "") or "").strip()
     if requested_bridge_id:
         try:
@@ -568,6 +735,7 @@ def _maybe_rearm_auto_forward_guard(bridge: Bridge) -> None:
         return
     bridge.rearm_auto_forward_guard()
     _audit("bridge.guard_rearmed", bridge_id=bridge.bridge_id, room_id=bridge.room.room_id)
+    _sync_workstream_from_bridge(bridge)
 
 
 def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -686,7 +854,10 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
     import uuid
-    backend = _make_backend(args)
+    backend_args = dict(args)
+    backend_args["backend"] = str(args.get("backend") or default_backend_name())
+    backend_spec = BackendSpec.from_args(backend_args)
+    backend = _make_backend(backend_args)
     pane_a = str(args["pane_a"])
     pane_b = str(args["pane_b"])
     try:
@@ -696,11 +867,37 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         requested_bridge_id = str(args.get("bridge_id", "")).strip()
         if requested_bridge_id:
             requested_bridge_id = _validate_bridge_id(requested_bridge_id)
+        requested_workstream_id = str(args.get("workstream_id", "")).strip()
+        if requested_workstream_id:
+            requested_workstream_id = validate_workstream_id(requested_workstream_id)
         poll_ms = _parse_int(args.get("poll_ms"), name="poll_ms", default=400, minimum=10, maximum=_MAX_POLL_MS)
         lines = _parse_int(args.get("lines"), name="lines", default=200, minimum=1, maximum=_MAX_CAPTURE_LINES)
     except ValueError as exc:
         return {"error": str(exc)}
-    bridge_id = requested_bridge_id or uuid.uuid4().hex[:12]
+    reusable_record = _get_workstream(requested_workstream_id) if requested_workstream_id else None
+    if reusable_record and reusable_record.bridge_active:
+        active_bridge = _get_bridge(reusable_record.bridge_id)
+        if active_bridge is not None and active_bridge.backend is backend and active_bridge.pane_a == pane_a and active_bridge.pane_b == pane_b:
+            _audit(
+                "bridge.start_existing",
+                workstream_id=reusable_record.workstream_id,
+                bridge_id=active_bridge.bridge_id,
+                room_id=active_bridge.room.room_id,
+                pane_a=pane_a,
+                pane_b=pane_b,
+                reason="workstream_reused",
+            )
+            return {
+                "workstream_id": reusable_record.workstream_id,
+                "bridge_id": active_bridge.bridge_id,
+                "room_id": active_bridge.room.room_id,
+                "existing": True,
+            }
+        return {"error": f"workstream_id already exists: {requested_workstream_id}"}
+    if reusable_record and not requested_room_id:
+        requested_room_id = reusable_record.room_id
+    bridge_id = requested_bridge_id or (reusable_record.bridge_id if reusable_record else uuid.uuid4().hex[:12])
+    workstream_id = requested_workstream_id or (reusable_record.workstream_id if reusable_record else bridge_id)
     profile_name = str(args.get("profile", "generic"))
 
     with _bridges_lock:
@@ -725,15 +922,22 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
                     }
                 _audit(
                     "bridge.start_existing",
+                    workstream_id=existing.workstream_id,
                     bridge_id=existing.bridge_id,
                     room_id=existing.room.room_id,
                     pane_a=pane_a,
                     pane_b=pane_b,
                     reason="bridge_id_reused",
                 )
-                return {"bridge_id": existing.bridge_id, "room_id": existing.room.room_id, "existing": True}
+                return {
+                    "workstream_id": existing.workstream_id,
+                    "bridge_id": existing.bridge_id,
+                    "room_id": existing.room.room_id,
+                    "existing": True,
+                }
             _audit(
                 "bridge.start_conflict",
+                workstream_id=existing.workstream_id,
                 bridge_id=requested_bridge_id,
                 room_id=existing.room.room_id,
                 pane_a=pane_a,
@@ -765,19 +969,26 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
                 }
             _audit(
                 "bridge.start_existing",
+                workstream_id=existing.workstream_id,
                 bridge_id=existing.bridge_id,
                 room_id=existing.room.room_id,
                 pane_a=pane_a,
                 pane_b=pane_b,
                 reason="pane_pair_existing",
             )
-            return {"bridge_id": existing.bridge_id, "room_id": existing.room.room_id, "existing": True}
+            return {
+                "workstream_id": existing.workstream_id,
+                "bridge_id": existing.bridge_id,
+                "room_id": existing.room.room_id,
+                "existing": True,
+            }
 
     try:
         backend.capture_both(pane_a, pane_b, lines)
     except Exception as exc:
         _audit(
             "bridge.start_failed",
+            workstream_id=workstream_id,
             bridge_id=bridge_id,
             room_id=requested_room_id or None,
             pane_a=pane_a,
@@ -788,6 +999,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         )
         return {"error": f"bridge preflight failed: {exc}"}
     room = create_room(requested_room_id) if requested_room_id else create_room()
+    if reusable_record:
+        _drop_workstream(reusable_record.workstream_id)
 
     bridge = Bridge(
         bridge_id=bridge_id,
@@ -795,6 +1008,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         room=room,
         pane_a=pane_a,
         pane_b=pane_b,
+        workstream_id=workstream_id,
+        backend_spec=backend_spec,
         profile_name=profile_name,
         poll_ms=poll_ms,
         lines=lines,
@@ -803,10 +1018,12 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
     )
     with _bridges_lock:
         _bridges[bridge_id] = bridge
+    _set_workstream(_bridge_workstream_record(bridge))
     t = threading.Thread(target=bridge.worker, daemon=True, name=f"bridge-{bridge_id}")
     t.start()
     _audit(
         "bridge.started",
+        workstream_id=workstream_id,
         bridge_id=bridge_id,
         room_id=room.room_id,
         pane_a=pane_a,
@@ -815,7 +1032,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         auto_forward=bridge.auto_forward,
         intervention=bridge.intervention_layer.active,
     )
-    return {"bridge_id": bridge_id, "room_id": room.room_id}
+    _persist_workstream_snapshot()
+    return {"workstream_id": workstream_id, "bridge_id": bridge_id, "room_id": room.room_id}
 
 
 def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -827,7 +1045,9 @@ def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
         bridge = _bridges.pop(bridge_id, None)
     if bridge:
         bridge.stop.set()
+        _drop_workstream(bridge.workstream_id)
         _audit("bridge.stopped", bridge_id=bridge_id, room_id=bridge.room.room_id)
+        _persist_workstream_snapshot()
         return {"ok": True}
     return {"error": "bridge not found"}
 
@@ -887,6 +1107,7 @@ def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
         errors=errors,
         remaining=len(bridge.intervention_layer.list_pending()),
     )
+    _sync_workstream_from_bridge(bridge)
 
     return {
         "bridge_id": bridge_id,
@@ -945,6 +1166,7 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
         rejected=rejected,
         remaining=len(bridge.intervention_layer.list_pending()),
     )
+    _sync_workstream_from_bridge(bridge)
 
     return {
         "bridge_id": bridge_id,
@@ -1040,6 +1262,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
     with _bridges_lock:
         bridge_ids = list(_bridges.keys())
         bridge_details = [_bridge_detail(bridge) for bridge in _bridges.values()]
+    workstreams = _workstream_status_payloads()
     transports = _transport_snapshot()
     transport_by_room = {item["room_id"]: item for item in transports["rooms"]}
     return {
@@ -1051,6 +1274,23 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
                   for r in rooms],
         "bridges": bridge_ids,
         "bridge_details": bridge_details,
+        "workstreams": [
+            {
+                **item,
+                "subscribers": transport_by_room.get(
+                    item["room_id"],
+                    {"room_id": item["room_id"], "sse": 0, "websocket": 0, "total": 0},
+                ),
+            }
+            for item in workstreams
+        ],
+        "fleet": {
+            "count": len(workstreams),
+            "live": sum(1 for item in workstreams if item["state"] == "live"),
+            "restored": sum(1 for item in workstreams if item["state"] == "restored"),
+            "degraded": sum(1 for item in workstreams if item["state"] == "degraded"),
+            "pending": sum(int(item["pending_count"]) for item in workstreams),
+        },
         "transports": transports,
         "audit": _audit_trail.describe(),
         "runtime": runtime_contract(),
@@ -1104,6 +1344,10 @@ _DEFAULT_TOOL_SCHEMA: Dict[str, Any] = {
 _BRIDGE_RESOLUTION_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
+        "workstream_id": {
+            "type": "string",
+            "description": "Preferred fleet-safe target identifier for a workstream.",
+        },
         "bridge_id": {
             "type": "string",
             "description": "Explicit bridge id. Optional when room_id or a single active bridge can resolve the target.",
@@ -1125,6 +1369,10 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "text": {"type": "string"},
             "kind": {"type": "string"},
             "deliver": {"type": "string", "enum": ["a", "b", "both"]},
+            "workstream_id": {
+                "type": "string",
+                "description": "Optional fleet-safe target identifier for delivery.",
+            },
             "bridge_id": {
                 "type": "string",
                 "description": "Optional when room_id already identifies a single active bridge.",
@@ -1758,6 +2006,7 @@ class MCPHandler(BaseHTTPRequestHandler):
 
 
 def run_server(host: str = "127.0.0.1", port: int = 3189) -> None:
+    _restore_workstreams_from_service_state()
     server = ThreadingHTTPServer((host, port), MCPHandler)
     print(f"[tb2-server] listening on {host}:{port}/mcp")
     try:

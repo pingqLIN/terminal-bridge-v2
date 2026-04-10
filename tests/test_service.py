@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -475,4 +476,76 @@ def test_runtime_contract_reads_service_state_metadata(tmp_path, monkeypatch):
     assert runtime["continuity"]["mode"] == "restart_state_lost"
     assert runtime["continuity"]["previous_pid"] == 1357
     assert runtime["continuity"]["previous_started_at"] == 12.5
+    assert runtime["state_persistence"] == "service_state_snapshot"
+    assert runtime["restart_behavior"] == "best_effort_restore"
+    assert runtime["recovery_source"] == "service_state_snapshot"
+    assert runtime["workstream_count"] == 0
 
+
+def test_runtime_contract_counts_persisted_workstreams(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": os.getpid(),
+                "runtime": {
+                    "launch_mode": "service",
+                    "continuity": {
+                        "mode": "restart_restored",
+                        "runtime_restored": True,
+                    },
+                },
+                "workstreams": [{"workstream_id": "main-flow"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runtime = service.runtime_contract()
+
+    assert runtime["workstream_count"] == 1
+    assert runtime["continuity"]["mode"] == "restart_restored"
+    assert runtime["continuity"]["runtime_restored"] is True
+
+
+def test_persist_runtime_snapshot_updates_service_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": os.getpid(),
+                "runtime": {
+                    "launch_mode": "service",
+                    "continuity": {
+                        "mode": "restart_state_lost",
+                        "runtime_restored": False,
+                    },
+                },
+                "workstreams": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    ok = service.persist_runtime_snapshot(
+        workstreams=[{"workstream_id": "main-flow", "room_id": "room-a"}],
+        continuity={
+            "mode": "restart_restored",
+            "runtime_restored": True,
+            "previous_pid": 1234,
+            "previous_started_at": 12.5,
+        },
+    )
+
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert ok is True
+    assert saved["runtime"]["state_persistence"] == "service_state_snapshot"
+    assert saved["runtime"]["continuity"]["mode"] == "restart_restored"
+    assert saved["runtime"]["continuity"]["runtime_restored"] is True
+    assert saved["workstreams"][0]["workstream_id"] == "main-flow"

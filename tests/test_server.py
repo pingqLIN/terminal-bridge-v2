@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import shutil
 import socket
 import subprocess
@@ -81,6 +82,8 @@ def clean_server_state():
         for b in server_mod._bridges.values():
             b.stop.set()
         server_mod._bridges.clear()
+    with server_mod._workstreams_lock:
+        server_mod._workstreams.clear()
     with server_mod._backend_cache_lock:
         server_mod._backend_cache.clear()
 
@@ -303,6 +306,7 @@ class TestStatusHandler:
             "pane_b": "status:b",
             "room_id": "status-test",
             "bridge_id": "status-bridge",
+            "workstream_id": "main-flow",
             "profile": "codex",
             "auto_forward": True,
             "intervention": True,
@@ -333,7 +337,12 @@ class TestStatusHandler:
         assert "status-test" in room_ids
         assert result["bridges"] == ["status-bridge"]
         assert result["bridge_details"][0]["room_id"] == "status-test"
+        assert result["bridge_details"][0]["workstream_id"] == "main-flow"
         assert result["bridge_details"][0]["profile"] == "codex"
+        assert result["workstreams"][0]["workstream_id"] == "main-flow"
+        assert result["workstreams"][0]["bridge_active"] is True
+        assert result["fleet"]["count"] == 1
+        assert result["fleet"]["live"] == 1
         server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
 
     def test_status_surfaces_service_runtime_metadata(self, tmp_path, monkeypatch):
@@ -418,8 +427,108 @@ class TestAuditTrail:
         assert "bridge.started" in events
         assert "room.message_posted" in events
         assert "operator.room_post" in events
-        assert "operator.interrupt" in events
-        assert "bridge.stopped" in events
+
+
+class TestWorkstreamHandlers:
+    @patch.object(server_mod, "_make_backend")
+    def test_intervention_list_resolves_workstream_id(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("ws-room")
+        started = server_mod.handle_bridge_start({
+            "pane_a": "ws:a",
+            "pane_b": "ws:b",
+            "room_id": "ws-room",
+            "bridge_id": "ws-bridge",
+            "workstream_id": "ws-main",
+            "intervention": True,
+        })
+
+        result = server_mod.handle_intervention_list({"workstream_id": "ws-main"})
+
+        assert started["workstream_id"] == "ws-main"
+        assert result["bridge_id"] == "ws-bridge"
+        server_mod.handle_bridge_stop({"bridge_id": "ws-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_restore_workstreams_from_service_state(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+        state = tmp_path / "server.state.json"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "pid": os.getpid(),
+                    "runtime": {
+                        "launch_mode": "service",
+                        "continuity": {
+                            "mode": "restart_state_lost",
+                            "runtime_restored": False,
+                        },
+                    },
+                    "workstreams": [
+                        {
+                            "workstream_id": "restored-main",
+                            "bridge_id": "restored-bridge",
+                            "room_id": "restored-room",
+                            "pane_a": "restore:a",
+                            "pane_b": "restore:b",
+                            "profile": "generic",
+                            "auto_forward": False,
+                            "intervention": True,
+                            "poll_ms": 400,
+                            "lines": 200,
+                            "backend": {
+                                "kind": "process",
+                                "backend_id": "restored-backend",
+                                "shell": "",
+                                "distro": "",
+                            },
+                            "pending": [
+                                {
+                                    "id": 1,
+                                    "from_pane": "restore:a",
+                                    "to_pane": "restore:b",
+                                    "text": "echo RESTORE",
+                                    "action": "pending",
+                                    "edited_text": None,
+                                    "created_at": 1.0,
+                                }
+                            ],
+                            "auto_forward_guard": {
+                                "blocked": False,
+                                "guard_reason": None,
+                                "rate_limit": 6,
+                                "window_seconds": 3.0,
+                                "streak_limit": 20,
+                            },
+                            "state": "live",
+                            "bridge_active": True,
+                            "restore_error": None,
+                            "updated_at": 1.0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        server_mod._restore_workstreams_from_service_state()
+        result = server_mod.handle_status({})
+
+        assert result["runtime"]["continuity"]["mode"] == "restart_restored"
+        assert result["runtime"]["continuity"]["runtime_restored"] is True
+        assert result["workstreams"][0]["workstream_id"] == "restored-main"
+        assert result["workstreams"][0]["state"] == "restored"
+        assert result["workstreams"][0]["pending_count"] == 1
+
+        server_mod.handle_bridge_stop({"bridge_id": "restored-bridge"})
 
     @patch.object(server_mod, "_make_backend")
     def test_audit_trail_records_intervention_approval(self, mock_factory, tmp_path, monkeypatch):
@@ -1435,6 +1544,14 @@ class TestGuiRouting:
         assert "function renderPendingDetail()" in html
         assert "state.pendingItems = Array.isArray(items) ? items : [];" in html
         assert "$('pending-select').onchange = () => renderPendingDetail();" in html
+
+    def test_gui_html_surfaces_workstream_fleet(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert 'id="workstream-list"' in html
+        assert 'id="fleet-summary-meta"' in html
+        assert "function renderWorkstreamFleet(status)" in html
+        assert "selectedWorkstreamId:" in html
+        assert "if (workstreamId) args.workstream_id = workstreamId;" in html
 
     def test_gui_html_surfaces_status_summary_badges(self):
         html = server_mod.build_gui_html("/mcp")

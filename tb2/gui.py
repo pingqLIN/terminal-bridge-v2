@@ -1952,16 +1952,8 @@ GUI_HTML_TEMPLATE = r"""
             <h2 data-i18n="fleet.overview">Overview</h2>
           </div>
           <p class="subtle" style="margin-bottom: 12px; margin-top: -6px;" data-i18n="fleet.hint">Select a workstream to manage.</p>
-          <div class="preset-grid" style="grid-template-columns: 1fr; margin-top: 0; gap: 8px;">
-            <button class="preset active" type="button">
-              <b>Main Workstream <span class="status-led is-ok" style="float: right;"></span></b>
-              <span>Host + Guest · 0 pending</span>
-            </button>
-            <button class="preset" type="button" style="opacity: 0.5;">
-              <b>+ New Workstream</b>
-              <span>Click to provision</span>
-            </button>
-          </div>
+          <div class="subtle" id="fleet-summary-meta" style="margin-bottom: 12px;">0 workstreams</div>
+          <div class="preset-grid" id="workstream-list" style="grid-template-columns: 1fr; margin-top: 0; gap: 8px;"></div>
         </aside>
 
         <div class="workstream-panel">
@@ -2431,6 +2423,18 @@ GUI_HTML_TEMPLATE = r"""
             inspectLive: 'runtime + logs',
             inspectAudit: 'audit + diagnostics'
           },
+          fleet: {
+            title: 'Workstream Fleet',
+            overview: 'Overview',
+            hint: 'Select a workstream to manage.',
+            empty: 'No active workstreams yet.',
+            count: '{count} workstreams',
+            pending: '{count} pending',
+            idle: 'idle',
+            stateLive: 'live',
+            stateRestored: 'restored',
+            stateDegraded: 'degraded'
+          },
           strip: {
             preset: 'Preset',
             session: 'Session',
@@ -2789,6 +2793,18 @@ GUI_HTML_TEMPLATE = r"""
             inspectIdle: '待命',
             inspectLive: '狀態與活動',
             inspectAudit: 'audit 與診斷'
+          },
+          fleet: {
+            title: 'Workstream Fleet',
+            overview: 'Overview',
+            hint: '選擇一條 workstream 進行操作。',
+            empty: '目前還沒有 active workstream。',
+            count: '{count} 條 workstream',
+            pending: '{count} 筆待審',
+            idle: '閒置',
+            stateLive: '運行中',
+            stateRestored: '已恢復',
+            stateDegraded: '降級'
           },
           strip: {
             preset: 'Preset',
@@ -3216,6 +3232,7 @@ GUI_HTML_TEMPLATE = r"""
         statusSnapshot: null,
         auditEvents: [],
         pendingItems: [],
+        selectedWorkstreamId: '',
         seen: new Set()
       };
 
@@ -3292,6 +3309,56 @@ GUI_HTML_TEMPLATE = r"""
         select.value = value;
       }
 
+      function workstreamsFromStatus(status) {
+        return Array.isArray(status && status.workstreams) ? status.workstreams : [];
+      }
+
+      function workstreamStateLabel(name) {
+        if (name === 'restored') return t('fleet.stateRestored');
+        if (name === 'degraded') return t('fleet.stateDegraded');
+        return t('fleet.stateLive');
+      }
+
+      function inferWorkstream(status) {
+        const workstreams = workstreamsFromStatus(status);
+        if (!workstreams.length) return null;
+        if (state.selectedWorkstreamId) {
+          const exact = workstreams.find(item => item && item.workstream_id === state.selectedWorkstreamId);
+          if (exact) return exact;
+        }
+        const bridgeId = $('bridge-id').value.trim();
+        if (bridgeId) {
+          const exact = workstreams.find(item => item && item.bridge_id === bridgeId);
+          if (exact) return exact;
+        }
+        const roomId = $('room-id').value.trim();
+        if (roomId) {
+          const exact = workstreams.find(item => item && item.room_id === roomId);
+          if (exact) return exact;
+        }
+        return workstreams.find(item => item && item.bridge_active) || workstreams[0];
+      }
+
+      function bridgeIsActive(detail) {
+        if (!detail) return false;
+        if (typeof detail.bridge_active === 'boolean') return detail.bridge_active;
+        return Boolean(detail.bridge_id);
+      }
+
+      function applyWorkstreamSelection(item) {
+        if (!item) return;
+        state.selectedWorkstreamId = String(item.workstream_id || '');
+        $('room-id').value = String(item.room_id || '');
+        $('bridge-id').value = item.bridge_active ? String(item.bridge_id || '') : '';
+        $('pane-a').value = String(item.pane_a || $('pane-a').value || '');
+        $('pane-b').value = String(item.pane_b || $('pane-b').value || '');
+        setSelectValue($('profile'), String(item.profile || 'generic'));
+        if (item.backend && item.backend.kind) setSelectValue($('backend'), String(item.backend.kind));
+        $('auto-forward').checked = Boolean(item.auto_forward);
+        $('intervention').checked = Boolean(item.intervention);
+        syncMetrics();
+      }
+
       function syncMirroredSelectOptions(sourceId, targetId) {
         const source = $(sourceId);
         const target = $(targetId);
@@ -3344,7 +3411,7 @@ GUI_HTML_TEMPLATE = r"""
 
       function workspaceMetaText(name) {
         const detail = inferBridgeDetail(state.statusSnapshot);
-        const bridgeActive = Boolean((detail && detail.bridge_id) || $('bridge-id').value.trim());
+        const bridgeActive = bridgeIsActive(detail) || Boolean($('bridge-id').value.trim());
         const roomActive = Boolean((detail && detail.room_id) || $('room-id').value.trim());
         const pendingCount = state.pendingItems.length;
         const reviewEnabled = detail ? Boolean(detail.intervention) : $('intervention').checked;
@@ -3413,7 +3480,7 @@ GUI_HTML_TEMPLATE = r"""
         container.replaceChildren();
         const detail = inferBridgeDetail(state.statusSnapshot);
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
-        const bridgeId = $('bridge-id').value.trim() || (detail && detail.bridge_id) || '';
+        const bridgeId = $('bridge-id').value.trim() || (bridgeIsActive(detail) ? (detail && detail.bridge_id) : '') || '';
         const sessionId = $('session').value.trim();
         const hasPanes = Boolean($('pane-a').value.trim() && $('pane-b').value.trim());
         const bridgeActive = Boolean(bridgeId);
@@ -3938,9 +4005,9 @@ GUI_HTML_TEMPLATE = r"""
         addSummaryTile(
           container,
           t('cards.inspectTileBridge'),
-          detail && detail.bridge_id ? String(detail.bridge_id) : t('strip.bridgeIdle'),
+          bridgeIsActive(detail) && detail && detail.bridge_id ? String(detail.bridge_id) : t('strip.bridgeIdle'),
           detail && detail.profile ? String(detail.profile) : t('relation.none'),
-          detail && detail.bridge_id ? 'active' : 'muted'
+          bridgeIsActive(detail) ? 'active' : 'muted'
         );
         addSummaryTile(
           container,
@@ -4010,14 +4077,17 @@ GUI_HTML_TEMPLATE = r"""
 
       function bridgeArgs() {
         const args = {};
+        const workstreamId = state.selectedWorkstreamId.trim();
         const bridgeId = $('bridge-id').value.trim();
         const roomId = $('room-id').value.trim();
+        if (workstreamId) args.workstream_id = workstreamId;
         if (bridgeId) args.bridge_id = bridgeId;
         if (!bridgeId && roomId) args.room_id = roomId;
         return args;
       }
 
       function clearBridgeState() {
+        state.selectedWorkstreamId = '';
         $('bridge-id').value = '';
         $('pending-edit').value = '';
         state.guard = null;
@@ -4028,8 +4098,43 @@ GUI_HTML_TEMPLATE = r"""
       function isInactiveBridgeError(message) {
         if (!message) return false;
         return message === 'bridge not found'
+          || message.startsWith('workstream ') && message.endsWith(' has no active bridge')
           || message === 'bridge_id required: no active bridges'
           || message.startsWith('no active bridge for room ');
+      }
+
+      function renderWorkstreamFleet(status) {
+        const box = $('workstream-list');
+        const meta = $('fleet-summary-meta');
+        if (!box || !meta) return;
+        const workstreams = workstreamsFromStatus(status);
+        box.innerHTML = '';
+        meta.textContent = workstreams.length ? format('fleet.count', { count: workstreams.length }) : t('fleet.empty');
+        if (!workstreams.length) return;
+        const selected = inferWorkstream(status);
+        if (selected) applyWorkstreamSelection(selected);
+        workstreams.forEach(item => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'preset' + (selected && selected.workstream_id === item.workstream_id ? ' active' : '');
+          const title = document.createElement('b');
+          title.textContent = String(item.workstream_id || '');
+          const detail = document.createElement('span');
+          const roomId = String(item.room_id || '');
+          const pending = Number(item.pending_count || 0) || 0;
+          const pendingLabel = pending > 0 ? format('fleet.pending', { count: pending }) : t('fleet.idle');
+          detail.textContent = workstreamStateLabel(String(item.state || 'live')) + ' · ' + pendingLabel + ' · ' + roomId;
+          button.appendChild(title);
+          button.appendChild(detail);
+          button.onclick = () => run(async () => {
+            applyWorkstreamSelection(item);
+            await refreshPending();
+            await refreshAudit();
+            renderStatusSummary(state.statusSnapshot || status);
+            renderRelationView();
+          });
+          box.appendChild(button);
+        });
       }
 
       function statusSummaryLabels(status, detail, subscribers) {
@@ -4058,6 +4163,7 @@ GUI_HTML_TEMPLATE = r"""
       function renderStatusSummary(status) {
         const box = $('status-badges');
         box.innerHTML = '';
+        renderWorkstreamFleet(status);
         const detail = inferBridgeDetail(status);
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
         const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
@@ -4082,6 +4188,8 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       function inferBridgeDetail(status) {
+        const workstream = inferWorkstream(status);
+        if (workstream) return workstream;
         const bridgeId = $('bridge-id').value.trim();
         const roomId = $('room-id').value.trim();
         const details = Array.isArray(status && status.bridge_details) ? status.bridge_details : [];
@@ -4526,7 +4634,7 @@ GUI_HTML_TEMPLATE = r"""
         const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];
         const preset = PRESETS[state.preset] || PRESETS.quick;
         const presetLabel = t('presets.' + state.preset + '.label');
-        const bridgeId = $('bridge-id').value.trim() || (detail && detail.bridge_id) || '';
+        const bridgeId = $('bridge-id').value.trim() || (bridgeIsActive(detail) ? (detail && detail.bridge_id) : '') || '';
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
         const hostPane = $('pane-a').value.trim() || (detail && detail.pane_a) || '';
         const guestPane = $('pane-b').value.trim() || (detail && detail.pane_b) || '';
@@ -4983,9 +5091,14 @@ GUI_HTML_TEMPLATE = r"""
           res = await tool('intervention_list', args);
         } catch (err) {
           if (isInactiveBridgeError(err.message || '')) {
-            clearBridgeState();
+            const selected = inferWorkstream(state.statusSnapshot || {});
+            if (selected && Array.isArray(selected.pending)) {
+              fillPending(selected.pending);
+            } else {
+              fillPending([]);
+            }
             syncMetrics();
-            return { pending: [], count: 0 };
+            return { pending: selected && Array.isArray(selected.pending) ? selected.pending : [], count: selected ? Number(selected.pending_count || 0) : 0 };
           }
           throw err;
         }
@@ -4997,8 +5110,10 @@ GUI_HTML_TEMPLATE = r"""
       async function refreshStatus() {
         const res = await tool('status', {});
         state.statusSnapshot = res;
+        const selected = inferWorkstream(res);
+        if (selected) applyWorkstreamSelection(selected);
         const detail = inferBridgeDetail(res);
-        const inferred = detail ? (detail.bridge_id || '') : '';
+        const inferred = bridgeIsActive(detail) && detail ? (detail.bridge_id || '') : '';
         if (!$('bridge-id').value.trim() && inferred) $('bridge-id').value = inferred;
         state.guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
         state.audit = res.audit || null;
@@ -5051,7 +5166,9 @@ GUI_HTML_TEMPLATE = r"""
         }, commonArgs());
         if ($('bridge-id').value.trim()) args.bridge_id = $('bridge-id').value.trim();
         if ($('room-id').value.trim()) args.room_id = $('room-id').value.trim();
+        if (state.selectedWorkstreamId.trim()) args.workstream_id = state.selectedWorkstreamId.trim();
         const res = await tool('bridge_start', args);
+        state.selectedWorkstreamId = String(res.workstream_id || state.selectedWorkstreamId || '');
         $('bridge-id').value = res.bridge_id || '';
         $('room-id').value = res.room_id || '';
         state.lastMsgId = 0;

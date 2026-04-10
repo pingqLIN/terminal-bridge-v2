@@ -152,6 +152,8 @@ def clean_remote_control_state():
         for bridge in server_mod._bridges.values():
             bridge.stop.set()
         server_mod._bridges.clear()
+    with server_mod._workstreams_lock:
+        server_mod._workstreams.clear()
     deadline = time.time() + 1.0
     while time.time() < deadline:
         if not any(thread.name.startswith("bridge-") for thread in threading.enumerate()):
@@ -281,10 +283,12 @@ class TestRemoteControlMcp:
         })
 
         assert first == {
+            "workstream_id": "mcp-room-check-bridge",
             "bridge_id": "mcp-room-check-bridge",
             "room_id": "mcp-room-check-room",
         }
         assert second == {
+            "workstream_id": "mcp-room-check-bridge",
             "bridge_id": "mcp-room-check-bridge",
             "room_id": "mcp-room-check-room",
             "existing": True,
@@ -293,6 +297,34 @@ class TestRemoteControlMcp:
             "pane pair already bridged by mcp-room-check-bridge in room "
             "mcp-room-check-room; stop it first"
         )
+
+    def test_status_surfaces_workstream_metadata(self, mcp_server):
+        base_url = mcp_server["base_url"]
+        init = _tool(base_url, "terminal_init", {
+            "session": "mcp-workstream",
+            "backend": "pipe",
+            "backend_id": "mcp-workstream",
+        })
+        started = _tool(base_url, "bridge_start", {
+            "pane_a": init["pane_a"],
+            "pane_b": init["pane_b"],
+            "backend": "pipe",
+            "backend_id": "mcp-workstream",
+            "bridge_id": "mcp-workstream-bridge",
+            "workstream_id": "mcp-main",
+            "room_id": "mcp-main-room",
+            "intervention": True,
+        })
+
+        status = _tool(base_url, "status", {})
+        pending = _tool(base_url, "intervention_list", {"workstream_id": "mcp-main"})
+
+        assert started["workstream_id"] == "mcp-main"
+        assert status["fleet"]["count"] == 1
+        assert status["workstreams"][0]["workstream_id"] == "mcp-main"
+        assert status["workstreams"][0]["bridge_id"] == "mcp-workstream-bridge"
+        assert status["workstreams"][0]["bridge_active"] is True
+        assert pending["bridge_id"] == "mcp-workstream-bridge"
 
     def test_midline_forwarding_once_via_mcp(self, mcp_server):
         base_url = mcp_server["base_url"]
@@ -341,6 +373,7 @@ class TestRemoteControlMcp:
         outputs = [line for line in pane_b["lines"] if line == "REMOTE_OK"]
 
         assert start == {
+            "workstream_id": "mcp-forward-bridge",
             "bridge_id": "mcp-forward-bridge",
             "room_id": "mcp-forward-room",
         }

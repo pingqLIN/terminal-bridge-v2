@@ -113,6 +113,55 @@ class InterventionLayer:
     def resume(self) -> None:
         self.active = False
 
+    def snapshot(self) -> Dict[str, object]:
+        with self._lock:
+            return {
+                "active": self.active,
+                "counter": self._counter,
+                "pending": [
+                    {
+                        "id": msg.id,
+                        "from_pane": msg.from_pane,
+                        "to_pane": msg.to_pane,
+                        "text": msg.text,
+                        "action": msg.action.value,
+                        "edited_text": msg.edited_text,
+                        "created_at": msg.created_at,
+                    }
+                    for msg in self._pending
+                    if msg.action == Action.PENDING
+                ],
+            }
+
+    def restore(self, snapshot: Dict[str, object]) -> None:
+        pending = snapshot.get("pending")
+        items = pending if isinstance(pending, list) else []
+        counter = snapshot.get("counter")
+        with self._lock:
+            self.active = bool(snapshot.get("active", False))
+            self._counter = int(counter) if isinstance(counter, int) else 0
+            self._pending.clear()
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                msg_id = item.get("id")
+                if not isinstance(msg_id, int):
+                    continue
+                created_at = item.get("created_at")
+                self._pending.append(
+                    PendingMessage(
+                        id=msg_id,
+                        from_pane=str(item.get("from_pane", "")),
+                        to_pane=str(item.get("to_pane", "")),
+                        text=str(item.get("text", "")),
+                        action=Action.PENDING,
+                        edited_text=str(item.get("edited_text")) if item.get("edited_text") is not None else None,
+                        created_at=float(created_at) if isinstance(created_at, (int, float)) else time.time(),
+                    )
+                )
+            if self._pending:
+                self._counter = max(self._counter, max(msg.id for msg in self._pending))
+
     def _resolve(
         self,
         msg_id: int,

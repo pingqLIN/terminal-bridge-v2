@@ -24,17 +24,21 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 _STATE_SCHEMA_VERSION = 1
-_RUNTIME_PERSISTENCE = "memory_only"
-_RUNTIME_RESTART_BEHAVIOR = "state_lost"
-_RUNTIME_RECOVERY_SOURCE = "audit_history_only"
+_RUNTIME_PERSISTENCE_DIRECT = "memory_only"
+_RUNTIME_RESTART_BEHAVIOR_DIRECT = "state_lost"
+_RUNTIME_RECOVERY_SOURCE_DIRECT = "audit_history_only"
+_RUNTIME_PERSISTENCE_SERVICE = "service_state_snapshot"
+_RUNTIME_RESTART_BEHAVIOR_SERVICE = "best_effort_restore"
+_RUNTIME_RECOVERY_SOURCE_SERVICE = "service_state_snapshot"
 _DIRECT_LAUNCH_MODE = "direct"
 _SERVICE_LAUNCH_MODE = "service"
 _CONTINUITY_DIRECT = "process_local_only"
 _CONTINUITY_FRESH = "fresh_start"
 _CONTINUITY_RESTART_LOST = "restart_state_lost"
+_CONTINUITY_RESTORED = "restart_restored"
 _AUDIT_ENV_KEYS = (
     "TB2_AUDIT",
     "TB2_AUDIT_ALLOW_FULL_TEXT",
@@ -225,9 +229,9 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
     runtime = state.get("runtime")
     if not isinstance(runtime, dict):
         return {
-            "state_persistence": _RUNTIME_PERSISTENCE,
-            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR,
-            "recovery_source": _RUNTIME_RECOVERY_SOURCE,
+            "state_persistence": _RUNTIME_PERSISTENCE_DIRECT,
+            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR_DIRECT,
+            "recovery_source": _RUNTIME_RECOVERY_SOURCE_DIRECT,
             "launch_mode": _DIRECT_LAUNCH_MODE,
             "snapshot_schema_version": None,
             "audit_policy_persistence": "process_env_only",
@@ -237,14 +241,18 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
                 "previous_pid": None,
                 "previous_started_at": None,
             },
+            "workstream_count": 0,
         }
     continuity = runtime.get("continuity")
     continuity_dict = continuity if isinstance(continuity, dict) else {}
     launch_mode = str(runtime.get("launch_mode", _SERVICE_LAUNCH_MODE))
+    defaults = _runtime_defaults(launch_mode)
+    workstreams = state.get("workstreams")
+    workstream_items = workstreams if isinstance(workstreams, list) else []
     return {
-        "state_persistence": _RUNTIME_PERSISTENCE,
-        "restart_behavior": _RUNTIME_RESTART_BEHAVIOR,
-        "recovery_source": _RUNTIME_RECOVERY_SOURCE,
+        "state_persistence": str(runtime.get("state_persistence", defaults["state_persistence"])),
+        "restart_behavior": str(runtime.get("restart_behavior", defaults["restart_behavior"])),
+        "recovery_source": str(runtime.get("recovery_source", defaults["recovery_source"])),
         "launch_mode": launch_mode,
         "snapshot_schema_version": _as_int(state.get("schema_version")),
         "audit_policy_persistence": str(runtime.get("audit_policy_persistence", "service_state")),
@@ -254,7 +262,40 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
             "previous_pid": _as_pid(continuity_dict.get("previous_pid")),
             "previous_started_at": _as_float(continuity_dict.get("previous_started_at")),
         },
+        "workstream_count": len(workstream_items),
     }
+
+
+def load_runtime_state(*, paths: Optional[ServicePaths] = None) -> Dict[str, object]:
+    p = paths or ServicePaths.discover()
+    return _load_state(p.state_file)
+
+
+def persist_runtime_snapshot(
+    *,
+    workstreams: List[Dict[str, Any]],
+    continuity: Optional[Dict[str, Any]] = None,
+    paths: Optional[ServicePaths] = None,
+) -> bool:
+    p = paths or ServicePaths.discover()
+    state = _load_state(p.state_file)
+    runtime = state.get("runtime")
+    if not isinstance(runtime, dict):
+        return False
+    if str(runtime.get("launch_mode", "")) != _SERVICE_LAUNCH_MODE:
+        return False
+    if _as_pid(state.get("pid")) != os.getpid():
+        return False
+    defaults = _runtime_defaults(_SERVICE_LAUNCH_MODE)
+    runtime["state_persistence"] = defaults["state_persistence"]
+    runtime["restart_behavior"] = defaults["restart_behavior"]
+    runtime["recovery_source"] = defaults["recovery_source"]
+    if continuity is not None:
+        runtime["continuity"] = continuity
+    state["runtime"] = runtime
+    state["workstreams"] = workstreams
+    _save_state(p.state_file, state)
+    return True
 
 
 def _state_root() -> Path:
@@ -455,9 +496,9 @@ def _build_state(
         },
         "runtime": {
             "launch_mode": _SERVICE_LAUNCH_MODE,
-            "state_persistence": _RUNTIME_PERSISTENCE,
-            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR,
-            "recovery_source": _RUNTIME_RECOVERY_SOURCE,
+            "state_persistence": _RUNTIME_PERSISTENCE_SERVICE,
+            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR_SERVICE,
+            "recovery_source": _RUNTIME_RECOVERY_SOURCE_SERVICE,
             "audit_policy_persistence": "service_state",
             "continuity": {
                 "mode": continuity_mode,
@@ -466,6 +507,21 @@ def _build_state(
                 "previous_started_at": previous_started_at,
             },
         },
+        "workstreams": [],
+    }
+
+
+def _runtime_defaults(launch_mode: str) -> Dict[str, str]:
+    if launch_mode == _SERVICE_LAUNCH_MODE:
+        return {
+            "state_persistence": _RUNTIME_PERSISTENCE_SERVICE,
+            "restart_behavior": _RUNTIME_RESTART_BEHAVIOR_SERVICE,
+            "recovery_source": _RUNTIME_RECOVERY_SOURCE_SERVICE,
+        }
+    return {
+        "state_persistence": _RUNTIME_PERSISTENCE_DIRECT,
+        "restart_behavior": _RUNTIME_RESTART_BEHAVIOR_DIRECT,
+        "recovery_source": _RUNTIME_RECOVERY_SOURCE_DIRECT,
     }
 
 
