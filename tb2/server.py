@@ -42,6 +42,7 @@ from .workstream import (
     WorkstreamRecord,
     normalize_workstream_policy,
     validate_workstream_id,
+    validate_workstream_tier,
 )
 
 
@@ -60,7 +61,9 @@ class Bridge:
                  restored: bool = False,
                  last_activity_at: Optional[float] = None,
                  policy: Optional[Dict[str, Any]] = None,
-                 operator_review_paused: bool = False):
+                 operator_review_paused: bool = False,
+                 tier: str = "main",
+                 parent_workstream_id: Optional[str] = None):
         self.workstream_id = workstream_id or bridge_id
         self.bridge_id = bridge_id
         self.backend = backend
@@ -75,6 +78,8 @@ class Bridge:
         self._intervention_default = intervention
         self._operator_review_paused = operator_review_paused
         self.policy = normalize_workstream_policy(policy, poll_ms=poll_ms)
+        self.tier = validate_workstream_tier(tier)
+        self.parent_workstream_id = parent_workstream_id
         self.intervention_layer = InterventionLayer(active=intervention or operator_review_paused)
         self.stop = threading.Event()
         self.prev_a: list = []
@@ -83,6 +88,7 @@ class Bridge:
         self._auto_forward_times = deque(maxlen=64)
         self._auto_forward_streak = 0
         self._auto_forward_guard_reason = ""
+        self._pending_quota_reason = ""
         # Adaptive polling
         self._current_poll: float = float(poll_ms)
         self._min_poll: float = 100.0
@@ -152,6 +158,10 @@ class Bridge:
                     if fp in self.forwarded_recent:
                         continue
                     self.forwarded_recent.append(fp)
+                    self._arm_pending_quota_guard(tag, from_pane, to_pane, parsed)
+                    if self._pending_quota_reason:
+                        _sync_workstream_from_bridge(self)
+                        continue
                     self._arm_auto_forward_guard(tag, from_pane, to_pane, parsed)
                     msg = self.intervention_layer.submit(from_pane, to_pane, parsed)
                     _audit(
@@ -248,6 +258,52 @@ class Bridge:
             trusted=True,
         )
 
+    def _next_pending_quota_reason(self) -> str:
+        pending_limit = int(self.policy["pending_limit"])
+        pending_count = len(self.intervention_layer.list_pending())
+        if pending_count >= pending_limit:
+            return f"pending quota exceeded: {pending_count}/{pending_limit} queued handoffs"
+        return ""
+
+    def _arm_pending_quota_guard(self, tag: str, from_pane: str, to_pane: str, text: str) -> None:
+        reason = self._next_pending_quota_reason()
+        if not reason:
+            return
+        if self._pending_quota_reason == reason:
+            return
+        self.intervention_layer.pause()
+        self._pending_quota_reason = reason
+        pending_limit = int(self.policy["pending_limit"])
+        pending_count = len(self.intervention_layer.list_pending())
+        _audit(
+            "workstream.quota_blocked",
+            workstream_id=self.workstream_id,
+            bridge_id=self.bridge_id,
+            room_id=self.room.room_id,
+            pending_count=pending_count,
+            pending_limit=pending_limit,
+            from_pane=from_pane,
+            to_pane=to_pane,
+            text=text,
+        )
+        _post_room_message(
+            self.room,
+            author="bridge",
+            text=f"[quota paused {tag}->{to_pane}] {reason}; operator intervention required",
+            kind="intervention",
+            meta={
+                "bridge_id": self.bridge_id,
+                "from_pane": from_pane,
+                "to_pane": to_pane,
+                "quota_reason": reason,
+                "pending_count": pending_count,
+                "pending_limit": pending_limit,
+            },
+            source_type="bridge",
+            source_role="safety",
+            trusted=True,
+        )
+
     def _next_auto_forward_guard_reason(self) -> str:
         now = time.time()
         while self._auto_forward_times and now - self._auto_forward_times[0] > float(self.policy["window_seconds"]):
@@ -275,6 +331,7 @@ class Bridge:
     def rearm_auto_forward_guard(self) -> None:
         self._auto_forward_guard_reason = ""
         self._reset_auto_forward_guard()
+        self._pending_quota_reason = ""
         if not self._intervention_default and not self._operator_review_paused:
             self.intervention_layer.resume()
 
@@ -283,7 +340,7 @@ class Bridge:
             return "manual"
         if self._operator_review_paused:
             return "paused"
-        if self._auto_forward_guard_reason:
+        if self._auto_forward_guard_reason or self._pending_quota_reason:
             return "guarded"
         return "auto"
 
@@ -293,7 +350,7 @@ class Bridge:
 
     def resume_review(self) -> None:
         self._operator_review_paused = False
-        if self._intervention_default or self._auto_forward_guard_reason:
+        if self._intervention_default or self._auto_forward_guard_reason or self._pending_quota_reason:
             self.intervention_layer.pause()
             return
         self.intervention_layer.resume()
@@ -303,11 +360,13 @@ class Bridge:
 
     def auto_forward_guard(self) -> Dict[str, Any]:
         return {
-            "blocked": self.intervention_layer.active and bool(self._auto_forward_guard_reason),
-            "guard_reason": self._auto_forward_guard_reason or None,
+            "blocked": self.intervention_layer.active and bool(self._auto_forward_guard_reason or self._pending_quota_reason),
+            "guard_reason": self._auto_forward_guard_reason or self._pending_quota_reason or None,
             "rate_limit": int(self.policy["rate_limit"]),
             "window_seconds": float(self.policy["window_seconds"]),
             "streak_limit": int(self.policy["streak_limit"]),
+            "pending_limit": int(self.policy["pending_limit"]),
+            "quota_reason": self._pending_quota_reason or None,
             "review_mode": self.review_mode(),
         }
 
@@ -474,6 +533,63 @@ def _drop_workstream(workstream_id: str) -> None:
         _workstreams.pop(workstream_id, None)
 
 
+def _workstream_children(parent_workstream_id: str) -> List[WorkstreamRecord]:
+    with _workstreams_lock:
+        return sorted(
+            [record for record in _workstreams.values() if record.parent_workstream_id == parent_workstream_id],
+            key=lambda item: item.workstream_id,
+        )
+
+
+def _workstream_descendants(parent_workstream_id: str) -> List[WorkstreamRecord]:
+    descendants: List[WorkstreamRecord] = []
+    queue = list(_workstream_children(parent_workstream_id))
+    while queue:
+        record = queue.pop(0)
+        descendants.append(record)
+        queue.extend(_workstream_children(record.workstream_id))
+    return descendants
+
+
+def _validate_dependency_update(
+    *,
+    record: Optional[WorkstreamRecord],
+    workstream_id: str,
+    tier: str,
+    parent_workstream_id: Optional[str],
+) -> Tuple[str, Optional[str]]:
+    normalized_tier = validate_workstream_tier(tier)
+    normalized_parent = validate_workstream_id(parent_workstream_id) if parent_workstream_id else None
+    children = _workstream_children(workstream_id)
+    if children and normalized_tier != "main":
+        raise ValueError("cannot demote main workstream while dependent sub workstreams still exist")
+    if normalized_tier == "main" and normalized_parent is not None:
+        raise ValueError("main workstream cannot declare parent_workstream_id")
+    if normalized_tier == "sub" and normalized_parent is None:
+        raise ValueError("sub workstream requires parent_workstream_id")
+    if normalized_parent == workstream_id:
+        raise ValueError("workstream cannot depend on itself")
+    if normalized_parent is None:
+        if record is not None and record.tier != "main" and children:
+            raise ValueError("cannot clear dependency while sub workstream still has descendants")
+        return normalized_tier, None
+
+    parent = _get_workstream(normalized_parent)
+    if parent is None:
+        raise ValueError(f"parent workstream not found: {normalized_parent}")
+    if parent.tier != "main":
+        raise ValueError("parent workstream must have tier=main")
+    ancestor_id = parent.parent_workstream_id
+    while ancestor_id:
+        if ancestor_id == workstream_id:
+            raise ValueError("dependency cycle detected")
+        ancestor = _get_workstream(ancestor_id)
+        if ancestor is None:
+            break
+        ancestor_id = ancestor.parent_workstream_id
+    return normalized_tier, normalized_parent
+
+
 def _runtime_health_alert(
     code: str,
     *,
@@ -560,6 +676,16 @@ def _decorate_workstream_status_payload(
         "bridge_present": bridge_present,
         "orphaned": orphaned,
     }
+    child_ids = [item.workstream_id for item in _workstream_children(record.workstream_id)]
+    dependency_blockers: List[str] = []
+    payload["dependency"] = {
+        "tier": record.tier,
+        "parent_workstream_id": record.parent_workstream_id,
+        "child_workstream_ids": child_ids,
+        "child_count": len(child_ids),
+        "blocked": False,
+        "blocking_reasons": dependency_blockers,
+    }
     if orphaned:
         detail = []
         if not room_present:
@@ -578,6 +704,64 @@ def _decorate_workstream_status_payload(
                 )
             ],
         )
+    if record.tier == "sub":
+        if not record.parent_workstream_id:
+            dependency_blockers.append("sub workstream missing parent")
+            payload["health"] = _merge_health_alerts(
+                dict(payload["health"]),
+                [
+                    _runtime_health_alert(
+                        "parent_missing",
+                        severity="critical",
+                        summary="sub workstream parent is missing",
+                        escalation="intervene",
+                    )
+                ],
+            )
+        else:
+            parent = _get_workstream(record.parent_workstream_id)
+            if parent is None:
+                dependency_blockers.append("parent workstream missing")
+                payload["health"] = _merge_health_alerts(
+                    dict(payload["health"]),
+                    [
+                        _runtime_health_alert(
+                            "parent_missing",
+                            severity="critical",
+                            summary=f"parent workstream missing: {record.parent_workstream_id}",
+                            escalation="intervene",
+                        )
+                    ],
+                )
+            else:
+                parent_health = parent.health_payload()
+                if parent_health["state"] == "critical":
+                    dependency_blockers.append(f"parent unhealthy: {record.parent_workstream_id}")
+                    payload["health"] = _merge_health_alerts(
+                        dict(payload["health"]),
+                        [
+                            _runtime_health_alert(
+                                "dependency_blocked",
+                                severity="critical",
+                                summary=f"parent workstream requires intervention: {record.parent_workstream_id}",
+                                escalation="intervene",
+                            )
+                        ],
+                    )
+                elif parent.review_mode == "paused":
+                    dependency_blockers.append(f"parent review paused: {record.parent_workstream_id}")
+                    payload["health"] = _merge_health_alerts(
+                        dict(payload["health"]),
+                        [
+                            _runtime_health_alert(
+                                "dependency_blocked",
+                                severity="warn",
+                                summary=f"parent workstream review is paused: {record.parent_workstream_id}",
+                                escalation="review",
+                            )
+                        ],
+                    )
+    payload["dependency"]["blocked"] = bool(dependency_blockers)
     return payload
 
 
@@ -632,7 +816,15 @@ def _fleet_reconciliation_snapshot(
         }
         for item in payloads
         if any(
-            str(alert.get("code", "")) in {"silent_stream", "pending_backlog", "restore_failed", "orphaned_workstream"}
+            str(alert.get("code", "")) in {
+                "silent_stream",
+                "pending_backlog",
+                "quota_blocked",
+                "restore_failed",
+                "orphaned_workstream",
+                "parent_missing",
+                "dependency_blocked",
+            }
             for alert in item["health"].get("alerts", [])
         )
     ]
@@ -663,6 +855,8 @@ def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = 
         auto_forward_guard=bridge.auto_forward_guard(),
         policy=dict(bridge.policy),
         review_mode=bridge.review_mode(),
+        tier=bridge.tier,
+        parent_workstream_id=bridge.parent_workstream_id,
         restore_error=restore_error,
         last_activity_at=bridge.last_activity_at,
     )
@@ -742,9 +936,14 @@ def _restore_workstreams_from_service_state() -> None:
             last_activity_at=record.last_activity_at,
             policy=record.policy,
             operator_review_paused=record.review_mode == "paused",
+            tier=record.tier,
+            parent_workstream_id=record.parent_workstream_id,
         )
         bridge._auto_forward_guard_reason = str(record.auto_forward_guard.get("guard_reason") or "")
-        if bridge._auto_forward_guard_reason:
+        bridge._pending_quota_reason = str(record.auto_forward_guard.get("quota_reason") or "")
+        if bridge._pending_quota_reason and bridge._auto_forward_guard_reason == bridge._pending_quota_reason:
+            bridge._auto_forward_guard_reason = ""
+        if bridge._auto_forward_guard_reason or bridge._pending_quota_reason:
             bridge.intervention_layer.pause()
         bridge.intervention_layer.restore({
             "active": record.intervention,
@@ -779,6 +978,8 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
         "auto_forward_guard": bridge.auto_forward_guard(),
         "policy": dict(bridge.policy),
         "review_mode": bridge.review_mode(),
+        "tier": bridge.tier,
+        "parent_workstream_id": bridge.parent_workstream_id,
         "backend": bridge.backend_spec.to_dict(),
         "poll_ms": bridge.poll_ms,
         "lines": bridge.lines,
@@ -968,13 +1169,32 @@ def _deliver_pending(bridge: Bridge, msg: Any) -> None:
 
 
 def _maybe_rearm_auto_forward_guard(bridge: Bridge) -> None:
-    if not bridge.auto_forward_guard()["blocked"]:
-        return
-    if bridge.intervention_layer.list_pending():
-        return
-    bridge.rearm_auto_forward_guard()
-    _audit("bridge.guard_rearmed", bridge_id=bridge.bridge_id, room_id=bridge.room.room_id)
-    _sync_workstream_from_bridge(bridge)
+    changed = False
+    pending_count = len(bridge.intervention_layer.list_pending())
+    guard = bridge.auto_forward_guard()
+    quota_reason = str(guard.get("quota_reason") or "").strip()
+    if quota_reason and pending_count < int(guard["pending_limit"]):
+        bridge._pending_quota_reason = ""
+        _audit(
+            "workstream.quota_rearmed",
+            workstream_id=bridge.workstream_id,
+            bridge_id=bridge.bridge_id,
+            room_id=bridge.room.room_id,
+            pending_count=pending_count,
+            pending_limit=int(guard["pending_limit"]),
+        )
+        changed = True
+
+    guard = bridge.auto_forward_guard()
+    if guard["blocked"] and bridge._auto_forward_guard_reason and pending_count == 0:
+        bridge.rearm_auto_forward_guard()
+        _audit("bridge.guard_rearmed", bridge_id=bridge.bridge_id, room_id=bridge.room.room_id)
+        changed = True
+    elif changed and not bridge._intervention_default and not bridge._operator_review_paused and not bridge._auto_forward_guard_reason:
+        bridge.intervention_layer.resume()
+
+    if changed:
+        _sync_workstream_from_bridge(bridge)
 
 
 def _remove_workstream_runtime(
@@ -1154,6 +1374,9 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         requested_workstream_id = str(args.get("workstream_id", "")).strip()
         if requested_workstream_id:
             requested_workstream_id = validate_workstream_id(requested_workstream_id)
+        requested_parent_workstream_id = str(args.get("parent_workstream_id", "") or "").strip()
+        if requested_parent_workstream_id:
+            requested_parent_workstream_id = validate_workstream_id(requested_parent_workstream_id)
         poll_ms = _parse_int(args.get("poll_ms"), name="poll_ms", default=400, minimum=10, maximum=_MAX_POLL_MS)
         lines = _parse_int(args.get("lines"), name="lines", default=200, minimum=1, maximum=_MAX_CAPTURE_LINES)
     except ValueError as exc:
@@ -1175,6 +1398,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
                 "workstream_id": reusable_record.workstream_id,
                 "bridge_id": active_bridge.bridge_id,
                 "room_id": active_bridge.room.room_id,
+                "tier": reusable_record.tier,
+                "parent_workstream_id": reusable_record.parent_workstream_id,
                 "existing": True,
             }
         return {"error": f"workstream_id already exists: {requested_workstream_id}"}
@@ -1183,6 +1408,16 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
     bridge_id = requested_bridge_id or (reusable_record.bridge_id if reusable_record else uuid.uuid4().hex[:12])
     workstream_id = requested_workstream_id or (reusable_record.workstream_id if reusable_record else bridge_id)
     profile_name = str(args.get("profile", "generic"))
+    requested_tier = str(args.get("tier", reusable_record.tier if reusable_record else "main"))
+    try:
+        tier, parent_workstream_id = _validate_dependency_update(
+            record=reusable_record,
+            workstream_id=workstream_id,
+            tier=requested_tier,
+            parent_workstream_id=requested_parent_workstream_id or (reusable_record.parent_workstream_id if reusable_record else None),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     with _bridges_lock:
         if requested_bridge_id and requested_bridge_id in _bridges:
@@ -1217,6 +1452,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
                     "workstream_id": existing.workstream_id,
                     "bridge_id": existing.bridge_id,
                     "room_id": existing.room.room_id,
+                    "tier": existing.tier,
+                    "parent_workstream_id": existing.parent_workstream_id,
                     "existing": True,
                 }
             _audit(
@@ -1264,6 +1501,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
                 "workstream_id": existing.workstream_id,
                 "bridge_id": existing.bridge_id,
                 "room_id": existing.room.room_id,
+                "tier": existing.tier,
+                "parent_workstream_id": existing.parent_workstream_id,
                 "existing": True,
             }
 
@@ -1301,6 +1540,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         intervention=bool(args.get("intervention", False)),
         policy=reusable_record.policy if reusable_record else None,
         operator_review_paused=reusable_record.review_mode == "paused" if reusable_record else False,
+        tier=tier,
+        parent_workstream_id=parent_workstream_id,
     )
     with _bridges_lock:
         _bridges[bridge_id] = bridge
@@ -1317,9 +1558,17 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         profile=profile_name,
         auto_forward=bridge.auto_forward,
         intervention=bridge.intervention_layer.active,
+        tier=bridge.tier,
+        parent_workstream_id=bridge.parent_workstream_id,
     )
     _persist_workstream_snapshot()
-    return {"workstream_id": workstream_id, "bridge_id": bridge_id, "room_id": room.room_id}
+    return {
+        "workstream_id": workstream_id,
+        "bridge_id": bridge_id,
+        "room_id": room.room_id,
+        "tier": bridge.tier,
+        "parent_workstream_id": bridge.parent_workstream_id,
+    }
 
 
 def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1508,6 +1757,15 @@ def handle_workstream_resume_review(args: Dict[str, Any]) -> Dict[str, Any]:
         return error
     if not bridge or not bridge_id:
         return {"error": "bridge not found"}
+    if bridge.parent_workstream_id:
+        parent = _get_workstream(bridge.parent_workstream_id)
+        if parent is None:
+            return {"error": f"parent workstream missing: {bridge.parent_workstream_id}"}
+        parent_health = parent.health_payload()
+        if parent.review_mode == "paused":
+            return {"error": f"cannot resume sub workstream while parent review is paused: {bridge.parent_workstream_id}"}
+        if parent_health["state"] == "critical":
+            return {"error": f"cannot resume sub workstream while parent requires intervention: {bridge.parent_workstream_id}"}
     pending_count = len(bridge.intervention_layer.list_pending())
     if pending_count:
         return {"error": f"cannot resume review with {pending_count} pending item(s)", "pending_count": pending_count}
@@ -1530,7 +1788,7 @@ def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": str(exc)}
     payload = {
         key: args.get(key)
-        for key in ("rate_limit", "window_seconds", "streak_limit", "pending_warn", "pending_critical", "silent_seconds")
+        for key in ("rate_limit", "window_seconds", "streak_limit", "pending_warn", "pending_critical", "pending_limit", "silent_seconds")
         if key in args
     }
     if not payload:
@@ -1561,8 +1819,50 @@ def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"workstream": _decorate_workstream_status_payload(record)}
 
 
+def handle_workstream_update_dependency(args: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        workstream_id = validate_workstream_id(str(args["workstream_id"]))
+    except (KeyError, ValueError) as exc:
+        return {"error": str(exc)}
+    record = _get_workstream(workstream_id)
+    if record is None:
+        return {"error": f"workstream not found: {workstream_id}"}
+
+    requested_tier = str(args.get("tier", record.tier))
+    requested_parent = args.get("parent_workstream_id", record.parent_workstream_id)
+    try:
+        tier, parent_workstream_id = _validate_dependency_update(
+            record=record,
+            workstream_id=workstream_id,
+            tier=requested_tier,
+            parent_workstream_id=str(requested_parent).strip() if requested_parent not in (None, "") else None,
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    record.tier = tier
+    record.parent_workstream_id = parent_workstream_id
+    bridge = _get_bridge(record.bridge_id)
+    if bridge is not None:
+        bridge.tier = tier
+        bridge.parent_workstream_id = parent_workstream_id
+        record = _bridge_workstream_record(bridge)
+    _set_workstream(record)
+    _persist_workstream_snapshot()
+    _audit(
+        "workstream.dependency_updated",
+        workstream_id=record.workstream_id,
+        bridge_id=record.bridge_id,
+        room_id=record.room_id,
+        tier=record.tier,
+        parent_workstream_id=record.parent_workstream_id,
+    )
+    return {"workstream": _decorate_workstream_status_payload(record)}
+
+
 def handle_workstream_stop(args: Dict[str, Any]) -> Dict[str, Any]:
     cleanup_room = bool(args.get("cleanup_room", False))
+    cascade = bool(args.get("cascade", False))
     requested_workstream_id = str(args.get("workstream_id", "") or "").strip()
     if requested_workstream_id:
         try:
@@ -1572,17 +1872,32 @@ def handle_workstream_stop(args: Dict[str, Any]) -> Dict[str, Any]:
         record = _get_workstream(requested_workstream_id)
         if record is None:
             return {"error": f"workstream not found: {requested_workstream_id}"}
-        return _remove_workstream_runtime(record, cleanup_room=cleanup_room)
+    else:
+        bridge_id, bridge, error = _resolve_bridge(args)
+        if error:
+            return error
+        if not bridge or not bridge_id:
+            return {"error": "bridge not found"}
+        record = _get_workstream(bridge.workstream_id)
+        if record is None:
+            record = _bridge_workstream_record(bridge)
 
-    bridge_id, bridge, error = _resolve_bridge(args)
-    if error:
-        return error
-    if not bridge or not bridge_id:
-        return {"error": "bridge not found"}
-    record = _get_workstream(bridge.workstream_id)
-    if record is None:
-        record = _bridge_workstream_record(bridge)
-    return _remove_workstream_runtime(record, cleanup_room=cleanup_room)
+    descendants = _workstream_descendants(record.workstream_id)
+    if descendants and not cascade:
+        return {
+            "error": f"cannot stop workstream with {len(descendants)} dependent sub workstream(s); set cascade=true",
+            "dependency_children": [item.workstream_id for item in descendants],
+        }
+    removed = [
+        _remove_workstream_runtime(item, cleanup_room=cleanup_room)
+        for item in reversed(descendants)
+    ]
+    removed.append(_remove_workstream_runtime(record, cleanup_room=cleanup_room))
+    return {
+        **removed[-1],
+        "cascade": cascade,
+        "removed": removed,
+    }
 
 
 def handle_fleet_reconcile(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1784,6 +2099,7 @@ HANDLERS = {
     "workstream_pause_review": handle_workstream_pause_review,
     "workstream_resume_review": handle_workstream_resume_review,
     "workstream_update_policy": handle_workstream_update_policy,
+    "workstream_update_dependency": handle_workstream_update_dependency,
     "workstream_stop": handle_workstream_stop,
     "fleet_reconcile": handle_fleet_reconcile,
     "terminal_init": handle_terminal_init,
@@ -1810,6 +2126,7 @@ TOOL_DESCRIPTIONS = {
     "workstream_pause_review": "Pause auto-forward review state for a workstream.",
     "workstream_resume_review": "Resume auto-forward review state for a workstream when no pending items remain.",
     "workstream_update_policy": "Update per-workstream governance policy such as rate limits and silent thresholds.",
+    "workstream_update_dependency": "Update main/sub dependency metadata for a workstream.",
     "workstream_stop": "Stop a workstream runtime and optionally clean up its room.",
     "fleet_reconcile": "Report or apply stale/orphan runtime reconciliation across rooms and workstreams.",
     "terminal_init": "Create a terminal session with pane A and pane B.",
@@ -1856,6 +2173,29 @@ _BRIDGE_RESOLUTION_SCHEMA: Dict[str, Any] = {
 }
 
 _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "bridge_start": {
+        "type": "object",
+        "properties": {
+            "pane_a": {"type": "string"},
+            "pane_b": {"type": "string"},
+            "room_id": {"type": "string"},
+            "bridge_id": {"type": "string"},
+            "workstream_id": {"type": "string"},
+            "tier": {"type": "string", "enum": ["main", "sub"]},
+            "parent_workstream_id": {"type": "string"},
+            "backend": {"type": "string"},
+            "backend_id": {"type": "string"},
+            "shell": {"type": "string"},
+            "distro": {"type": "string"},
+            "profile": {"type": "string"},
+            "auto_forward": {"type": "boolean"},
+            "intervention": {"type": "boolean"},
+            "poll_ms": {"type": "integer", "minimum": 10, "maximum": _MAX_POLL_MS},
+            "lines": {"type": "integer", "minimum": 1, "maximum": _MAX_CAPTURE_LINES},
+        },
+        "required": ["pane_a", "pane_b"],
+        "additionalProperties": False,
+    },
     "workstream_list": {
         "type": "object",
         "properties": {},
@@ -1892,7 +2232,18 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "streak_limit": {"type": "integer", "minimum": 1},
             "pending_warn": {"type": "integer", "minimum": 0},
             "pending_critical": {"type": "integer", "minimum": 0},
+            "pending_limit": {"type": "integer", "minimum": 1},
             "silent_seconds": {"type": "number", "minimum": 5},
+        },
+        "required": ["workstream_id"],
+        "additionalProperties": False,
+    },
+    "workstream_update_dependency": {
+        "type": "object",
+        "properties": {
+            "workstream_id": {"type": "string"},
+            "tier": {"type": "string", "enum": ["main", "sub"]},
+            "parent_workstream_id": {"type": "string"},
         },
         "required": ["workstream_id"],
         "additionalProperties": False,
@@ -1901,6 +2252,7 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "type": "object",
         "properties": {
             **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "cascade": {"type": "boolean"},
             "cleanup_room": {"type": "boolean"},
         },
         "additionalProperties": False,

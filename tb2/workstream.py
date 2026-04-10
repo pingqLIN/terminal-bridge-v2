@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 
 _WORKSTREAM_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+_WORKSTREAM_TIER_VALUES = {"main", "sub"}
 _SEVERITY_ORDER = {"ok": 0, "warn": 1, "critical": 2}
 _ESCALATION_ORDER = {"observe": 0, "review": 1, "intervene": 2}
 _DEFAULT_RATE_LIMIT = 6
@@ -20,12 +21,20 @@ _DEFAULT_WINDOW_SECONDS = 3.0
 _DEFAULT_STREAK_LIMIT = 20
 _DEFAULT_PENDING_WARN_THRESHOLD = 3
 _DEFAULT_PENDING_CRITICAL_THRESHOLD = 8
+_DEFAULT_PENDING_LIMIT = 12
 
 
 def validate_workstream_id(workstream_id: str) -> str:
     value = str(workstream_id).strip()
     if not _WORKSTREAM_ID_RE.fullmatch(value):
         raise ValueError("invalid workstream_id")
+    return value
+
+
+def validate_workstream_tier(tier: str) -> str:
+    value = str(tier).strip().lower() or "main"
+    if value not in _WORKSTREAM_TIER_VALUES:
+        raise ValueError("invalid workstream tier")
     return value
 
 
@@ -56,6 +65,7 @@ def default_workstream_policy(*, poll_ms: int) -> Dict[str, Any]:
         "streak_limit": _DEFAULT_STREAK_LIMIT,
         "pending_warn": _DEFAULT_PENDING_WARN_THRESHOLD,
         "pending_critical": _DEFAULT_PENDING_CRITICAL_THRESHOLD,
+        "pending_limit": _DEFAULT_PENDING_LIMIT,
         "silent_seconds": min(300.0, base_silent),
     }
 
@@ -66,7 +76,9 @@ def normalize_workstream_policy(
     poll_ms: int,
     base: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    merged = dict(base or default_workstream_policy(poll_ms=poll_ms))
+    merged = default_workstream_policy(poll_ms=poll_ms)
+    if base:
+        merged.update(base)
     raw = payload or {}
     if "rate_limit" in raw and raw["rate_limit"] is not None:
         merged["rate_limit"] = int(raw["rate_limit"])
@@ -78,6 +90,8 @@ def normalize_workstream_policy(
         merged["pending_warn"] = int(raw["pending_warn"])
     if "pending_critical" in raw and raw["pending_critical"] is not None:
         merged["pending_critical"] = int(raw["pending_critical"])
+    if "pending_limit" in raw and raw["pending_limit"] is not None:
+        merged["pending_limit"] = int(raw["pending_limit"])
     if "silent_seconds" in raw and raw["silent_seconds"] is not None:
         merged["silent_seconds"] = float(raw["silent_seconds"])
 
@@ -91,6 +105,8 @@ def normalize_workstream_policy(
         raise ValueError("pending_warn must be >= 0")
     if int(merged["pending_critical"]) < int(merged["pending_warn"]):
         raise ValueError("pending_critical must be >= pending_warn")
+    if int(merged["pending_limit"]) < int(merged["pending_critical"]):
+        raise ValueError("pending_limit must be >= pending_critical")
     if float(merged["silent_seconds"]) < 5.0:
         raise ValueError("silent_seconds must be >= 5")
 
@@ -100,6 +116,7 @@ def normalize_workstream_policy(
         "streak_limit": int(merged["streak_limit"]),
         "pending_warn": int(merged["pending_warn"]),
         "pending_critical": int(merged["pending_critical"]),
+        "pending_limit": int(merged["pending_limit"]),
         "silent_seconds": float(merged["silent_seconds"]),
     }
 
@@ -166,6 +183,8 @@ class WorkstreamRecord:
     auto_forward_guard: Dict[str, Any] = field(default_factory=dict)
     policy: Dict[str, Any] = field(default_factory=dict)
     review_mode: str = "auto"
+    tier: str = "main"
+    parent_workstream_id: Optional[str] = None
     restore_error: Optional[str] = None
     last_activity_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -211,6 +230,20 @@ class WorkstreamRecord:
             )
 
         pending_count = len(self.pending)
+        quota_reason = str(self.auto_forward_guard.get("quota_reason") or "").strip()
+        pending_limit = int(self.policy.get("pending_limit", _DEFAULT_PENDING_LIMIT))
+        if quota_reason:
+            quota_severity = "critical" if pending_count >= pending_limit else "warn"
+            quota_escalation = "intervene" if quota_severity == "critical" else "review"
+            alerts.append(
+                _health_alert(
+                    "quota_blocked",
+                    severity=quota_severity,
+                    summary=quota_reason,
+                    escalation=quota_escalation,
+                )
+            )
+
         pending_warn = int(self.policy.get("pending_warn", _DEFAULT_PENDING_WARN_THRESHOLD))
         pending_critical = int(self.policy.get("pending_critical", _DEFAULT_PENDING_CRITICAL_THRESHOLD))
         if pending_count >= pending_critical:
@@ -290,6 +323,8 @@ class WorkstreamRecord:
             "auto_forward_guard": dict(self.auto_forward_guard),
             "policy": dict(self.policy),
             "review_mode": self.review_mode,
+            "tier": self.tier,
+            "parent_workstream_id": self.parent_workstream_id,
             "backend": self.backend.to_dict(),
             "poll_ms": self.poll_ms,
             "lines": self.lines,
@@ -328,6 +363,10 @@ class WorkstreamRecord:
                 poll_ms=int(payload.get("poll_ms", 400)),
             ),
             review_mode=str(payload.get("review_mode", "auto")),
+            tier=validate_workstream_tier(str(payload.get("tier", "main"))),
+            parent_workstream_id=validate_workstream_id(str(payload.get("parent_workstream_id")))
+            if payload.get("parent_workstream_id")
+            else None,
             restore_error=str(payload.get("restore_error")) if payload.get("restore_error") is not None else None,
             last_activity_at=float(payload.get("last_activity_at", payload.get("updated_at", time.time()))),
             updated_at=float(payload.get("updated_at", time.time())),

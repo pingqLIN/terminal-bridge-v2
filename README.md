@@ -120,6 +120,9 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - MCP operators can now call `workstream_list`, `workstream_get`, `workstream_pause_review`, `workstream_resume_review`, and `workstream_update_policy` to pause review or tune per-workstream guardrails without falling back to ad hoc bridge-only targeting
 - `status.reconciliation` and `status.fleet` now surface `orphaned_rooms`, `orphaned_workstreams`, and `stale_workstreams` so fleet drift is visible without reading raw room state
 - MCP operators can now call `workstream_stop` and `fleet_reconcile` to stop broken workstreams or clean up orphaned runtime artifacts through an explicit remediation path
+- workstreams now expose `dependency` metadata with `main` / `sub` topology, child linkage, and blocked-parent reasons directly in `status.workstreams[*]`
+- per-workstream `pending_limit` is now enforced as a real quota guard, and operators can update `tier` / `parent_workstream_id` through `workstream_update_dependency`
+- the GUI Diagnostics card now exposes pause / resume review, stop-workstream, and fleet-reconcile controls for the selected workstream
 
 ## Quick Install
 

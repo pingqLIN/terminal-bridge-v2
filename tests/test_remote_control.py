@@ -286,11 +286,15 @@ class TestRemoteControlMcp:
             "workstream_id": "mcp-room-check-bridge",
             "bridge_id": "mcp-room-check-bridge",
             "room_id": "mcp-room-check-room",
+            "tier": "main",
+            "parent_workstream_id": None,
         }
         assert second == {
             "workstream_id": "mcp-room-check-bridge",
             "bridge_id": "mcp-room-check-bridge",
             "room_id": "mcp-room-check-room",
+            "tier": "main",
+            "parent_workstream_id": None,
             "existing": True,
         }
         assert conflict["error"] == (
@@ -376,6 +380,8 @@ class TestRemoteControlMcp:
             "workstream_id": "mcp-forward-bridge",
             "bridge_id": "mcp-forward-bridge",
             "room_id": "mcp-forward-room",
+            "tier": "main",
+            "parent_workstream_id": None,
         }
         assert sent == {"ok": True}
         assert len(forwarded) == 1

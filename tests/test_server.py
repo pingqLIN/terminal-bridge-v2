@@ -348,12 +348,16 @@ class TestStatusHandler:
         assert result["bridge_details"][0]["workstream_id"] == "main-flow"
         assert result["bridge_details"][0]["profile"] == "codex"
         assert result["bridge_details"][0]["review_mode"] == "manual"
+        assert result["bridge_details"][0]["tier"] == "main"
         assert result["bridge_details"][0]["policy"]["rate_limit"] == 6
         assert result["workstreams"][0]["workstream_id"] == "main-flow"
         assert result["workstreams"][0]["bridge_active"] is True
         assert result["workstreams"][0]["review_mode"] == "manual"
         assert result["workstreams"][0]["policy"]["silent_seconds"] == 30.0
+        assert result["workstreams"][0]["policy"]["pending_limit"] == 12
         assert result["workstreams"][0]["health"]["state"] == "ok"
+        assert result["workstreams"][0]["dependency"]["tier"] == "main"
+        assert result["workstreams"][0]["dependency"]["child_count"] == 0
         assert result["fleet"]["count"] == 1
         assert result["fleet"]["live"] == 1
         assert result["fleet"]["healthy"] == 1
@@ -388,6 +392,46 @@ class TestStatusHandler:
         assert result["fleet"]["intervene"] == 1
         assert result["fleet"]["stale_workstreams"] == 1
         server_mod.handle_bridge_stop({"bridge_id": "silent-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_status_marks_sub_workstream_dependency_blocked_when_parent_is_critical(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        server_mod.handle_bridge_start({
+            "pane_a": "dep:main:a",
+            "pane_b": "dep:main:b",
+            "room_id": "dep-main-room",
+            "bridge_id": "dep-main-bridge",
+            "workstream_id": "dep-main",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "dep:sub:a",
+            "pane_b": "dep:sub:b",
+            "room_id": "dep-sub-room",
+            "bridge_id": "dep-sub-bridge",
+            "workstream_id": "dep-sub",
+            "tier": "sub",
+            "parent_workstream_id": "dep-main",
+        })
+        parent = server_mod._get_bridge("dep-main-bridge")
+        assert parent is not None
+        parent.last_activity_at -= 1000.0
+        server_mod._set_workstream(server_mod._bridge_workstream_record(parent))
+
+        result = server_mod.handle_status({})
+        sub = next(item for item in result["workstreams"] if item["workstream_id"] == "dep-sub")
+
+        assert sub["dependency"]["tier"] == "sub"
+        assert sub["dependency"]["parent_workstream_id"] == "dep-main"
+        assert sub["dependency"]["blocked"] is True
+        assert "parent unhealthy: dep-main" in sub["dependency"]["blocking_reasons"]
+        assert any(alert["code"] == "dependency_blocked" for alert in sub["health"]["alerts"])
+        stale_ids = {item["workstream_id"] for item in result["reconciliation"]["stale_workstreams"]}
+        assert "dep-sub" in stale_ids
+
+        server_mod.handle_bridge_stop({"bridge_id": "dep-sub-bridge"})
+        server_mod.handle_bridge_stop({"bridge_id": "dep-main-bridge"})
 
     def test_status_reports_orphaned_workstream_reconciliation(self):
         server_mod._set_workstream(
@@ -523,8 +567,11 @@ class TestWorkstreamHandlers:
         assert listed["workstreams"][0]["workstream_id"] == "ws-list-main"
         assert listed["workstreams"][0]["review_mode"] == "auto"
         assert listed["workstreams"][0]["policy"]["rate_limit"] == 6
+        assert listed["workstreams"][0]["policy"]["pending_limit"] == 12
+        assert listed["workstreams"][0]["dependency"]["tier"] == "main"
         assert detail["workstream"]["workstream_id"] == "ws-list-main"
         assert detail["workstream"]["policy"]["pending_warn"] == 3
+        assert detail["workstream"]["dependency"]["child_count"] == 0
 
         server_mod.handle_bridge_stop({"bridge_id": "ws-list-bridge"})
 
@@ -611,6 +658,45 @@ class TestWorkstreamHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "ws-pending-bridge"})
 
     @patch.object(server_mod, "_make_backend")
+    def test_workstream_resume_review_respects_parent_dependency_state(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:parent:a",
+            "pane_b": "ws:parent:b",
+            "room_id": "ws-parent-room",
+            "bridge_id": "ws-parent-bridge",
+            "workstream_id": "ws-parent-main",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:child:a",
+            "pane_b": "ws:child:b",
+            "room_id": "ws-child-room",
+            "bridge_id": "ws-child-bridge",
+            "workstream_id": "ws-child-sub",
+            "tier": "sub",
+            "parent_workstream_id": "ws-parent-main",
+        })
+
+        server_mod.handle_workstream_pause_review({"workstream_id": "ws-parent-main"})
+        paused_parent = server_mod.handle_workstream_resume_review({"workstream_id": "ws-child-sub"})
+        assert paused_parent["error"] == "cannot resume sub workstream while parent review is paused: ws-parent-main"
+
+        server_mod.handle_workstream_resume_review({"workstream_id": "ws-parent-main"})
+        parent = server_mod._get_bridge("ws-parent-bridge")
+        assert parent is not None
+        parent.last_activity_at -= 1000.0
+        server_mod._set_workstream(server_mod._bridge_workstream_record(parent))
+
+        critical_parent = server_mod.handle_workstream_resume_review({"workstream_id": "ws-child-sub"})
+        assert critical_parent["error"] == "cannot resume sub workstream while parent requires intervention: ws-parent-main"
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-child-bridge"})
+        server_mod.handle_bridge_stop({"bridge_id": "ws-parent-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
     def test_workstream_update_policy_updates_live_bridge(self, mock_factory, tmp_path, monkeypatch):
         mock_backend = MagicMock()
         mock_backend.capture_both.return_value = ([], [])
@@ -631,6 +717,7 @@ class TestWorkstreamHandlers:
             "rate_limit": 2,
             "pending_warn": 1,
             "pending_critical": 2,
+            "pending_limit": 4,
             "silent_seconds": 45,
         })
         audit = server_mod.handle_audit_recent({
@@ -644,12 +731,85 @@ class TestWorkstreamHandlers:
         assert updated["workstream"]["policy"]["rate_limit"] == 2
         assert updated["workstream"]["policy"]["pending_warn"] == 1
         assert updated["workstream"]["policy"]["pending_critical"] == 2
+        assert updated["workstream"]["policy"]["pending_limit"] == 4
         assert updated["workstream"]["policy"]["silent_seconds"] == 45.0
         assert bridge.policy["rate_limit"] == 2
         assert audit["count"] == 1
         assert audit["events"][0]["policy"]["rate_limit"] == 2
 
         server_mod.handle_bridge_stop({"bridge_id": "ws-policy-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_quota_guard_blocks_new_handoffs_and_rearms(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:quota:a",
+            "pane_b": "ws:quota:b",
+            "room_id": "ws-quota-room",
+            "bridge_id": "ws-quota-bridge",
+            "workstream_id": "ws-quota-main",
+            "auto_forward": True,
+        })
+        server_mod.handle_workstream_update_policy({
+            "workstream_id": "ws-quota-main",
+            "pending_warn": 1,
+            "pending_critical": 1,
+            "pending_limit": 1,
+        })
+        bridge = server_mod._get_bridge("ws-quota-bridge")
+        assert bridge is not None
+        bridge.intervention_layer.restore({
+            "active": False,
+            "counter": 1,
+            "pending": [
+                {
+                    "id": 1,
+                    "from_pane": bridge.pane_a,
+                    "to_pane": bridge.pane_b,
+                    "text": "echo seed backlog",
+                    "action": "pending",
+                    "edited_text": None,
+                    "created_at": 1.0,
+                }
+            ],
+        })
+
+        profile = server_mod.get_profile("generic")
+        bridge._process_new_lines("A", bridge.pane_a, bridge.pane_b, ["MSG: echo overflow"], profile)
+
+        detail = server_mod.handle_workstream_get({"workstream_id": "ws-quota-main"})
+        pending = server_mod.handle_intervention_list({"workstream_id": "ws-quota-main"})
+        audit = server_mod.handle_audit_recent({
+            "workstream_id": "ws-quota-main",
+            "limit": 20,
+        })
+
+        assert pending["count"] == 1
+        assert detail["workstream"]["review_mode"] == "guarded"
+        assert detail["workstream"]["auto_forward_guard"]["blocked"] is True
+        assert detail["workstream"]["auto_forward_guard"]["pending_limit"] == 1
+        assert detail["workstream"]["auto_forward_guard"]["quota_reason"] == "pending quota exceeded: 1/1 queued handoffs"
+        assert any(alert["code"] == "quota_blocked" for alert in detail["workstream"]["health"]["alerts"])
+        assert any(item["event"] == "workstream.quota_blocked" for item in audit["events"])
+
+        server_mod.handle_intervention_reject({"workstream_id": "ws-quota-main", "id": 1})
+        rearmed = server_mod.handle_workstream_get({"workstream_id": "ws-quota-main"})
+        audit = server_mod.handle_audit_recent({
+            "workstream_id": "ws-quota-main",
+            "limit": 20,
+        })
+
+        assert rearmed["workstream"]["review_mode"] == "auto"
+        assert rearmed["workstream"]["auto_forward_guard"]["blocked"] is False
+        assert rearmed["workstream"]["auto_forward_guard"]["quota_reason"] is None
+        assert any(item["event"] == "workstream.quota_rearmed" for item in audit["events"])
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-quota-bridge"})
 
     def test_workstream_update_policy_updates_inactive_record(self):
         record = server_mod.WorkstreamRecord(
@@ -698,6 +858,113 @@ class TestWorkstreamHandlers:
         result = server_mod.handle_workstream_update_policy({"workstream_id": "ws-empty-policy"})
 
         assert result["error"] == "policy update requires at least one policy field"
+
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_enforces_main_sub_dependency_rules(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:dep:main:a",
+            "pane_b": "ws:dep:main:b",
+            "room_id": "ws-dep-main-room",
+            "bridge_id": "ws-dep-main-bridge",
+            "workstream_id": "ws-dep-main",
+        })
+        missing_parent = server_mod.handle_bridge_start({
+            "pane_a": "ws:dep:sub:a",
+            "pane_b": "ws:dep:sub:b",
+            "room_id": "ws-dep-sub-room",
+            "bridge_id": "ws-dep-sub-bridge",
+            "workstream_id": "ws-dep-sub",
+            "tier": "sub",
+        })
+        valid_sub = server_mod.handle_bridge_start({
+            "pane_a": "ws:dep:sub:a",
+            "pane_b": "ws:dep:sub:b",
+            "room_id": "ws-dep-sub-room",
+            "bridge_id": "ws-dep-sub-bridge",
+            "workstream_id": "ws-dep-sub",
+            "tier": "sub",
+            "parent_workstream_id": "ws-dep-main",
+        })
+        nested_sub = server_mod.handle_bridge_start({
+            "pane_a": "ws:dep:sub2:a",
+            "pane_b": "ws:dep:sub2:b",
+            "room_id": "ws-dep-sub2-room",
+            "bridge_id": "ws-dep-sub2-bridge",
+            "workstream_id": "ws-dep-sub2",
+            "tier": "sub",
+            "parent_workstream_id": "ws-dep-sub",
+        })
+
+        assert missing_parent["error"] == "sub workstream requires parent_workstream_id"
+        assert valid_sub["tier"] == "sub"
+        assert valid_sub["parent_workstream_id"] == "ws-dep-main"
+        assert nested_sub["error"] == "parent workstream must have tier=main"
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-dep-sub-bridge"})
+        server_mod.handle_bridge_stop({"bridge_id": "ws-dep-main-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_update_dependency_reparents_live_sub_workstream(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:main1:a",
+            "pane_b": "ws:main1:b",
+            "room_id": "ws-main1-room",
+            "bridge_id": "ws-main1-bridge",
+            "workstream_id": "ws-main-1",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:main2:a",
+            "pane_b": "ws:main2:b",
+            "room_id": "ws-main2-room",
+            "bridge_id": "ws-main2-bridge",
+            "workstream_id": "ws-main-2",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:sub:a",
+            "pane_b": "ws:sub:b",
+            "room_id": "ws-sub-room",
+            "bridge_id": "ws-sub-bridge",
+            "workstream_id": "ws-sub-1",
+            "tier": "sub",
+            "parent_workstream_id": "ws-main-1",
+        })
+
+        updated = server_mod.handle_workstream_update_dependency({
+            "workstream_id": "ws-sub-1",
+            "tier": "sub",
+            "parent_workstream_id": "ws-main-2",
+        })
+        main_one = server_mod.handle_workstream_get({"workstream_id": "ws-main-1"})
+        main_two = server_mod.handle_workstream_get({"workstream_id": "ws-main-2"})
+        audit = server_mod.handle_audit_recent({
+            "workstream_id": "ws-sub-1",
+            "event": "workstream.dependency_updated",
+            "limit": 5,
+        })
+        bridge = server_mod._get_bridge("ws-sub-bridge")
+
+        assert bridge is not None
+        assert updated["workstream"]["tier"] == "sub"
+        assert updated["workstream"]["parent_workstream_id"] == "ws-main-2"
+        assert bridge.parent_workstream_id == "ws-main-2"
+        assert main_one["workstream"]["dependency"]["child_count"] == 0
+        assert main_two["workstream"]["dependency"]["child_workstream_ids"] == ["ws-sub-1"]
+        assert audit["count"] == 1
+        assert audit["events"][0]["parent_workstream_id"] == "ws-main-2"
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-sub-bridge"})
+        server_mod.handle_bridge_stop({"bridge_id": "ws-main2-bridge"})
+        server_mod.handle_bridge_stop({"bridge_id": "ws-main1-bridge"})
 
     @patch.object(server_mod, "_make_backend")
     def test_workstream_stop_stops_active_bridge_and_cleans_room(self, mock_factory, tmp_path, monkeypatch):
@@ -762,6 +1029,56 @@ class TestWorkstreamHandlers:
         assert result["room_deleted"] is True
         assert server_mod._get_workstream("ws-offline-stop") is None
         assert get_room("ws-offline-stop-room") is None
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_stop_requires_cascade_for_dependents(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:tree:main:a",
+            "pane_b": "ws:tree:main:b",
+            "room_id": "ws-tree-main-room",
+            "bridge_id": "ws-tree-main-bridge",
+            "workstream_id": "ws-tree-main",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:tree:sub1:a",
+            "pane_b": "ws:tree:sub1:b",
+            "room_id": "ws-tree-sub1-room",
+            "bridge_id": "ws-tree-sub1-bridge",
+            "workstream_id": "ws-tree-sub-1",
+            "tier": "sub",
+            "parent_workstream_id": "ws-tree-main",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:tree:sub2:a",
+            "pane_b": "ws:tree:sub2:b",
+            "room_id": "ws-tree-sub2-room",
+            "bridge_id": "ws-tree-sub2-bridge",
+            "workstream_id": "ws-tree-sub-2",
+            "tier": "sub",
+            "parent_workstream_id": "ws-tree-main",
+        })
+
+        blocked = server_mod.handle_workstream_stop({"workstream_id": "ws-tree-main"})
+        cascaded = server_mod.handle_workstream_stop({
+            "workstream_id": "ws-tree-main",
+            "cascade": True,
+        })
+
+        assert blocked["error"] == "cannot stop workstream with 2 dependent sub workstream(s); set cascade=true"
+        assert blocked["dependency_children"] == ["ws-tree-sub-1", "ws-tree-sub-2"]
+        assert cascaded["cascade"] is True
+        assert {item["workstream_id"] for item in cascaded["removed"]} == {
+            "ws-tree-main",
+            "ws-tree-sub-1",
+            "ws-tree-sub-2",
+        }
+        assert server_mod._get_workstream("ws-tree-main") is None
+        assert server_mod._get_workstream("ws-tree-sub-1") is None
+        assert server_mod._get_workstream("ws-tree-sub-2") is None
 
     def test_fleet_reconcile_reports_and_applies_orphan_cleanup(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
@@ -1804,6 +2121,10 @@ class TestMCPProtocol:
     def test_tools_list_exposes_bridge_resolution_schema(self):
         result = self._rpc({"jsonrpc": "2.0", "id": 13, "method": "tools/list", "params": {}})
         tools = {tool["name"]: tool for tool in result["result"]["tools"]}
+        bridge_start = tools["bridge_start"]["inputSchema"]
+        assert bridge_start["required"] == ["pane_a", "pane_b"]
+        assert bridge_start["properties"]["tier"]["enum"] == ["main", "sub"]
+        assert bridge_start["properties"]["parent_workstream_id"]["type"] == "string"
         workstream_get = tools["workstream_get"]["inputSchema"]
         assert workstream_get["required"] == ["workstream_id"]
         pause = tools["workstream_pause_review"]["inputSchema"]
@@ -1813,8 +2134,12 @@ class TestMCPProtocol:
         update_policy = tools["workstream_update_policy"]["inputSchema"]
         assert update_policy["required"] == ["workstream_id"]
         assert update_policy["properties"]["silent_seconds"]["minimum"] == 5
+        assert update_policy["properties"]["pending_limit"]["minimum"] == 1
+        update_dependency = tools["workstream_update_dependency"]["inputSchema"]
+        assert update_dependency["properties"]["tier"]["enum"] == ["main", "sub"]
         workstream_stop = tools["workstream_stop"]["inputSchema"]
         assert workstream_stop["properties"]["cleanup_room"]["type"] == "boolean"
+        assert workstream_stop["properties"]["cascade"]["type"] == "boolean"
         fleet_reconcile = tools["fleet_reconcile"]["inputSchema"]
         assert fleet_reconcile["properties"]["apply"]["type"] == "boolean"
         intervention_list = tools["intervention_list"]["inputSchema"]
@@ -1851,6 +2176,7 @@ class TestMCPProtocol:
         tool_result = result["result"]
         assert tool_result["structuredContent"]["count"] == 1
         assert tool_result["structuredContent"]["workstreams"][0]["workstream_id"] == "rpc-main"
+        assert tool_result["structuredContent"]["workstreams"][0]["dependency"]["tier"] == "main"
         assert tool_result["structuredContent"]["reconciliation"]["orphaned_rooms"] == []
         assert tool_result.get("isError") is not True
 
@@ -1944,6 +2270,25 @@ class TestGuiRouting:
         assert "bridge.start_conflict" in html
         assert "bridge.start_failed" in html
 
+    def test_gui_html_surfaces_remediation_controls(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert 'id="pause-review"' in html
+        assert 'id="resume-review"' in html
+        assert 'id="stop-workstream"' in html
+        assert 'id="reconcile-fleet"' in html
+        assert "async function pauseReview()" in html
+        assert "async function resumeReview()" in html
+        assert "async function stopWorkstream()" in html
+        assert "async function reconcileFleet()" in html
+        assert "tool('workstream_pause_review'" in html
+        assert "tool('workstream_resume_review'" in html
+        assert "tool('workstream_stop'" in html
+        assert "tool('fleet_reconcile'" in html
+        assert "$('pause-review').onclick = () => run(pauseReview);" in html
+        assert "$('resume-review').onclick = () => run(resumeReview);" in html
+        assert "$('stop-workstream').onclick = () => run(stopWorkstream);" in html
+        assert "$('reconcile-fleet').onclick = () => run(reconcileFleet);" in html
+
     def test_gui_html_wires_audit_filters_to_refresh(self):
         html = server_mod.build_gui_html("/mcp")
         assert "$('audit-event').onchange = () => run(refreshAudit);" in html
@@ -1998,11 +2343,16 @@ class TestGuiRouting:
         assert 'id="status-badges"' in html
         assert "function renderStatusSummary(status)" in html
         assert "function statusSummaryLabels(status, detail, subscribers)" in html
+        assert "function workstreamDependencyLabel(detail)" in html
+        assert "function workstreamDependencyBlocker(detail)" in html
         assert "cards.statusBadgeAuditRaw" in html
         assert "cards.statusBadgeAuditRawBlocked" in html
         assert "cards.statusBadgeSecurity" in html
         assert "cards.statusBadgeHealth" in html
         assert "cards.statusBadgeEscalation" in html
+        assert "active.auto_forward_guard && active.auto_forward_guard.quota_reason" in html
+        assert "workstreamDependencyBlocker(active)" in html
+        assert "cards.inspectTileDependency" in html
         assert "status.audit.redaction && status.audit.redaction.raw_text_opt_in_blocked" in html
         assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html

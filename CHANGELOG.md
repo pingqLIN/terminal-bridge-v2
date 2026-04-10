@@ -17,6 +17,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - `audit_recent` now accepts `workstream_id` for fleet-safe governance review.
 - New workstream action tools: `workstream_list`, `workstream_get`, `workstream_pause_review`, `workstream_resume_review`, and `workstream_update_policy`.
 - New remediation tools: `workstream_stop` and `fleet_reconcile`.
+- New dependency tooling: `workstream_update_dependency`, `bridge_start` tier metadata, and explicit `main` / `sub` topology in workstream status payloads.
 
 ### Changed
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
@@ -32,6 +33,8 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Audit text redaction now supports `mask`, `drop`, and explicit `full` modes so operators can choose between privacy and verbatim retention.
 - `status.workstreams[*]` and `bridge_details[*]` now surface per-workstream governance `policy` plus `review_mode` so operators can see when review is `auto`, `guarded`, `paused`, or `manual`.
 - `status` now surfaces reconciliation metadata for `orphaned_rooms`, `orphaned_workstreams`, and `stale_workstreams` so runtime drift is machine-readable.
+- Per-workstream policy now includes enforced `pending_limit` quota guards, and `status.workstreams[*].dependency` now reports parent / child linkage and dependency blockers.
+- GUI diagnostics now surface selected-workstream remediation controls for pause / resume review, stop-workstream, and fleet reconcile flows.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.
@@ -40,6 +43,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Burst and streak-based auto-forward loops now trip a breaker before unbounded terminal delivery, preserve the triggering handoff in the pending queue, and re-arm after review.
 - Service-managed workstream restore now preserves per-workstream policy snapshots and guarded-review state instead of collapsing everything back to default bridge behavior.
 - Operators now have an explicit remediation path for broken runtime artifacts instead of relying on ad hoc room cleanup or manual bridge-id hunting.
+- Remote-control and restore flows now preserve the Phase 9 workstream contract, including default `tier` metadata and quota-guard recovery state.
 
 ## [0.2.0] - 2026-03-26
 

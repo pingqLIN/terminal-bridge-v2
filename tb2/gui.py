@@ -2336,6 +2336,10 @@ GUI_HTML_TEMPLATE = r"""
                 <button id="interrupt-host" class="warn" type="button" data-i18n="actions.interruptHost">Interrupt Host</button>
                 <button id="interrupt-guest" class="warn" type="button" data-i18n="actions.interruptGuest">Interrupt Guest</button>
                 <button id="interrupt-both" class="warn" type="button" data-i18n="actions.interruptBoth">Interrupt Both</button>
+                <button id="pause-review" class="ghost" type="button" data-i18n="actions.pauseReview">Pause Review</button>
+                <button id="resume-review" class="ghost" type="button" data-i18n="actions.resumeReview">Resume Review</button>
+                <button id="stop-workstream" class="warn" type="button" data-i18n="actions.stopWorkstream">Stop Workstream</button>
+                <button id="reconcile-fleet" class="ghost" type="button" data-i18n="actions.reconcileFleet">Reconcile Fleet</button>
               </div>
               <div style="margin-top: 14px;">
                 <label for="audit-box" data-i18n="fields.audit">audit trail</label>
@@ -2432,6 +2436,9 @@ GUI_HTML_TEMPLATE = r"""
             countAlerts: '{count} workstreams · {warn} warn · {critical} critical',
             pending: '{count} pending',
             idle: 'idle',
+            main: 'main',
+            mainChildren: 'main + {count} sub',
+            subOf: 'sub of {parent}',
             stateLive: 'live',
             stateRestored: 'restored',
             stateDegraded: 'degraded',
@@ -2554,6 +2561,10 @@ GUI_HTML_TEMPLATE = r"""
             interruptHost: 'Interrupt Host',
             interruptGuest: 'Interrupt Guest',
             interruptBoth: 'Interrupt Both',
+            pauseReview: 'Pause Review',
+            resumeReview: 'Resume Review',
+            stopWorkstream: 'Stop Workstream',
+            reconcileFleet: 'Reconcile Fleet',
             jumpToFocus: 'Jump to Matched Control',
             sendHost: 'Send to Host',
             sendGuest: 'Send to Guest',
@@ -2634,6 +2645,8 @@ GUI_HTML_TEMPLATE = r"""
             inspectTileRoom: 'Room',
             inspectTileTransport: 'Transport',
             inspectTileGuard: 'Guard',
+            inspectTileDependency: 'Dependency',
+            inspectDependencyClear: 'No dependency blocker',
             inspectGuardActive: 'guarded',
             inspectGuardIdle: 'not guarding',
             statusMetaIdle: 'Expand',
@@ -2731,8 +2744,12 @@ GUI_HTML_TEMPLATE = r"""
             roomPosted: 'Human operator message posted{target}',
             captureDone: 'Captured {target}',
             interruptSent: 'Interrupt sent to {target}',
+            reviewPaused: 'Review paused for the selected workstream',
+            reviewResumed: 'Review resumed for the selected workstream',
             approved: 'Pending handoff approved',
             rejected: 'Pending handoff rejected',
+            workstreamStopped: 'Stopped {count} workstream(s)',
+            fleetReconciled: 'Fleet reconciled: {workstreams} workstream(s), {rooms} room(s)',
             ready: 'GUI ready, endpoint {endpoint}',
             languageChanged: 'Language switched to {language}',
             layoutChanged: 'Layout switched to {layout}'
@@ -2742,6 +2759,7 @@ GUI_HTML_TEMPLATE = r"""
             paneTargetsRequired: 'pane targets are required',
             bridgeIdRequired: 'bridge_id is required',
             roomIdRequired: 'room_id is required',
+            workstreamTargetRequired: 'workstream, bridge, or room target is required',
             messageEmpty: 'message is empty',
             targetPaneRequired: 'target pane is required',
             selectPendingFirst: 'select a pending item first',
@@ -2812,6 +2830,9 @@ GUI_HTML_TEMPLATE = r"""
             countAlerts: '{count} 條 workstream · {warn} 條警示 · {critical} 條嚴重',
             pending: '{count} 筆待審',
             idle: '閒置',
+            main: 'main',
+            mainChildren: 'main + {count} 條 sub',
+            subOf: 'sub -> {parent}',
             stateLive: '運行中',
             stateRestored: '已恢復',
             stateDegraded: '降級',
@@ -2934,6 +2955,10 @@ GUI_HTML_TEMPLATE = r"""
             interruptHost: '中斷 Host',
             interruptGuest: '中斷 Guest',
             interruptBoth: '同時中斷',
+            pauseReview: '暫停審核',
+            resumeReview: '恢復審核',
+            stopWorkstream: '停止 Workstream',
+            reconcileFleet: '整理 Fleet',
             jumpToFocus: '跳到對應控制區',
             sendHost: '送到 Host',
             sendGuest: '送到 Guest',
@@ -3014,6 +3039,8 @@ GUI_HTML_TEMPLATE = r"""
             inspectTileRoom: 'Room',
             inspectTileTransport: 'Transport',
             inspectTileGuard: 'Guard',
+            inspectTileDependency: 'Dependency',
+            inspectDependencyClear: '目前沒有 dependency blocker',
             inspectGuardActive: '警戒中',
             inspectGuardIdle: '未警戒',
             statusMetaIdle: '展開',
@@ -3111,8 +3138,12 @@ GUI_HTML_TEMPLATE = r"""
             roomPosted: '已送出 human operator 訊息{target}',
             captureDone: '已擷取 {target}',
             interruptSent: '已送出 interrupt 到 {target}',
+            reviewPaused: '已暫停所選 workstream 的審核',
+            reviewResumed: '已恢復所選 workstream 的審核',
             approved: '待審 handoff 已核准',
             rejected: '待審 handoff 已退回',
+            workstreamStopped: '已停止 {count} 條 workstream',
+            fleetReconciled: 'Fleet 已整理：{workstreams} 條 workstream，{rooms} 個 room',
             ready: 'GUI 已就緒，endpoint {endpoint}',
             languageChanged: '語言已切換為 {language}',
             layoutChanged: '版面已切換為 {layout}'
@@ -3122,6 +3153,7 @@ GUI_HTML_TEMPLATE = r"""
             paneTargetsRequired: '必須先提供 pane targets',
             bridgeIdRequired: '必須提供 bridge_id',
             roomIdRequired: '必須提供 room_id',
+            workstreamTargetRequired: '必須提供 workstream、bridge 或 room 目標',
             messageEmpty: '訊息不可為空',
             targetPaneRequired: '必須提供 target pane',
             selectPendingFirst: '請先選擇一筆待審項目',
@@ -4068,6 +4100,13 @@ GUI_HTML_TEMPLATE = r"""
           guard && guard.guard_reason ? String(guard.guard_reason) : t('cards.inspectGuideCopy'),
           guard && guard.blocked ? 'attention' : 'active'
         );
+        addSummaryTile(
+          container,
+          t('cards.inspectTileDependency'),
+          workstreamDependencyLabel(detail),
+          workstreamDependencyBlocker(detail) || t('cards.inspectDependencyClear'),
+          workstreamDependencyBlocker(detail) ? 'attention' : 'active'
+        );
       }
 
       function renderPendingDetail() {
@@ -4127,6 +4166,32 @@ GUI_HTML_TEMPLATE = r"""
         fillPending([]);
       }
 
+      function requireWorkstreamTarget() {
+        const args = bridgeArgs();
+        if (args.workstream_id || args.bridge_id || args.room_id) return args;
+        throw new Error(t('errors.workstreamTargetRequired'));
+      }
+
+      function workstreamDependencyLabel(detail) {
+        if (!detail) return t('relation.none');
+        const dependency = detail && detail.dependency ? detail.dependency : null;
+        const tier = dependency && dependency.tier ? String(dependency.tier) : String(detail.tier || 'main');
+        if (tier === 'sub') {
+          const parent = dependency && dependency.parent_workstream_id
+            ? String(dependency.parent_workstream_id)
+            : String(detail.parent_workstream_id || '?');
+          return format('fleet.subOf', { parent });
+        }
+        const childCount = dependency ? Number(dependency.child_count || 0) : 0;
+        return childCount > 0 ? format('fleet.mainChildren', { count: childCount }) : t('fleet.main');
+      }
+
+      function workstreamDependencyBlocker(detail) {
+        const dependency = detail && detail.dependency ? detail.dependency : null;
+        const blockers = dependency && Array.isArray(dependency.blocking_reasons) ? dependency.blocking_reasons : [];
+        return blockers.length ? String(blockers[0]) : '';
+      }
+
       function isInactiveBridgeError(message) {
         if (!message) return false;
         return message === 'bridge not found'
@@ -4166,7 +4231,8 @@ GUI_HTML_TEMPLATE = r"""
           const health = item.health || null;
           const escalation = workstreamEscalationLabel(health);
           const healthLabel = workstreamHealthLabel(health);
-          detail.textContent = workstreamStateLabel(String(item.state || 'live')) + ' · ' + healthLabel + (escalation ? ' · ' + escalation : '') + ' · ' + pendingLabel + ' · ' + roomId;
+          const dependencyLabel = workstreamDependencyLabel(item);
+          detail.textContent = workstreamStateLabel(String(item.state || 'live')) + ' · ' + healthLabel + (escalation ? ' · ' + escalation : '') + ' · ' + pendingLabel + ' · ' + dependencyLabel + ' · ' + roomId;
           button.appendChild(title);
           button.appendChild(detail);
           button.onclick = () => run(async () => {
@@ -4227,13 +4293,17 @@ GUI_HTML_TEMPLATE = r"""
         const note = $('status-note');
         if (note) {
           const active = inferBridgeDetail(status);
+          const quotaReason = active && active.auto_forward_guard && active.auto_forward_guard.quota_reason
+            ? String(active.auto_forward_guard.quota_reason)
+            : '';
+          const dependencyBlocker = workstreamDependencyBlocker(active);
           const alertSummary = active && active.health && active.health.summary && active.health.state !== 'ok'
             ? String(active.health.summary)
             : '';
           const warnings = Array.isArray(status && status.security && status.security.warnings)
             ? status.security.warnings
             : [];
-          note.textContent = alertSummary || (warnings.length ? warnings[0] : t('cards.statusNote'));
+          note.textContent = quotaReason || dependencyBlocker || alertSummary || (warnings.length ? warnings[0] : t('cards.statusNote'));
         }
         const detail = inferBridgeDetail(status);
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
@@ -5294,6 +5364,44 @@ GUI_HTML_TEMPLATE = r"""
         return res;
       }
 
+      async function pauseReview() {
+        const res = await tool('workstream_pause_review', requireWorkstreamTarget());
+        await refreshReviewState();
+        log(t('logs.reviewPaused'));
+        return res;
+      }
+
+      async function resumeReview() {
+        const res = await tool('workstream_resume_review', requireWorkstreamTarget());
+        await refreshReviewState();
+        log(t('logs.reviewResumed'));
+        return res;
+      }
+
+      async function stopWorkstream() {
+        const res = await tool('workstream_stop', Object.assign({ cascade: true }, requireWorkstreamTarget()));
+        if (res.bridge_stopped) stopTransport();
+        if (res.workstream_removed) clearBridgeState();
+        await refreshReviewState();
+        const removedCount = Array.isArray(res.removed) && res.removed.length ? res.removed.length : 1;
+        log(format('logs.workstreamStopped', { count: removedCount }));
+        return res;
+      }
+
+      async function reconcileFleet() {
+        const res = await tool('fleet_reconcile', { apply: true });
+        if (state.selectedWorkstreamId && Array.isArray(res.dropped_workstreams) && res.dropped_workstreams.includes(state.selectedWorkstreamId)) {
+          stopTransport();
+          clearBridgeState();
+        }
+        await refreshReviewState();
+        log(format('logs.fleetReconciled', {
+          workstreams: Array.isArray(res.dropped_workstreams) ? res.dropped_workstreams.length : 0,
+          rooms: Array.isArray(res.deleted_rooms) ? res.deleted_rooms.length : 0,
+        }));
+        return res;
+      }
+
       async function approveSelected() {
         const id = $('pending-select').value;
         if (!id) throw new Error(t('errors.selectPendingFirst'));
@@ -5367,6 +5475,10 @@ GUI_HTML_TEMPLATE = r"""
         $('interrupt-host').onclick = () => run(() => interrupt('a'));
         $('interrupt-guest').onclick = () => run(() => interrupt('b'));
         $('interrupt-both').onclick = () => run(() => interrupt('both'));
+        $('pause-review').onclick = () => run(pauseReview);
+        $('resume-review').onclick = () => run(resumeReview);
+        $('stop-workstream').onclick = () => run(stopWorkstream);
+        $('reconcile-fleet').onclick = () => run(reconcileFleet);
         $('approve-selected').onclick = () => run(approveSelected);
         $('reject-selected').onclick = () => run(rejectSelected);
         $('approve-all').onclick = () => run(() => tool('intervention_approve', Object.assign({
