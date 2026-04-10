@@ -358,6 +358,9 @@ class TestStatusHandler:
         assert result["fleet"]["live"] == 1
         assert result["fleet"]["healthy"] == 1
         assert result["fleet"]["alerts"] == 0
+        assert result["fleet"]["orphaned_rooms"] == 0
+        assert result["fleet"]["orphaned_workstreams"] == 0
+        assert result["fleet"]["stale_workstreams"] == 0
         server_mod.handle_bridge_stop({"bridge_id": "status-bridge"})
 
     @patch.object(server_mod, "_make_backend")
@@ -383,7 +386,34 @@ class TestStatusHandler:
         assert result["workstreams"][0]["health"]["alerts"][0]["code"] == "silent_stream"
         assert result["fleet"]["critical"] == 1
         assert result["fleet"]["intervene"] == 1
+        assert result["fleet"]["stale_workstreams"] == 1
         server_mod.handle_bridge_stop({"bridge_id": "silent-bridge"})
+
+    def test_status_reports_orphaned_workstream_reconciliation(self):
+        server_mod._set_workstream(
+            server_mod.WorkstreamRecord(
+                workstream_id="orphan-main",
+                bridge_id="orphan-bridge",
+                room_id="missing-room",
+                pane_a="orph:a",
+                pane_b="orph:b",
+                profile="generic",
+                auto_forward=True,
+                intervention=False,
+                poll_ms=400,
+                lines=200,
+                backend=server_mod.BackendSpec(kind="process", backend_id="orphan"),
+                state="live",
+            )
+        )
+
+        result = server_mod.handle_status({})
+
+        assert result["fleet"]["orphaned_workstreams"] == 1
+        assert result["fleet"]["stale_workstreams"] == 1
+        assert result["workstreams"][0]["topology"]["orphaned"] is True
+        assert result["workstreams"][0]["health"]["alerts"][-1]["code"] == "orphaned_workstream"
+        assert result["reconciliation"]["orphaned_workstreams"][0]["workstream_id"] == "orphan-main"
 
     def test_status_surfaces_service_runtime_metadata(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
@@ -668,6 +698,115 @@ class TestWorkstreamHandlers:
         result = server_mod.handle_workstream_update_policy({"workstream_id": "ws-empty-policy"})
 
         assert result["error"] == "policy update requires at least one policy field"
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_stop_stops_active_bridge_and_cleans_room(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:stop:a",
+            "pane_b": "ws:stop:b",
+            "room_id": "ws-stop-room",
+            "bridge_id": "ws-stop-bridge",
+            "workstream_id": "ws-stop-main",
+        })
+
+        result = server_mod.handle_workstream_stop({
+            "workstream_id": "ws-stop-main",
+            "cleanup_room": True,
+        })
+        audit = server_mod.handle_audit_recent({
+            "event": "workstream.stopped",
+            "limit": 5,
+        })
+
+        assert result["bridge_stopped"] is True
+        assert result["workstream_removed"] is True
+        assert result["room_deleted"] is True
+        assert server_mod._get_bridge("ws-stop-bridge") is None
+        assert server_mod._get_workstream("ws-stop-main") is None
+        assert get_room("ws-stop-room") is None
+        assert audit["count"] == 1
+        assert audit["events"][0]["workstream_id"] == "ws-stop-main"
+
+    def test_workstream_stop_removes_inactive_record(self):
+        create_room("ws-offline-stop-room")
+        server_mod._set_workstream(
+            server_mod.WorkstreamRecord(
+                workstream_id="ws-offline-stop",
+                bridge_id="ws-offline-stop-bridge",
+                room_id="ws-offline-stop-room",
+                pane_a="ws:offline-stop:a",
+                pane_b="ws:offline-stop:b",
+                profile="generic",
+                auto_forward=False,
+                intervention=False,
+                poll_ms=400,
+                lines=200,
+                backend=server_mod.BackendSpec(kind="process", backend_id="offline-stop"),
+                state="degraded",
+            )
+        )
+
+        result = server_mod.handle_workstream_stop({
+            "workstream_id": "ws-offline-stop",
+            "cleanup_room": True,
+        })
+
+        assert result["bridge_stopped"] is False
+        assert result["workstream_removed"] is True
+        assert result["room_deleted"] is True
+        assert server_mod._get_workstream("ws-offline-stop") is None
+        assert get_room("ws-offline-stop-room") is None
+
+    def test_fleet_reconcile_reports_and_applies_orphan_cleanup(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        orphan_room = create_room("orphan-room")
+        orphan_room.post(
+            author="bridge",
+            text="[forwarded]",
+            kind="system",
+            meta={"bridge_id": "orphan-bridge"},
+            source_type="bridge",
+            source_role="automation",
+            trusted=True,
+        )
+        server_mod._set_workstream(
+            server_mod.WorkstreamRecord(
+                workstream_id="orphan-workstream",
+                bridge_id="orphan-bridge",
+                room_id="missing-room",
+                pane_a="orph:a",
+                pane_b="orph:b",
+                profile="generic",
+                auto_forward=True,
+                intervention=False,
+                poll_ms=400,
+                lines=200,
+                backend=server_mod.BackendSpec(kind="process", backend_id="orphan"),
+                state="live",
+            )
+        )
+
+        preview = server_mod.handle_fleet_reconcile({})
+        applied = server_mod.handle_fleet_reconcile({"apply": True})
+        audit = server_mod.handle_audit_recent({"event": "fleet.reconciled", "limit": 5})
+
+        assert preview["apply"] is False
+        assert preview["orphaned_rooms"][0]["room_id"] == "orphan-room"
+        assert preview["orphaned_workstreams"][0]["workstream_id"] == "orphan-workstream"
+        assert applied["apply"] is True
+        assert applied["deleted_rooms"] == ["orphan-room"]
+        assert applied["dropped_workstreams"] == ["orphan-workstream"]
+        assert get_room("orphan-room") is None
+        assert server_mod._get_workstream("orphan-workstream") is None
+        assert audit["count"] == 2
 
     @patch.object(server_mod, "_make_backend")
     def test_restore_workstreams_from_service_state(self, mock_factory, tmp_path, monkeypatch):
@@ -1674,6 +1813,10 @@ class TestMCPProtocol:
         update_policy = tools["workstream_update_policy"]["inputSchema"]
         assert update_policy["required"] == ["workstream_id"]
         assert update_policy["properties"]["silent_seconds"]["minimum"] == 5
+        workstream_stop = tools["workstream_stop"]["inputSchema"]
+        assert workstream_stop["properties"]["cleanup_room"]["type"] == "boolean"
+        fleet_reconcile = tools["fleet_reconcile"]["inputSchema"]
+        assert fleet_reconcile["properties"]["apply"]["type"] == "boolean"
         intervention_list = tools["intervention_list"]["inputSchema"]
         assert intervention_list["properties"]["bridge_id"]["type"] == "string"
         assert intervention_list["properties"]["room_id"]["type"] == "string"
@@ -1708,6 +1851,7 @@ class TestMCPProtocol:
         tool_result = result["result"]
         assert tool_result["structuredContent"]["count"] == 1
         assert tool_result["structuredContent"]["workstreams"][0]["workstream_id"] == "rpc-main"
+        assert tool_result["structuredContent"]["reconciliation"]["orphaned_rooms"] == []
         assert tool_result.get("isError") is not True
 
     def test_tools_call_returns_mcp_content_shape(self):

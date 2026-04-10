@@ -120,6 +120,8 @@ TB2 特別適合這類情境：
 - `audit_recent` 現在也可直接接受 `workstream_id`，讓治理與回溯不必再先轉成 bridge / room
 - `status.workstreams[*]` 現在也會公開 `policy` 與 `review_mode`，讓 operator 能直接分辨 `auto`、`guarded`、`paused`、`manual` 等審核狀態
 - MCP operator 現在可直接使用 `workstream_list`、`workstream_get`、`workstream_pause_review`、`workstream_resume_review`、`workstream_update_policy`，用 workstream 主語暫停審核或調整 guardrail policy，而不必回退到臨時的 bridge-only targeting
+- `status.reconciliation` 與 `status.fleet` 現在也會公開 `orphaned_rooms`、`orphaned_workstreams`、`stale_workstreams`，讓 fleet drift 不必再靠人工讀原始 room 狀態
+- MCP operator 現在也可直接使用 `workstream_stop` 與 `fleet_reconcile`，以明確 remediation flow 停止失效 workstream 或清理 orphaned runtime artifact
 
 ## 快速安裝
 

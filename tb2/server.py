@@ -341,6 +341,8 @@ _BRIDGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _AUTO_FORWARD_MAX_PER_WINDOW = 6
 _AUTO_FORWARD_WINDOW_SECONDS = 3.0
 _AUTO_FORWARD_STREAK_LIMIT = 20
+_HEALTH_SEVERITY_ORDER = {"ok": 0, "warn": 1, "critical": 2}
+_HEALTH_ESCALATION_ORDER = {"observe": 0, "review": 1, "intervene": 2}
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +474,175 @@ def _drop_workstream(workstream_id: str) -> None:
         _workstreams.pop(workstream_id, None)
 
 
+def _runtime_health_alert(
+    code: str,
+    *,
+    severity: str,
+    summary: str,
+    escalation: str,
+    detail: Optional[str] = None,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "code": code,
+        "severity": severity,
+        "summary": summary,
+        "escalation": escalation,
+    }
+    if detail:
+        payload["detail"] = detail
+    return payload
+
+
+def _merge_health_alerts(health: Dict[str, Any], extra_alerts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    alerts = list(health.get("alerts", []))
+    seen = {str(item.get("code", "")) for item in alerts}
+    for item in extra_alerts:
+        code = str(item.get("code", ""))
+        if code in seen:
+            continue
+        alerts.append(item)
+        seen.add(code)
+
+    severity = "ok"
+    escalation = "observe"
+    for alert in alerts:
+        alert_severity = str(alert.get("severity", "ok"))
+        alert_escalation = str(alert.get("escalation", "observe"))
+        if _HEALTH_SEVERITY_ORDER.get(alert_severity, 0) > _HEALTH_SEVERITY_ORDER.get(severity, 0):
+            severity = alert_severity
+        if _HEALTH_ESCALATION_ORDER.get(alert_escalation, 0) > _HEALTH_ESCALATION_ORDER.get(escalation, 0):
+            escalation = alert_escalation
+
+    merged = dict(health)
+    merged["alerts"] = alerts
+    merged["alert_count"] = len(alerts)
+    merged["state"] = severity
+    merged["escalation"] = escalation
+    merged["summary"] = alerts[0]["summary"] if alerts else "healthy"
+    return merged
+
+
+def _room_has_bridge_history(room: Room) -> bool:
+    if room.message_count <= 0:
+        return False
+    for message in room.poll(after_id=0, limit=room.message_count):
+        if message.source_type in {"terminal", "bridge"}:
+            return True
+        if str(message.meta.get("bridge_id", "")).strip():
+            return True
+    return False
+
+
+def _room_has_runtime_references(room_id: str) -> bool:
+    with _workstreams_lock:
+        if any(record.room_id == room_id for record in _workstreams.values()):
+            return True
+    with _bridges_lock:
+        return any(bridge.room.room_id == room_id for bridge in _bridges.values())
+
+
+def _decorate_workstream_status_payload(
+    record: WorkstreamRecord,
+    *,
+    active_bridge_ids: Optional[set[str]] = None,
+) -> Dict[str, Any]:
+    payload = record.to_status_payload()
+    if active_bridge_ids is None:
+        with _bridges_lock:
+            bridge_ids = {bridge.bridge_id for bridge in _bridges.values()}
+    else:
+        bridge_ids = active_bridge_ids
+    room_present = get_room(record.room_id) is not None
+    bridge_present = record.bridge_id in bridge_ids
+    orphaned = (not room_present) or (record.bridge_active and not bridge_present)
+    payload["topology"] = {
+        "room_present": room_present,
+        "bridge_present": bridge_present,
+        "orphaned": orphaned,
+    }
+    if orphaned:
+        detail = []
+        if not room_present:
+            detail.append("room missing")
+        if record.bridge_active and not bridge_present:
+            detail.append("bridge missing")
+        payload["health"] = _merge_health_alerts(
+            dict(payload["health"]),
+            [
+                _runtime_health_alert(
+                    "orphaned_workstream",
+                    severity="critical",
+                    summary="workstream topology is orphaned from active runtime",
+                    escalation="intervene",
+                    detail=", ".join(detail) or None,
+                )
+            ],
+        )
+    return payload
+
+
+def _fleet_reconciliation_snapshot(
+    *,
+    rooms: Optional[List[Room]] = None,
+    workstream_payloads: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    runtime_rooms = rooms if rooms is not None else list_rooms()
+    with _bridges_lock:
+        active_bridges = list(_bridges.values())
+        active_bridge_ids = {bridge.bridge_id for bridge in active_bridges}
+    payloads = workstream_payloads if workstream_payloads is not None else _workstream_status_payloads(active_bridge_ids=active_bridge_ids)
+    bound_room_ids = {
+        str(item["room_id"])
+        for item in payloads
+        if str(item.get("room_id", "")).strip()
+    } | {
+        bridge.room.room_id
+        for bridge in active_bridges
+        if bridge.room.room_id
+    }
+    orphaned_rooms = [
+        {
+            "room_id": room.room_id,
+            "messages": room.message_count,
+            "age_seconds": round(max(0.0, time.time() - room.created_at), 3),
+            "last_active_age_seconds": round(max(0.0, time.time() - room.last_active), 3),
+        }
+        for room in runtime_rooms
+        if room.room_id not in bound_room_ids and _room_has_bridge_history(room)
+    ]
+    orphaned_workstreams = [
+        {
+            "workstream_id": str(item["workstream_id"]),
+            "bridge_id": str(item["bridge_id"]),
+            "room_id": str(item["room_id"]),
+            "state": str(item["state"]),
+            "review_mode": str(item["review_mode"]),
+            "room_present": bool(item.get("topology", {}).get("room_present", True)),
+            "bridge_present": bool(item.get("topology", {}).get("bridge_present", False)),
+        }
+        for item in payloads
+        if bool(item.get("topology", {}).get("orphaned"))
+    ]
+    stale_workstreams = [
+        {
+            "workstream_id": str(item["workstream_id"]),
+            "state": str(item["health"]["state"]),
+            "escalation": str(item["health"]["escalation"]),
+            "alerts": [str(alert.get("code", "")) for alert in item["health"].get("alerts", [])],
+        }
+        for item in payloads
+        if any(
+            str(alert.get("code", "")) in {"silent_stream", "pending_backlog", "restore_failed", "orphaned_workstream"}
+            for alert in item["health"].get("alerts", [])
+        )
+    ]
+    return {
+        "orphaned_rooms": orphaned_rooms,
+        "orphaned_workstreams": orphaned_workstreams,
+        "stale_workstreams": stale_workstreams,
+    }
+
+
 def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = None) -> WorkstreamRecord:
     snapshot = bridge.intervention_layer.snapshot()
     pending = snapshot.get("pending")
@@ -497,10 +668,13 @@ def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = 
     )
 
 
-def _workstream_status_payloads() -> List[Dict[str, Any]]:
+def _workstream_status_payloads(*, active_bridge_ids: Optional[set[str]] = None) -> List[Dict[str, Any]]:
     with _workstreams_lock:
         records = list(_workstreams.values())
-    return [record.to_status_payload() for record in sorted(records, key=lambda item: item.workstream_id)]
+    return [
+        _decorate_workstream_status_payload(record, active_bridge_ids=active_bridge_ids)
+        for record in sorted(records, key=lambda item: item.workstream_id)
+    ]
 
 
 def _sync_workstream_from_bridge(bridge: Bridge, *, restore_error: Optional[str] = None) -> None:
@@ -801,6 +975,45 @@ def _maybe_rearm_auto_forward_guard(bridge: Bridge) -> None:
     bridge.rearm_auto_forward_guard()
     _audit("bridge.guard_rearmed", bridge_id=bridge.bridge_id, room_id=bridge.room.room_id)
     _sync_workstream_from_bridge(bridge)
+
+
+def _remove_workstream_runtime(
+    record: WorkstreamRecord,
+    *,
+    cleanup_room: bool,
+) -> Dict[str, Any]:
+    bridge_removed = False
+    with _bridges_lock:
+        bridge = _bridges.pop(record.bridge_id, None)
+    if bridge is not None:
+        bridge.stop.set()
+        bridge_removed = True
+        _audit("bridge.stopped", bridge_id=bridge.bridge_id, room_id=bridge.room.room_id)
+    _drop_workstream(record.workstream_id)
+
+    room_deleted = False
+    if cleanup_room and not _room_has_runtime_references(record.room_id):
+        room_deleted = delete_room(record.room_id)
+
+    _audit(
+        "workstream.stopped",
+        workstream_id=record.workstream_id,
+        bridge_id=record.bridge_id,
+        room_id=record.room_id,
+        bridge_stopped=bridge_removed,
+        workstream_removed=True,
+        room_deleted=room_deleted,
+        cleanup_room=cleanup_room,
+    )
+    _persist_workstream_snapshot()
+    return {
+        "workstream_id": record.workstream_id,
+        "bridge_id": record.bridge_id,
+        "room_id": record.room_id,
+        "bridge_stopped": bridge_removed,
+        "workstream_removed": True,
+        "room_deleted": room_deleted,
+    }
 
 
 def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1252,9 +1465,11 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def handle_workstream_list(_args: Dict[str, Any]) -> Dict[str, Any]:
     workstreams = _workstream_status_payloads()
+    reconciliation = _fleet_reconciliation_snapshot(workstream_payloads=workstreams)
     return {
         "workstreams": workstreams,
         "count": len(workstreams),
+        "reconciliation": reconciliation,
     }
 
 
@@ -1266,7 +1481,7 @@ def handle_workstream_get(args: Dict[str, Any]) -> Dict[str, Any]:
     record = _get_workstream(workstream_id)
     if record is None:
         return {"error": f"workstream not found: {workstream_id}"}
-    return {"workstream": record.to_status_payload()}
+    return {"workstream": _decorate_workstream_status_payload(record)}
 
 
 def handle_workstream_pause_review(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1284,7 +1499,7 @@ def handle_workstream_pause_review(args: Dict[str, Any]) -> Dict[str, Any]:
         room_id=bridge.room.room_id,
     )
     _sync_workstream_from_bridge(bridge)
-    return {"workstream": _bridge_workstream_record(bridge).to_status_payload()}
+    return {"workstream": _decorate_workstream_status_payload(_bridge_workstream_record(bridge))}
 
 
 def handle_workstream_resume_review(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1305,7 +1520,7 @@ def handle_workstream_resume_review(args: Dict[str, Any]) -> Dict[str, Any]:
         room_id=bridge.room.room_id,
     )
     _sync_workstream_from_bridge(bridge)
-    return {"workstream": _bridge_workstream_record(bridge).to_status_payload()}
+    return {"workstream": _decorate_workstream_status_payload(_bridge_workstream_record(bridge))}
 
 
 def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1336,14 +1551,80 @@ def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
                 policy=dict(bridge.policy),
             )
             _sync_workstream_from_bridge(bridge)
-            return {"workstream": _bridge_workstream_record(bridge).to_status_payload()}
+            return {"workstream": _decorate_workstream_status_payload(_bridge_workstream_record(bridge))}
         record.policy = normalize_workstream_policy(payload, poll_ms=record.poll_ms, base=record.policy)
     except ValueError as exc:
         return {"error": str(exc)}
     record.updated_at = time.time()
     _set_workstream(record)
     _persist_workstream_snapshot()
-    return {"workstream": record.to_status_payload()}
+    return {"workstream": _decorate_workstream_status_payload(record)}
+
+
+def handle_workstream_stop(args: Dict[str, Any]) -> Dict[str, Any]:
+    cleanup_room = bool(args.get("cleanup_room", False))
+    requested_workstream_id = str(args.get("workstream_id", "") or "").strip()
+    if requested_workstream_id:
+        try:
+            requested_workstream_id = validate_workstream_id(requested_workstream_id)
+        except ValueError as exc:
+            return {"error": str(exc)}
+        record = _get_workstream(requested_workstream_id)
+        if record is None:
+            return {"error": f"workstream not found: {requested_workstream_id}"}
+        return _remove_workstream_runtime(record, cleanup_room=cleanup_room)
+
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
+        return {"error": "bridge not found"}
+    record = _get_workstream(bridge.workstream_id)
+    if record is None:
+        record = _bridge_workstream_record(bridge)
+    return _remove_workstream_runtime(record, cleanup_room=cleanup_room)
+
+
+def handle_fleet_reconcile(args: Dict[str, Any]) -> Dict[str, Any]:
+    apply_changes = bool(args.get("apply", False))
+    rooms = list_rooms()
+    workstreams = _workstream_status_payloads()
+    reconciliation = _fleet_reconciliation_snapshot(rooms=rooms, workstream_payloads=workstreams)
+    deleted_rooms: List[str] = []
+    dropped_workstreams: List[str] = []
+
+    if apply_changes:
+        for item in reconciliation["orphaned_rooms"]:
+            room_id = str(item["room_id"])
+            if _room_has_runtime_references(room_id):
+                continue
+            if delete_room(room_id):
+                deleted_rooms.append(room_id)
+        for item in reconciliation["orphaned_workstreams"]:
+            workstream_id = str(item["workstream_id"])
+            record = _get_workstream(workstream_id)
+            if record is None:
+                continue
+            _drop_workstream(workstream_id)
+            dropped_workstreams.append(workstream_id)
+        if deleted_rooms or dropped_workstreams:
+            _persist_workstream_snapshot()
+
+    _audit(
+        "fleet.reconciled",
+        apply=apply_changes,
+        orphaned_rooms=[item["room_id"] for item in reconciliation["orphaned_rooms"]],
+        orphaned_workstreams=[item["workstream_id"] for item in reconciliation["orphaned_workstreams"]],
+        stale_workstreams=[item["workstream_id"] for item in reconciliation["stale_workstreams"]],
+        deleted_rooms=deleted_rooms,
+        dropped_workstreams=dropped_workstreams,
+    )
+    return {
+        **reconciliation,
+        "apply": apply_changes,
+        "deleted_rooms": deleted_rooms,
+        "dropped_workstreams": dropped_workstreams,
+    }
 
 
 def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1449,7 +1730,9 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
     with _bridges_lock:
         bridge_ids = list(_bridges.keys())
         bridge_details = [_bridge_detail(bridge) for bridge in _bridges.values()]
-    workstreams = _workstream_status_payloads()
+        active_bridge_ids = {bridge["bridge_id"] for bridge in bridge_details if str(bridge.get("bridge_id", "")).strip()}
+    workstreams = _workstream_status_payloads(active_bridge_ids=active_bridge_ids)
+    reconciliation = _fleet_reconciliation_snapshot(rooms=rooms, workstream_payloads=workstreams)
     transports = _transport_snapshot()
     transport_by_room = {item["room_id"]: item for item in transports["rooms"]}
     return {
@@ -1483,7 +1766,11 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
             "alerts": sum(int(item["health"]["alert_count"]) for item in workstreams),
             "review": sum(1 for item in workstreams if item["health"]["escalation"] == "review"),
             "intervene": sum(1 for item in workstreams if item["health"]["escalation"] == "intervene"),
+            "orphaned_rooms": len(reconciliation["orphaned_rooms"]),
+            "orphaned_workstreams": len(reconciliation["orphaned_workstreams"]),
+            "stale_workstreams": len(reconciliation["stale_workstreams"]),
         },
+        "reconciliation": reconciliation,
         "transports": transports,
         "audit": _audit_trail.describe(),
         "runtime": runtime_contract(),
@@ -1497,6 +1784,8 @@ HANDLERS = {
     "workstream_pause_review": handle_workstream_pause_review,
     "workstream_resume_review": handle_workstream_resume_review,
     "workstream_update_policy": handle_workstream_update_policy,
+    "workstream_stop": handle_workstream_stop,
+    "fleet_reconcile": handle_fleet_reconcile,
     "terminal_init": handle_terminal_init,
     "terminal_capture": handle_terminal_capture,
     "terminal_send": handle_terminal_send,
@@ -1521,6 +1810,8 @@ TOOL_DESCRIPTIONS = {
     "workstream_pause_review": "Pause auto-forward review state for a workstream.",
     "workstream_resume_review": "Resume auto-forward review state for a workstream when no pending items remain.",
     "workstream_update_policy": "Update per-workstream governance policy such as rate limits and silent thresholds.",
+    "workstream_stop": "Stop a workstream runtime and optionally clean up its room.",
+    "fleet_reconcile": "Report or apply stale/orphan runtime reconciliation across rooms and workstreams.",
     "terminal_init": "Create a terminal session with pane A and pane B.",
     "terminal_capture": "Capture recent lines from a target pane.",
     "terminal_send": "Send text to a target pane.",
@@ -1604,6 +1895,21 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "silent_seconds": {"type": "number", "minimum": 5},
         },
         "required": ["workstream_id"],
+        "additionalProperties": False,
+    },
+    "workstream_stop": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "cleanup_room": {"type": "boolean"},
+        },
+        "additionalProperties": False,
+    },
+    "fleet_reconcile": {
+        "type": "object",
+        "properties": {
+            "apply": {"type": "boolean"},
+        },
         "additionalProperties": False,
     },
     "room_post": {
