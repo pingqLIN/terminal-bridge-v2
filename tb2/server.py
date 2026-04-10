@@ -37,7 +37,12 @@ from .service import (
     persist_runtime_snapshot,
     runtime_contract,
 )
-from .workstream import BackendSpec, WorkstreamRecord, validate_workstream_id
+from .workstream import (
+    BackendSpec,
+    WorkstreamRecord,
+    normalize_workstream_policy,
+    validate_workstream_id,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +58,9 @@ class Bridge:
                  poll_ms: int = 400, lines: int = 200,
                  auto_forward: bool = False, intervention: bool = False,
                  restored: bool = False,
-                 last_activity_at: Optional[float] = None):
+                 last_activity_at: Optional[float] = None,
+                 policy: Optional[Dict[str, Any]] = None,
+                 operator_review_paused: bool = False):
         self.workstream_id = workstream_id or bridge_id
         self.bridge_id = bridge_id
         self.backend = backend
@@ -66,7 +73,9 @@ class Bridge:
         self.lines = lines
         self.auto_forward = auto_forward
         self._intervention_default = intervention
-        self.intervention_layer = InterventionLayer(active=intervention)
+        self._operator_review_paused = operator_review_paused
+        self.policy = normalize_workstream_policy(policy, poll_ms=poll_ms)
+        self.intervention_layer = InterventionLayer(active=intervention or operator_review_paused)
         self.stop = threading.Event()
         self.prev_a: list = []
         self.prev_b: list = []
@@ -241,20 +250,20 @@ class Bridge:
 
     def _next_auto_forward_guard_reason(self) -> str:
         now = time.time()
-        while self._auto_forward_times and now - self._auto_forward_times[0] > _AUTO_FORWARD_WINDOW_SECONDS:
+        while self._auto_forward_times and now - self._auto_forward_times[0] > float(self.policy["window_seconds"]):
             self._auto_forward_times.popleft()
-        if len(self._auto_forward_times) >= _AUTO_FORWARD_MAX_PER_WINDOW:
+        if len(self._auto_forward_times) >= int(self.policy["rate_limit"]):
             return (
                 f"rate limit exceeded: {len(self._auto_forward_times)} auto-forwards "
-                f"in {_AUTO_FORWARD_WINDOW_SECONDS:.1f}s"
+                f"in {float(self.policy['window_seconds']):.1f}s"
             )
-        if self._auto_forward_streak >= _AUTO_FORWARD_STREAK_LIMIT:
+        if self._auto_forward_streak >= int(self.policy["streak_limit"]):
             return f"circuit breaker tripped after {self._auto_forward_streak} consecutive auto-forwards"
         return ""
 
     def _record_auto_forward(self) -> None:
         now = time.time()
-        while self._auto_forward_times and now - self._auto_forward_times[0] > _AUTO_FORWARD_WINDOW_SECONDS:
+        while self._auto_forward_times and now - self._auto_forward_times[0] > float(self.policy["window_seconds"]):
             self._auto_forward_times.popleft()
         self._auto_forward_times.append(now)
         self._auto_forward_streak += 1
@@ -266,16 +275,40 @@ class Bridge:
     def rearm_auto_forward_guard(self) -> None:
         self._auto_forward_guard_reason = ""
         self._reset_auto_forward_guard()
-        if not self._intervention_default:
+        if not self._intervention_default and not self._operator_review_paused:
             self.intervention_layer.resume()
+
+    def review_mode(self) -> str:
+        if self._intervention_default:
+            return "manual"
+        if self._operator_review_paused:
+            return "paused"
+        if self._auto_forward_guard_reason:
+            return "guarded"
+        return "auto"
+
+    def pause_review(self) -> None:
+        self._operator_review_paused = True
+        self.intervention_layer.pause()
+
+    def resume_review(self) -> None:
+        self._operator_review_paused = False
+        if self._intervention_default or self._auto_forward_guard_reason:
+            self.intervention_layer.pause()
+            return
+        self.intervention_layer.resume()
+
+    def update_policy(self, payload: Dict[str, Any]) -> None:
+        self.policy = normalize_workstream_policy(payload, poll_ms=self.poll_ms, base=self.policy)
 
     def auto_forward_guard(self) -> Dict[str, Any]:
         return {
             "blocked": self.intervention_layer.active and bool(self._auto_forward_guard_reason),
             "guard_reason": self._auto_forward_guard_reason or None,
-            "rate_limit": _AUTO_FORWARD_MAX_PER_WINDOW,
-            "window_seconds": _AUTO_FORWARD_WINDOW_SECONDS,
-            "streak_limit": _AUTO_FORWARD_STREAK_LIMIT,
+            "rate_limit": int(self.policy["rate_limit"]),
+            "window_seconds": float(self.policy["window_seconds"]),
+            "streak_limit": int(self.policy["streak_limit"]),
+            "review_mode": self.review_mode(),
         }
 
 
@@ -457,6 +490,8 @@ def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = 
         state=bridge.state,
         pending=list(pending) if isinstance(pending, list) else [],
         auto_forward_guard=bridge.auto_forward_guard(),
+        policy=dict(bridge.policy),
+        review_mode=bridge.review_mode(),
         restore_error=restore_error,
         last_activity_at=bridge.last_activity_at,
     )
@@ -531,7 +566,12 @@ def _restore_workstreams_from_service_state() -> None:
             intervention=record.intervention,
             restored=True,
             last_activity_at=record.last_activity_at,
+            policy=record.policy,
+            operator_review_paused=record.review_mode == "paused",
         )
+        bridge._auto_forward_guard_reason = str(record.auto_forward_guard.get("guard_reason") or "")
+        if bridge._auto_forward_guard_reason:
+            bridge.intervention_layer.pause()
         bridge.intervention_layer.restore({
             "active": record.intervention,
             "counter": max([int(msg.get("id", 0)) for msg in record.pending if isinstance(msg, dict)] + [0]),
@@ -563,6 +603,8 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
         "intervention": bridge.intervention_layer.active,
         "pending_count": len(bridge.intervention_layer.list_pending()),
         "auto_forward_guard": bridge.auto_forward_guard(),
+        "policy": dict(bridge.policy),
+        "review_mode": bridge.review_mode(),
         "backend": bridge.backend_spec.to_dict(),
         "poll_ms": bridge.poll_ms,
         "lines": bridge.lines,
@@ -1044,6 +1086,8 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         lines=lines,
         auto_forward=bool(args.get("auto_forward", False)),
         intervention=bool(args.get("intervention", False)),
+        policy=reusable_record.policy if reusable_record else None,
+        operator_review_paused=reusable_record.review_mode == "paused" if reusable_record else False,
     )
     with _bridges_lock:
         _bridges[bridge_id] = bridge
@@ -1206,6 +1250,102 @@ def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def handle_workstream_list(_args: Dict[str, Any]) -> Dict[str, Any]:
+    workstreams = _workstream_status_payloads()
+    return {
+        "workstreams": workstreams,
+        "count": len(workstreams),
+    }
+
+
+def handle_workstream_get(args: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        workstream_id = validate_workstream_id(str(args["workstream_id"]))
+    except (KeyError, ValueError) as exc:
+        return {"error": str(exc)}
+    record = _get_workstream(workstream_id)
+    if record is None:
+        return {"error": f"workstream not found: {workstream_id}"}
+    return {"workstream": record.to_status_payload()}
+
+
+def handle_workstream_pause_review(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
+        return {"error": "bridge not found"}
+    bridge.pause_review()
+    bridge.last_activity_at = time.time()
+    _audit(
+        "workstream.review_paused",
+        workstream_id=bridge.workstream_id,
+        bridge_id=bridge_id,
+        room_id=bridge.room.room_id,
+    )
+    _sync_workstream_from_bridge(bridge)
+    return {"workstream": _bridge_workstream_record(bridge).to_status_payload()}
+
+
+def handle_workstream_resume_review(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    if not bridge or not bridge_id:
+        return {"error": "bridge not found"}
+    pending_count = len(bridge.intervention_layer.list_pending())
+    if pending_count:
+        return {"error": f"cannot resume review with {pending_count} pending item(s)", "pending_count": pending_count}
+    bridge.resume_review()
+    bridge.last_activity_at = time.time()
+    _audit(
+        "workstream.review_resumed",
+        workstream_id=bridge.workstream_id,
+        bridge_id=bridge_id,
+        room_id=bridge.room.room_id,
+    )
+    _sync_workstream_from_bridge(bridge)
+    return {"workstream": _bridge_workstream_record(bridge).to_status_payload()}
+
+
+def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        workstream_id = validate_workstream_id(str(args["workstream_id"]))
+    except (KeyError, ValueError) as exc:
+        return {"error": str(exc)}
+    payload = {
+        key: args.get(key)
+        for key in ("rate_limit", "window_seconds", "streak_limit", "pending_warn", "pending_critical", "silent_seconds")
+        if key in args
+    }
+    if not payload:
+        return {"error": "policy update requires at least one policy field"}
+    record = _get_workstream(workstream_id)
+    if record is None:
+        return {"error": f"workstream not found: {workstream_id}"}
+    bridge = _get_bridge(record.bridge_id)
+    try:
+        if bridge is not None:
+            bridge.update_policy(payload)
+            bridge.last_activity_at = time.time()
+            _audit(
+                "workstream.policy_updated",
+                workstream_id=bridge.workstream_id,
+                bridge_id=bridge.bridge_id,
+                room_id=bridge.room.room_id,
+                policy=dict(bridge.policy),
+            )
+            _sync_workstream_from_bridge(bridge)
+            return {"workstream": _bridge_workstream_record(bridge).to_status_payload()}
+        record.policy = normalize_workstream_policy(payload, poll_ms=record.poll_ms, base=record.policy)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    record.updated_at = time.time()
+    _set_workstream(record)
+    _persist_workstream_snapshot()
+    return {"workstream": record.to_status_payload()}
+
+
 def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
     bridge_id, bridge, error = _resolve_bridge(args)
     if error:
@@ -1352,6 +1492,11 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 HANDLERS = {
+    "workstream_list": handle_workstream_list,
+    "workstream_get": handle_workstream_get,
+    "workstream_pause_review": handle_workstream_pause_review,
+    "workstream_resume_review": handle_workstream_resume_review,
+    "workstream_update_policy": handle_workstream_update_policy,
     "terminal_init": handle_terminal_init,
     "terminal_capture": handle_terminal_capture,
     "terminal_send": handle_terminal_send,
@@ -1371,6 +1516,11 @@ HANDLERS = {
 }
 
 TOOL_DESCRIPTIONS = {
+    "workstream_list": "List workstreams with health, policy, and escalation state.",
+    "workstream_get": "Return one workstream with health, policy, and escalation state.",
+    "workstream_pause_review": "Pause auto-forward review state for a workstream.",
+    "workstream_resume_review": "Resume auto-forward review state for a workstream when no pending items remain.",
+    "workstream_update_policy": "Update per-workstream governance policy such as rate limits and silent thresholds.",
     "terminal_init": "Create a terminal session with pane A and pane B.",
     "terminal_capture": "Capture recent lines from a target pane.",
     "terminal_send": "Send text to a target pane.",
@@ -1415,6 +1565,47 @@ _BRIDGE_RESOLUTION_SCHEMA: Dict[str, Any] = {
 }
 
 _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "workstream_list": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    "workstream_get": {
+        "type": "object",
+        "properties": {
+            "workstream_id": {"type": "string"},
+        },
+        "required": ["workstream_id"],
+        "additionalProperties": False,
+    },
+    "workstream_pause_review": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+        },
+        "additionalProperties": False,
+    },
+    "workstream_resume_review": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+        },
+        "additionalProperties": False,
+    },
+    "workstream_update_policy": {
+        "type": "object",
+        "properties": {
+            "workstream_id": {"type": "string"},
+            "rate_limit": {"type": "integer", "minimum": 1},
+            "window_seconds": {"type": "number", "minimum": 0.5},
+            "streak_limit": {"type": "integer", "minimum": 1},
+            "pending_warn": {"type": "integer", "minimum": 0},
+            "pending_critical": {"type": "integer", "minimum": 0},
+            "silent_seconds": {"type": "number", "minimum": 5},
+        },
+        "required": ["workstream_id"],
+        "additionalProperties": False,
+    },
     "room_post": {
         "type": "object",
         "properties": {

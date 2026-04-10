@@ -347,8 +347,12 @@ class TestStatusHandler:
         assert result["bridge_details"][0]["room_id"] == "status-test"
         assert result["bridge_details"][0]["workstream_id"] == "main-flow"
         assert result["bridge_details"][0]["profile"] == "codex"
+        assert result["bridge_details"][0]["review_mode"] == "manual"
+        assert result["bridge_details"][0]["policy"]["rate_limit"] == 6
         assert result["workstreams"][0]["workstream_id"] == "main-flow"
         assert result["workstreams"][0]["bridge_active"] is True
+        assert result["workstreams"][0]["review_mode"] == "manual"
+        assert result["workstreams"][0]["policy"]["silent_seconds"] == 30.0
         assert result["workstreams"][0]["health"]["state"] == "ok"
         assert result["fleet"]["count"] == 1
         assert result["fleet"]["live"] == 1
@@ -468,6 +472,33 @@ class TestAuditTrail:
 
 class TestWorkstreamHandlers:
     @patch.object(server_mod, "_make_backend")
+    def test_workstream_list_and_get_surface_policy_and_review_mode(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:list:a",
+            "pane_b": "ws:list:b",
+            "room_id": "ws-list-room",
+            "bridge_id": "ws-list-bridge",
+            "workstream_id": "ws-list-main",
+            "auto_forward": True,
+        })
+
+        listed = server_mod.handle_workstream_list({})
+        detail = server_mod.handle_workstream_get({"workstream_id": "ws-list-main"})
+
+        assert listed["count"] == 1
+        assert listed["workstreams"][0]["workstream_id"] == "ws-list-main"
+        assert listed["workstreams"][0]["review_mode"] == "auto"
+        assert listed["workstreams"][0]["policy"]["rate_limit"] == 6
+        assert detail["workstream"]["workstream_id"] == "ws-list-main"
+        assert detail["workstream"]["policy"]["pending_warn"] == 3
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-list-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
     def test_intervention_list_resolves_workstream_id(self, mock_factory):
         mock_backend = MagicMock()
         mock_backend.capture_both.return_value = ([], [])
@@ -488,6 +519,155 @@ class TestWorkstreamHandlers:
         assert started["workstream_id"] == "ws-main"
         assert result["bridge_id"] == "ws-bridge"
         server_mod.handle_bridge_stop({"bridge_id": "ws-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_pause_and_resume_review(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:pause:a",
+            "pane_b": "ws:pause:b",
+            "room_id": "ws-pause-room",
+            "bridge_id": "ws-pause-bridge",
+            "workstream_id": "ws-pause-main",
+            "auto_forward": True,
+        })
+
+        paused = server_mod.handle_workstream_pause_review({"workstream_id": "ws-pause-main"})
+        resumed = server_mod.handle_workstream_resume_review({"workstream_id": "ws-pause-main"})
+        audit = server_mod.handle_audit_recent({
+            "workstream_id": "ws-pause-main",
+            "limit": 10,
+        })
+
+        assert paused["workstream"]["review_mode"] == "paused"
+        assert paused["workstream"]["health"]["alerts"][0]["code"] == "review_paused"
+        assert resumed["workstream"]["review_mode"] == "auto"
+        assert [item["event"] for item in audit["events"] if item["event"].startswith("workstream.review_")] == [
+            "workstream.review_paused",
+            "workstream.review_resumed",
+        ]
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-pause-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_resume_review_rejects_pending_queue(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:pending:a",
+            "pane_b": "ws:pending:b",
+            "room_id": "ws-pending-room",
+            "bridge_id": "ws-pending-bridge",
+            "workstream_id": "ws-pending-main",
+            "intervention": True,
+        })
+        bridge = server_mod._get_bridge("ws-pending-bridge")
+        assert bridge is not None
+        bridge.intervention_layer.submit("ws:pending:a", "ws:pending:b", "echo hold")
+        paused = server_mod.handle_workstream_pause_review({"workstream_id": "ws-pending-main"})
+        resumed = server_mod.handle_workstream_resume_review({"workstream_id": "ws-pending-main"})
+
+        assert paused["workstream"]["review_mode"] == "manual"
+        assert resumed["error"] == "cannot resume review with 1 pending item(s)"
+        assert resumed["pending_count"] == 1
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-pending-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_update_policy_updates_live_bridge(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:policy:a",
+            "pane_b": "ws:policy:b",
+            "room_id": "ws-policy-room",
+            "bridge_id": "ws-policy-bridge",
+            "workstream_id": "ws-policy-main",
+        })
+
+        updated = server_mod.handle_workstream_update_policy({
+            "workstream_id": "ws-policy-main",
+            "rate_limit": 2,
+            "pending_warn": 1,
+            "pending_critical": 2,
+            "silent_seconds": 45,
+        })
+        audit = server_mod.handle_audit_recent({
+            "workstream_id": "ws-policy-main",
+            "event": "workstream.policy_updated",
+            "limit": 5,
+        })
+        bridge = server_mod._get_bridge("ws-policy-bridge")
+
+        assert bridge is not None
+        assert updated["workstream"]["policy"]["rate_limit"] == 2
+        assert updated["workstream"]["policy"]["pending_warn"] == 1
+        assert updated["workstream"]["policy"]["pending_critical"] == 2
+        assert updated["workstream"]["policy"]["silent_seconds"] == 45.0
+        assert bridge.policy["rate_limit"] == 2
+        assert audit["count"] == 1
+        assert audit["events"][0]["policy"]["rate_limit"] == 2
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-policy-bridge"})
+
+    def test_workstream_update_policy_updates_inactive_record(self):
+        record = server_mod.WorkstreamRecord(
+            workstream_id="ws-offline-main",
+            bridge_id="ws-offline-bridge",
+            room_id="ws-offline-room",
+            pane_a="ws:offline:a",
+            pane_b="ws:offline:b",
+            profile="generic",
+            auto_forward=True,
+            intervention=False,
+            poll_ms=400,
+            lines=200,
+            backend=server_mod.BackendSpec(kind="process", backend_id="offline"),
+            state="degraded",
+            policy={"rate_limit": 4, "window_seconds": 3.0, "streak_limit": 20, "pending_warn": 3, "pending_critical": 8, "silent_seconds": 30.0},
+        )
+        server_mod._set_workstream(record)
+
+        updated = server_mod.handle_workstream_update_policy({
+            "workstream_id": "ws-offline-main",
+            "silent_seconds": 90,
+        })
+
+        assert updated["workstream"]["policy"]["silent_seconds"] == 90.0
+        assert updated["workstream"]["bridge_active"] is False
+
+    def test_workstream_update_policy_requires_fields(self):
+        server_mod._set_workstream(
+            server_mod.WorkstreamRecord(
+                workstream_id="ws-empty-policy",
+                bridge_id="ws-empty-bridge",
+                room_id="ws-empty-room",
+                pane_a="ws:empty:a",
+                pane_b="ws:empty:b",
+                profile="generic",
+                auto_forward=False,
+                intervention=False,
+                poll_ms=400,
+                lines=200,
+                backend=server_mod.BackendSpec(kind="process", backend_id="empty"),
+                state="degraded",
+            )
+        )
+
+        result = server_mod.handle_workstream_update_policy({"workstream_id": "ws-empty-policy"})
+
+        assert result["error"] == "policy update requires at least one policy field"
 
     @patch.object(server_mod, "_make_backend")
     def test_restore_workstreams_from_service_state(self, mock_factory, tmp_path, monkeypatch):
@@ -539,12 +719,21 @@ class TestWorkstreamHandlers:
                                 }
                             ],
                             "auto_forward_guard": {
-                                "blocked": False,
-                                "guard_reason": None,
-                                "rate_limit": 6,
-                                "window_seconds": 3.0,
-                                "streak_limit": 20,
+                                "blocked": True,
+                                "guard_reason": "rate limit exceeded",
+                                "rate_limit": 2,
+                                "window_seconds": 5.0,
+                                "streak_limit": 9,
                             },
+                            "policy": {
+                                "rate_limit": 2,
+                                "window_seconds": 5.0,
+                                "streak_limit": 9,
+                                "pending_warn": 1,
+                                "pending_critical": 2,
+                                "silent_seconds": 45.0,
+                            },
+                            "review_mode": "paused",
                             "state": "live",
                             "bridge_active": True,
                             "restore_error": None,
@@ -564,6 +753,9 @@ class TestWorkstreamHandlers:
         assert result["workstreams"][0]["workstream_id"] == "restored-main"
         assert result["workstreams"][0]["state"] == "restored"
         assert result["workstreams"][0]["pending_count"] == 1
+        assert result["workstreams"][0]["review_mode"] == "manual"
+        assert result["workstreams"][0]["policy"]["rate_limit"] == 2
+        assert result["workstreams"][0]["auto_forward_guard"]["guard_reason"] == "rate limit exceeded"
 
         server_mod.handle_bridge_stop({"bridge_id": "restored-bridge"})
 
@@ -1473,6 +1665,15 @@ class TestMCPProtocol:
     def test_tools_list_exposes_bridge_resolution_schema(self):
         result = self._rpc({"jsonrpc": "2.0", "id": 13, "method": "tools/list", "params": {}})
         tools = {tool["name"]: tool for tool in result["result"]["tools"]}
+        workstream_get = tools["workstream_get"]["inputSchema"]
+        assert workstream_get["required"] == ["workstream_id"]
+        pause = tools["workstream_pause_review"]["inputSchema"]
+        assert pause["properties"]["workstream_id"]["type"] == "string"
+        resume = tools["workstream_resume_review"]["inputSchema"]
+        assert resume["properties"]["bridge_id"]["type"] == "string"
+        update_policy = tools["workstream_update_policy"]["inputSchema"]
+        assert update_policy["required"] == ["workstream_id"]
+        assert update_policy["properties"]["silent_seconds"]["minimum"] == 5
         intervention_list = tools["intervention_list"]["inputSchema"]
         assert intervention_list["properties"]["bridge_id"]["type"] == "string"
         assert intervention_list["properties"]["room_id"]["type"] == "string"
@@ -1483,6 +1684,31 @@ class TestMCPProtocol:
         assert audit_recent["properties"]["workstream_id"]["type"] == "string"
         assert audit_recent["properties"]["event"]["type"] == "string"
         assert audit_recent["properties"]["limit"]["maximum"] == 200
+
+    @patch.object(server_mod, "_make_backend")
+    def test_tools_call_workstream_list_returns_structured_payload(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        server_mod.handle_bridge_start({
+            "pane_a": "rpc:a",
+            "pane_b": "rpc:b",
+            "room_id": "rpc-room",
+            "bridge_id": "rpc-bridge",
+            "workstream_id": "rpc-main",
+        })
+
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 15,
+            "method": "tools/call",
+            "params": {"name": "workstream_list", "arguments": {}},
+        })
+
+        tool_result = result["result"]
+        assert tool_result["structuredContent"]["count"] == 1
+        assert tool_result["structuredContent"]["workstreams"][0]["workstream_id"] == "rpc-main"
+        assert tool_result.get("isError") is not True
 
     def test_tools_call_returns_mcp_content_shape(self):
         result = self._rpc({

@@ -118,6 +118,8 @@ TB2 特別適合這類情境：
 - `status.workstreams[*].health` 現在會公開每條 workstream 的 severity、alert summary、escalation 與 silent-stream 偵測
 - `status.fleet` 現在會聚合 `healthy`、`warn`、`critical` 與 escalation 數量，方便快速隔離出有風險的工作線
 - `audit_recent` 現在也可直接接受 `workstream_id`，讓治理與回溯不必再先轉成 bridge / room
+- `status.workstreams[*]` 現在也會公開 `policy` 與 `review_mode`，讓 operator 能直接分辨 `auto`、`guarded`、`paused`、`manual` 等審核狀態
+- MCP operator 現在可直接使用 `workstream_list`、`workstream_get`、`workstream_pause_review`、`workstream_resume_review`、`workstream_update_policy`，用 workstream 主語暫停審核或調整 guardrail policy，而不必回退到臨時的 bridge-only targeting
 
 ## 快速安裝
 

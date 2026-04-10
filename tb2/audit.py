@@ -44,6 +44,9 @@ AUDIT_EVENT_CATALOG = (
     "bridge.stopped",
     "bridge.guard_blocked",
     "bridge.guard_rearmed",
+    "workstream.review_paused",
+    "workstream.review_resumed",
+    "workstream.policy_updated",
     "intervention.submitted",
     "intervention.approved",
     "intervention.rejected",
@@ -195,6 +198,29 @@ _AUDIT_EVENT_SCHEMAS: Dict[str, Dict[str, Any]] = {
     "bridge.guard_rearmed": {
         "bridge_id": True,
         "room_id": True,
+    },
+    "workstream.review_paused": {
+        "workstream_id": True,
+        "bridge_id": True,
+        "room_id": True,
+    },
+    "workstream.review_resumed": {
+        "workstream_id": True,
+        "bridge_id": True,
+        "room_id": True,
+    },
+    "workstream.policy_updated": {
+        "workstream_id": True,
+        "bridge_id": True,
+        "room_id": True,
+        "policy": {
+            "rate_limit": True,
+            "window_seconds": True,
+            "streak_limit": True,
+            "pending_warn": True,
+            "pending_critical": True,
+            "silent_seconds": True,
+        },
     },
     "intervention.submitted": {
         "bridge_id": True,

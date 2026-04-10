@@ -15,8 +15,11 @@ from typing import Any, Dict, List, Optional
 _WORKSTREAM_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _SEVERITY_ORDER = {"ok": 0, "warn": 1, "critical": 2}
 _ESCALATION_ORDER = {"observe": 0, "review": 1, "intervene": 2}
-_PENDING_WARN_THRESHOLD = 3
-_PENDING_CRITICAL_THRESHOLD = 8
+_DEFAULT_RATE_LIMIT = 6
+_DEFAULT_WINDOW_SECONDS = 3.0
+_DEFAULT_STREAK_LIMIT = 20
+_DEFAULT_PENDING_WARN_THRESHOLD = 3
+_DEFAULT_PENDING_CRITICAL_THRESHOLD = 8
 
 
 def validate_workstream_id(workstream_id: str) -> str:
@@ -43,6 +46,62 @@ def _health_alert(
     if detail:
         payload["detail"] = detail
     return payload
+
+
+def default_workstream_policy(*, poll_ms: int) -> Dict[str, Any]:
+    base_silent = max(30.0, (float(poll_ms) / 1000.0) * 25.0)
+    return {
+        "rate_limit": _DEFAULT_RATE_LIMIT,
+        "window_seconds": _DEFAULT_WINDOW_SECONDS,
+        "streak_limit": _DEFAULT_STREAK_LIMIT,
+        "pending_warn": _DEFAULT_PENDING_WARN_THRESHOLD,
+        "pending_critical": _DEFAULT_PENDING_CRITICAL_THRESHOLD,
+        "silent_seconds": min(300.0, base_silent),
+    }
+
+
+def normalize_workstream_policy(
+    payload: Optional[Dict[str, Any]],
+    *,
+    poll_ms: int,
+    base: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    merged = dict(base or default_workstream_policy(poll_ms=poll_ms))
+    raw = payload or {}
+    if "rate_limit" in raw and raw["rate_limit"] is not None:
+        merged["rate_limit"] = int(raw["rate_limit"])
+    if "window_seconds" in raw and raw["window_seconds"] is not None:
+        merged["window_seconds"] = float(raw["window_seconds"])
+    if "streak_limit" in raw and raw["streak_limit"] is not None:
+        merged["streak_limit"] = int(raw["streak_limit"])
+    if "pending_warn" in raw and raw["pending_warn"] is not None:
+        merged["pending_warn"] = int(raw["pending_warn"])
+    if "pending_critical" in raw and raw["pending_critical"] is not None:
+        merged["pending_critical"] = int(raw["pending_critical"])
+    if "silent_seconds" in raw and raw["silent_seconds"] is not None:
+        merged["silent_seconds"] = float(raw["silent_seconds"])
+
+    if int(merged["rate_limit"]) < 1:
+        raise ValueError("rate_limit must be >= 1")
+    if float(merged["window_seconds"]) < 0.5:
+        raise ValueError("window_seconds must be >= 0.5")
+    if int(merged["streak_limit"]) < 1:
+        raise ValueError("streak_limit must be >= 1")
+    if int(merged["pending_warn"]) < 0:
+        raise ValueError("pending_warn must be >= 0")
+    if int(merged["pending_critical"]) < int(merged["pending_warn"]):
+        raise ValueError("pending_critical must be >= pending_warn")
+    if float(merged["silent_seconds"]) < 5.0:
+        raise ValueError("silent_seconds must be >= 5")
+
+    return {
+        "rate_limit": int(merged["rate_limit"]),
+        "window_seconds": float(merged["window_seconds"]),
+        "streak_limit": int(merged["streak_limit"]),
+        "pending_warn": int(merged["pending_warn"]),
+        "pending_critical": int(merged["pending_critical"]),
+        "silent_seconds": float(merged["silent_seconds"]),
+    }
 
 
 @dataclass(frozen=True)
@@ -105,6 +164,8 @@ class WorkstreamRecord:
     state: str = "live"
     pending: List[Dict[str, Any]] = field(default_factory=list)
     auto_forward_guard: Dict[str, Any] = field(default_factory=dict)
+    policy: Dict[str, Any] = field(default_factory=dict)
+    review_mode: str = "auto"
     restore_error: Optional[str] = None
     last_activity_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
@@ -114,6 +175,8 @@ class WorkstreamRecord:
         return self.state in {"live", "restored"}
 
     def silent_threshold_seconds(self) -> float:
+        if self.policy.get("silent_seconds") is not None:
+            return float(self.policy["silent_seconds"])
         base = max(30.0, (float(self.poll_ms) / 1000.0) * 25.0)
         return min(300.0, base)
 
@@ -148,7 +211,9 @@ class WorkstreamRecord:
             )
 
         pending_count = len(self.pending)
-        if pending_count >= _PENDING_CRITICAL_THRESHOLD:
+        pending_warn = int(self.policy.get("pending_warn", _DEFAULT_PENDING_WARN_THRESHOLD))
+        pending_critical = int(self.policy.get("pending_critical", _DEFAULT_PENDING_CRITICAL_THRESHOLD))
+        if pending_count >= pending_critical:
             alerts.append(
                 _health_alert(
                     "pending_backlog",
@@ -157,13 +222,23 @@ class WorkstreamRecord:
                     escalation="intervene",
                 )
             )
-        elif pending_count >= _PENDING_WARN_THRESHOLD:
+        elif pending_count >= pending_warn:
             alerts.append(
                 _health_alert(
                     "pending_backlog",
                     severity="warn",
                     summary=f"pending review backlog is building ({pending_count})",
                     escalation="review",
+                )
+            )
+
+        if self.review_mode == "paused":
+            alerts.append(
+                _health_alert(
+                    "review_paused",
+                    severity="warn",
+                    summary="review is paused by operator policy",
+                    escalation="observe",
                 )
             )
 
@@ -213,6 +288,8 @@ class WorkstreamRecord:
             "pending_count": len(self.pending),
             "pending": list(self.pending),
             "auto_forward_guard": dict(self.auto_forward_guard),
+            "policy": dict(self.policy),
+            "review_mode": self.review_mode,
             "backend": self.backend.to_dict(),
             "poll_ms": self.poll_ms,
             "lines": self.lines,
@@ -246,6 +323,11 @@ class WorkstreamRecord:
             state=str(payload.get("state", "live")),
             pending=list(payload.get("pending", [])),
             auto_forward_guard=dict(payload.get("auto_forward_guard", {})),
+            policy=normalize_workstream_policy(
+                dict(payload.get("policy", {})) if isinstance(payload.get("policy"), dict) else {},
+                poll_ms=int(payload.get("poll_ms", 400)),
+            ),
+            review_mode=str(payload.get("review_mode", "auto")),
             restore_error=str(payload.get("restore_error")) if payload.get("restore_error") is not None else None,
             last_activity_at=float(payload.get("last_activity_at", payload.get("updated_at", time.time()))),
             updated_at=float(payload.get("updated_at", time.time())),

@@ -15,6 +15,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Release-facing security posture docs and support-tier guidance for local-first, private-network experimental, and public-edge unsupported adoption paths.
 - Per-workstream health, alert severity, escalation, and silent-stream detection surfaced through `status.workstreams[*].health` and `status.fleet`.
 - `audit_recent` now accepts `workstream_id` for fleet-safe governance review.
+- New workstream action tools: `workstream_list`, `workstream_get`, `workstream_pause_review`, `workstream_resume_review`, and `workstream_update_policy`.
 
 ### Changed
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
@@ -28,12 +29,14 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - GUI diagnostics audit view now supports event-level filtering and recent-entry limits for faster review.
 - Persisted audit entries now redact text-bearing fields and expose the active redaction mode through the audit status snapshot.
 - Audit text redaction now supports `mask`, `drop`, and explicit `full` modes so operators can choose between privacy and verbatim retention.
+- `status.workstreams[*]` and `bridge_details[*]` now surface per-workstream governance `policy` plus `review_mode` so operators can see when review is `auto`, `guarded`, `paused`, or `manual`.
 
 ### Fixed
 - HTTP, SSE, and WebSocket request handling now apply bounded-size, timeout, incomplete-body, and numeric-input validation more consistently.
 - Backend caching now distinguishes shell and distro configuration, while `process` and `pipe` backends prune dead child state and reuse live panes instead of respawning duplicates.
 - Bridge worker polling now waits once per capture cycle instead of once per output line, reducing burst-output latency.
 - Burst and streak-based auto-forward loops now trip a breaker before unbounded terminal delivery, preserve the triggering handoff in the pending queue, and re-arm after review.
+- Service-managed workstream restore now preserves per-workstream policy snapshots and guarded-review state instead of collapsing everything back to default bridge behavior.
 
 ## [0.2.0] - 2026-03-26
 

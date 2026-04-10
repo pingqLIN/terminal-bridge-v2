@@ -116,6 +116,8 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - `status.workstreams[*].health` now surfaces per-workstream severity, alert summaries, escalation level, and silent-stream detection
 - `status.fleet` now aggregates `healthy`, `warn`, `critical`, and escalation counts so one noisy workstream is easier to isolate
 - `audit_recent` now accepts `workstream_id` for fleet-safe governance review
+- `status.workstreams[*]` now also exposes `policy` and `review_mode` so operators can distinguish `auto`, `guarded`, `paused`, and `manual` review states
+- MCP operators can now call `workstream_list`, `workstream_get`, `workstream_pause_review`, `workstream_resume_review`, and `workstream_update_policy` to pause review or tune per-workstream guardrails without falling back to ad hoc bridge-only targeting
 
 ## Quick Install
 
