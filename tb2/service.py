@@ -255,6 +255,12 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
                 "runtime_restored": False,
                 "previous_pid": None,
                 "previous_started_at": None,
+                "recovery_protocol": None,
+                "restore_order": [],
+                "last_recovery_at": None,
+                "restored_workstream_count": 0,
+                "manual_takeover_workstream_count": 0,
+                "lost_workstream_count": 0,
             },
             "workstream_count": 0,
             "security_posture": posture.to_dict(),
@@ -271,6 +277,8 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
     )
     workstreams = state.get("workstreams")
     workstream_items = workstreams if isinstance(workstreams, list) else []
+    restore_order = continuity_dict.get("restore_order")
+    restore_order_items = [str(item) for item in restore_order] if isinstance(restore_order, list) else []
     return {
         "state_persistence": str(runtime.get("state_persistence", defaults["state_persistence"])),
         "restart_behavior": str(runtime.get("restart_behavior", defaults["restart_behavior"])),
@@ -283,6 +291,14 @@ def runtime_contract(*, paths: Optional[ServicePaths] = None) -> Dict[str, objec
             "runtime_restored": bool(continuity_dict.get("runtime_restored", False)),
             "previous_pid": _as_pid(continuity_dict.get("previous_pid")),
             "previous_started_at": _as_float(continuity_dict.get("previous_started_at")),
+            "recovery_protocol": str(continuity_dict.get("recovery_protocol"))
+            if continuity_dict.get("recovery_protocol")
+            else None,
+            "restore_order": restore_order_items,
+            "last_recovery_at": _as_float(continuity_dict.get("last_recovery_at")),
+            "restored_workstream_count": _as_int(continuity_dict.get("restored_workstream_count")) or 0,
+            "manual_takeover_workstream_count": _as_int(continuity_dict.get("manual_takeover_workstream_count")) or 0,
+            "lost_workstream_count": _as_int(continuity_dict.get("lost_workstream_count")) or 0,
         },
         "workstream_count": len(workstream_items),
         "security_posture": posture.to_dict(),

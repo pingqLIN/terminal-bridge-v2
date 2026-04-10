@@ -22,6 +22,14 @@ _DEFAULT_STREAK_LIMIT = 20
 _DEFAULT_PENDING_WARN_THRESHOLD = 3
 _DEFAULT_PENDING_CRITICAL_THRESHOLD = 8
 _DEFAULT_PENDING_LIMIT = 12
+_RECOVERY_PROTOCOL = "ordered_restore_v1"
+_RESTORE_ORDER = (
+    "workstream_metadata",
+    "room_metadata",
+    "bridge_worker",
+    "pending_interventions",
+    "health_state",
+)
 
 
 def validate_workstream_id(workstream_id: str) -> str:
@@ -36,6 +44,14 @@ def validate_workstream_tier(tier: str) -> str:
     if value not in _WORKSTREAM_TIER_VALUES:
         raise ValueError("invalid workstream tier")
     return value
+
+
+def workstream_recovery_protocol() -> str:
+    return _RECOVERY_PROTOCOL
+
+
+def workstream_restore_order() -> List[str]:
+    return list(_RESTORE_ORDER)
 
 
 def _health_alert(
@@ -308,6 +324,47 @@ class WorkstreamRecord:
             "silent_threshold_seconds": round(silent_threshold, 3),
         }
 
+    def recovery_payload(self) -> Dict[str, Any]:
+        restore_order = workstream_restore_order()
+        if self.state == "restored":
+            return {
+                "protocol": workstream_recovery_protocol(),
+                "state": "restored",
+                "attempted_from_snapshot": True,
+                "restored_from_snapshot": True,
+                "manual_takeover_required": False,
+                "restore_order": restore_order,
+                "completed_steps": restore_order,
+                "failure_step": None,
+                "stage": restore_order[-1],
+                "error": None,
+            }
+        if self.state == "degraded":
+            return {
+                "protocol": workstream_recovery_protocol(),
+                "state": "manual_takeover",
+                "attempted_from_snapshot": True,
+                "restored_from_snapshot": False,
+                "manual_takeover_required": True,
+                "restore_order": restore_order,
+                "completed_steps": restore_order[:2],
+                "failure_step": "bridge_worker",
+                "stage": "bridge_worker",
+                "error": self.restore_error,
+            }
+        return {
+            "protocol": workstream_recovery_protocol(),
+            "state": "live_runtime",
+            "attempted_from_snapshot": False,
+            "restored_from_snapshot": False,
+            "manual_takeover_required": False,
+            "restore_order": restore_order,
+            "completed_steps": [],
+            "failure_step": None,
+            "stage": None,
+            "error": None,
+        }
+
     def to_status_payload(self) -> Dict[str, Any]:
         return {
             "workstream_id": self.workstream_id,
@@ -331,6 +388,7 @@ class WorkstreamRecord:
             "state": self.state,
             "bridge_active": self.bridge_active,
             "restore_error": self.restore_error,
+            "recovery": self.recovery_payload(),
             "last_activity_at": self.last_activity_at,
             "health": self.health_payload(),
             "updated_at": self.updated_at,

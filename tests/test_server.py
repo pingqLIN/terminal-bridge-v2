@@ -1206,14 +1206,106 @@ class TestWorkstreamHandlers:
 
         assert result["runtime"]["continuity"]["mode"] == "restart_restored"
         assert result["runtime"]["continuity"]["runtime_restored"] is True
+        assert result["runtime"]["continuity"]["recovery_protocol"] == "ordered_restore_v1"
+        assert result["runtime"]["continuity"]["restore_order"] == [
+            "workstream_metadata",
+            "room_metadata",
+            "bridge_worker",
+            "pending_interventions",
+            "health_state",
+        ]
+        assert result["runtime"]["continuity"]["restored_workstream_count"] == 1
+        assert result["runtime"]["continuity"]["manual_takeover_workstream_count"] == 0
         assert result["workstreams"][0]["workstream_id"] == "restored-main"
         assert result["workstreams"][0]["state"] == "restored"
         assert result["workstreams"][0]["pending_count"] == 1
         assert result["workstreams"][0]["review_mode"] == "manual"
         assert result["workstreams"][0]["policy"]["rate_limit"] == 2
         assert result["workstreams"][0]["auto_forward_guard"]["guard_reason"] == "rate limit exceeded"
+        assert result["workstreams"][0]["recovery"]["state"] == "restored"
+        assert result["workstreams"][0]["recovery"]["restored_from_snapshot"] is True
+        assert result["recovery"]["restored_count"] == 1
+        assert result["recovery"]["restored_workstreams"] == ["restored-main"]
+        assert result["recovery"]["manual_takeover_workstreams"] == []
 
         server_mod.handle_bridge_stop({"bridge_id": "restored-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_restore_workstreams_marks_manual_takeover_when_backend_probe_fails(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.side_effect = RuntimeError("capture failed")
+        mock_factory.return_value = mock_backend
+        monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+        state = tmp_path / "server.state.json"
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "pid": os.getpid(),
+                    "runtime": {
+                        "launch_mode": "service",
+                        "continuity": {
+                            "mode": "restart_state_lost",
+                            "runtime_restored": False,
+                        },
+                    },
+                    "workstreams": [
+                        {
+                            "workstream_id": "degraded-main",
+                            "bridge_id": "degraded-bridge",
+                            "room_id": "degraded-room",
+                            "pane_a": "restore:a",
+                            "pane_b": "restore:b",
+                            "profile": "generic",
+                            "auto_forward": False,
+                            "intervention": False,
+                            "poll_ms": 400,
+                            "lines": 200,
+                            "backend": {
+                                "kind": "process",
+                                "backend_id": "degraded-backend",
+                                "shell": "",
+                                "distro": "",
+                            },
+                            "pending": [],
+                            "policy": {
+                                "rate_limit": 2,
+                                "window_seconds": 5.0,
+                                "streak_limit": 9,
+                                "pending_warn": 1,
+                                "pending_critical": 2,
+                                "pending_limit": 3,
+                                "silent_seconds": 45.0,
+                            },
+                            "review_mode": "auto",
+                            "state": "live",
+                            "bridge_active": True,
+                            "restore_error": None,
+                            "updated_at": 1.0,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        server_mod._restore_workstreams_from_service_state()
+        result = server_mod.handle_status({})
+
+        assert result["runtime"]["continuity"]["mode"] == "restart_state_lost"
+        assert result["runtime"]["continuity"]["runtime_restored"] is False
+        assert result["runtime"]["continuity"]["restored_workstream_count"] == 0
+        assert result["runtime"]["continuity"]["manual_takeover_workstream_count"] == 1
+        assert result["runtime"]["continuity"]["lost_workstream_count"] == 1
+        assert result["workstreams"][0]["workstream_id"] == "degraded-main"
+        assert result["workstreams"][0]["state"] == "degraded"
+        assert result["workstreams"][0]["restore_error"] == "capture failed"
+        assert result["workstreams"][0]["recovery"]["state"] == "manual_takeover"
+        assert result["workstreams"][0]["recovery"]["manual_takeover_required"] is True
+        assert result["recovery"]["manual_takeover_count"] == 1
+        assert result["recovery"]["manual_takeover_workstreams"] == ["degraded-main"]
+        assert result["recovery"]["lost_count"] == 1
 
     @patch.object(server_mod, "_make_backend")
     def test_audit_trail_records_intervention_approval(self, mock_factory, tmp_path, monkeypatch):
@@ -2335,6 +2427,8 @@ class TestGuiRouting:
         assert 'id="workstream-list"' in html
         assert 'id="fleet-summary-meta"' in html
         assert "function renderWorkstreamFleet(status)" in html
+        assert "const recovery = status && status.recovery ? status.recovery : null;" in html
+        assert "const manualTakeover = Number(recovery.manual_takeover_count || 0) || 0;" in html
         assert "selectedWorkstreamId:" in html
         assert "if (workstreamId) args.workstream_id = workstreamId;" in html
 

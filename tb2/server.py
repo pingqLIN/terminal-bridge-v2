@@ -43,6 +43,8 @@ from .workstream import (
     normalize_workstream_policy,
     validate_workstream_id,
     validate_workstream_tier,
+    workstream_recovery_protocol,
+    workstream_restore_order,
 )
 
 
@@ -835,6 +837,50 @@ def _fleet_reconciliation_snapshot(
     }
 
 
+def _recovery_status_snapshot(
+    workstream_payloads: List[Dict[str, Any]],
+    *,
+    continuity: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    continuity_dict = continuity if isinstance(continuity, dict) else {}
+    protocol = str(continuity_dict.get("recovery_protocol") or workstream_recovery_protocol())
+    restore_order = continuity_dict.get("restore_order")
+    restore_order_items = [str(item) for item in restore_order] if isinstance(restore_order, list) else workstream_restore_order()
+    restored_ids = [
+        str(item["workstream_id"])
+        for item in workstream_payloads
+        if bool(item.get("recovery", {}).get("restored_from_snapshot"))
+    ]
+    manual_takeover_ids = [
+        str(item["workstream_id"])
+        for item in workstream_payloads
+        if bool(item.get("recovery", {}).get("manual_takeover_required"))
+    ]
+    live_runtime_ids = [
+        str(item["workstream_id"])
+        for item in workstream_payloads
+        if str(item.get("recovery", {}).get("state", "")) == "live_runtime"
+    ]
+    restored_count = continuity_dict.get("restored_workstream_count")
+    manual_takeover_count = continuity_dict.get("manual_takeover_workstream_count")
+    lost_count = continuity_dict.get("lost_workstream_count")
+    return {
+        "protocol": protocol,
+        "restore_order": restore_order_items,
+        "continuity_mode": str(continuity_dict.get("mode", "")),
+        "runtime_restored": bool(continuity_dict.get("runtime_restored", False)),
+        "last_recovery_at": continuity_dict.get("last_recovery_at"),
+        "restored_count": int(restored_count) if restored_count is not None else len(restored_ids),
+        "restored_workstreams": restored_ids,
+        "manual_takeover_count": int(manual_takeover_count) if manual_takeover_count is not None else len(manual_takeover_ids),
+        "manual_takeover_workstreams": manual_takeover_ids,
+        "lost_count": int(lost_count) if lost_count is not None else len(manual_takeover_ids),
+        "lost_workstreams": manual_takeover_ids,
+        "live_runtime_count": len(live_runtime_ids),
+        "live_runtime_workstreams": live_runtime_ids,
+    }
+
+
 def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = None) -> WorkstreamRecord:
     snapshot = bridge.intervention_layer.snapshot()
     pending = snapshot.get("pending")
@@ -902,6 +948,8 @@ def _restore_workstreams_from_service_state() -> None:
         return
 
     restored_any = False
+    restored_count = 0
+    manual_takeover_count = 0
     for item in snapshots:
         if not isinstance(item, dict):
             continue
@@ -917,6 +965,7 @@ def _restore_workstreams_from_service_state() -> None:
             record.state = "degraded"
             record.restore_error = str(exc)
             _set_workstream(record)
+            manual_takeover_count += 1
             continue
 
         bridge = Bridge(
@@ -956,8 +1005,15 @@ def _restore_workstreams_from_service_state() -> None:
         t.start()
         _set_workstream(_bridge_workstream_record(bridge))
         restored_any = True
+        restored_count += 1
 
     continuity = dict(runtime.get("continuity", {})) if isinstance(runtime.get("continuity"), dict) else {}
+    continuity["recovery_protocol"] = workstream_recovery_protocol()
+    continuity["restore_order"] = workstream_restore_order()
+    continuity["last_recovery_at"] = time.time()
+    continuity["restored_workstream_count"] = restored_count
+    continuity["manual_takeover_workstream_count"] = manual_takeover_count
+    continuity["lost_workstream_count"] = manual_takeover_count
     if restored_any and continuity.get("mode") == _CONTINUITY_RESTART_LOST:
         continuity["mode"] = _CONTINUITY_RESTORED
         continuity["runtime_restored"] = True
@@ -2048,6 +2104,8 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         active_bridge_ids = {bridge["bridge_id"] for bridge in bridge_details if str(bridge.get("bridge_id", "")).strip()}
     workstreams = _workstream_status_payloads(active_bridge_ids=active_bridge_ids)
     reconciliation = _fleet_reconciliation_snapshot(rooms=rooms, workstream_payloads=workstreams)
+    runtime = runtime_contract()
+    recovery = _recovery_status_snapshot(workstreams, continuity=runtime.get("continuity"))
     transports = _transport_snapshot()
     transport_by_room = {item["room_id"]: item for item in transports["rooms"]}
     return {
@@ -2074,6 +2132,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
             "live": sum(1 for item in workstreams if item["state"] == "live"),
             "restored": sum(1 for item in workstreams if item["state"] == "restored"),
             "degraded": sum(1 for item in workstreams if item["state"] == "degraded"),
+            "manual_takeover": sum(1 for item in workstreams if bool(item.get("recovery", {}).get("manual_takeover_required"))),
             "pending": sum(int(item["pending_count"]) for item in workstreams),
             "healthy": sum(1 for item in workstreams if item["health"]["state"] == "ok"),
             "warn": sum(1 for item in workstreams if item["health"]["state"] == "warn"),
@@ -2086,9 +2145,10 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
             "stale_workstreams": len(reconciliation["stale_workstreams"]),
         },
         "reconciliation": reconciliation,
+        "recovery": recovery,
         "transports": transports,
         "audit": _audit_trail.describe(),
-        "runtime": runtime_contract(),
+        "runtime": runtime,
         "security": _server_security_payload(),
     }
 

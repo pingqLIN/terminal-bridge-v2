@@ -487,6 +487,18 @@ def test_runtime_contract_reads_service_state_metadata(tmp_path, monkeypatch):
                         "runtime_restored": False,
                         "previous_pid": 1357,
                         "previous_started_at": 12.5,
+                        "recovery_protocol": "ordered_restore_v1",
+                        "restore_order": [
+                            "workstream_metadata",
+                            "room_metadata",
+                            "bridge_worker",
+                            "pending_interventions",
+                            "health_state",
+                        ],
+                        "last_recovery_at": 44.5,
+                        "restored_workstream_count": 2,
+                        "manual_takeover_workstream_count": 1,
+                        "lost_workstream_count": 1,
                     },
                 },
             }
@@ -502,6 +514,18 @@ def test_runtime_contract_reads_service_state_metadata(tmp_path, monkeypatch):
     assert runtime["continuity"]["mode"] == "restart_state_lost"
     assert runtime["continuity"]["previous_pid"] == 1357
     assert runtime["continuity"]["previous_started_at"] == 12.5
+    assert runtime["continuity"]["recovery_protocol"] == "ordered_restore_v1"
+    assert runtime["continuity"]["restore_order"] == [
+        "workstream_metadata",
+        "room_metadata",
+        "bridge_worker",
+        "pending_interventions",
+        "health_state",
+    ]
+    assert runtime["continuity"]["last_recovery_at"] == 44.5
+    assert runtime["continuity"]["restored_workstream_count"] == 2
+    assert runtime["continuity"]["manual_takeover_workstream_count"] == 1
+    assert runtime["continuity"]["lost_workstream_count"] == 1
     assert runtime["state_persistence"] == "service_state_snapshot"
     assert runtime["restart_behavior"] == "best_effort_restore"
     assert runtime["recovery_source"] == "service_state_snapshot"
@@ -567,6 +591,18 @@ def test_persist_runtime_snapshot_updates_service_state(tmp_path, monkeypatch):
             "runtime_restored": True,
             "previous_pid": 1234,
             "previous_started_at": 12.5,
+            "recovery_protocol": "ordered_restore_v1",
+            "restore_order": [
+                "workstream_metadata",
+                "room_metadata",
+                "bridge_worker",
+                "pending_interventions",
+                "health_state",
+            ],
+            "last_recovery_at": 55.0,
+            "restored_workstream_count": 1,
+            "manual_takeover_workstream_count": 0,
+            "lost_workstream_count": 0,
         },
     )
 
@@ -575,6 +611,8 @@ def test_persist_runtime_snapshot_updates_service_state(tmp_path, monkeypatch):
     assert saved["runtime"]["state_persistence"] == "service_state_snapshot"
     assert saved["runtime"]["continuity"]["mode"] == "restart_restored"
     assert saved["runtime"]["continuity"]["runtime_restored"] is True
+    assert saved["runtime"]["continuity"]["recovery_protocol"] == "ordered_restore_v1"
+    assert saved["runtime"]["continuity"]["restored_workstream_count"] == 1
     assert saved["workstreams"][0]["workstream_id"] == "main-flow"
 
 

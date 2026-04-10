@@ -4205,6 +4205,7 @@ GUI_HTML_TEMPLATE = r"""
         const meta = $('fleet-summary-meta');
         if (!box || !meta) return;
         const workstreams = workstreamsFromStatus(status);
+        const recovery = status && status.recovery ? status.recovery : null;
         box.innerHTML = '';
         if (status && status.fleet && (status.fleet.warn || status.fleet.critical)) {
           meta.textContent = format('fleet.countAlerts', {
@@ -4214,6 +4215,13 @@ GUI_HTML_TEMPLATE = r"""
           });
         } else {
           meta.textContent = workstreams.length ? format('fleet.count', { count: workstreams.length }) : t('fleet.empty');
+        }
+        if (recovery && workstreams.length) {
+          const restored = Number(recovery.restored_count || 0) || 0;
+          const manualTakeover = Number(recovery.manual_takeover_count || 0) || 0;
+          if (restored > 0 || manualTakeover > 0) {
+            meta.textContent += ' · ' + t('fleet.stateRestored') + ' ' + String(restored) + ' · ' + t('fleet.stateDegraded') + ' ' + String(manualTakeover);
+          }
         }
         if (!workstreams.length) return;
         const selected = inferWorkstream(status);
