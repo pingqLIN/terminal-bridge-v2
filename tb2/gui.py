@@ -46,9 +46,10 @@ GUI_HTML_TEMPLATE = r"""
       body {
         margin: 0;
         color: var(--ink);
-        font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", "Segoe UI", sans-serif;
-        font-size: 14px;
-        line-height: 1.45;
+        font-family: "IBM Plex Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", "Segoe UI", sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+        font-feature-settings: "kern" 1, "liga" 1;
         background:
           radial-gradient(circle at top left, rgba(23, 33, 47, 0.08), transparent 28%),
           radial-gradient(circle at top right, rgba(116, 100, 86, 0.10), transparent 30%),
@@ -121,9 +122,9 @@ GUI_HTML_TEMPLATE = r"""
       main {
         position: relative;
         width: min(var(--shell-width), calc(100vw - var(--shell-gutter)));
-        margin: 24px auto 48px;
+        margin: 18px auto 40px;
         display: grid;
-        gap: 14px;
+        gap: 16px;
       }
 
       body[data-home="preset-only"] main {
@@ -156,8 +157,15 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .hero {
-        padding: 22px;
+        padding: 18px 20px;
+        display: grid;
+        gap: 14px;
         box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+      }
+
+      body[data-home="workspace"] .hero {
+        padding: 14px 16px;
+        gap: 10px;
       }
 
       .card {
@@ -190,9 +198,9 @@ GUI_HTML_TEMPLATE = r"""
       .eyebrow {
         margin: 0 0 8px;
         color: var(--accent);
-        font-size: 0.74rem;
-        font-weight: 600;
-        letter-spacing: 0.1em;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
       }
 
@@ -204,36 +212,57 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       h1 {
-        font-size: clamp(1.8rem, 3.4vw, 2.45rem);
-        line-height: 1;
-        letter-spacing: -0.04em;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Noto Serif TC", serif;
+        font-size: clamp(2.05rem, 3.5vw, 2.9rem);
+        line-height: 0.96;
+        letter-spacing: -0.035em;
         font-weight: 600;
-        max-width: 12ch;
+        max-width: 10ch;
+        text-wrap: balance;
       }
 
       h2 {
-        font-size: 1.02rem;
-        letter-spacing: 0.01em;
+        font-size: 1.12rem;
+        letter-spacing: 0.005em;
         font-weight: 600;
+        line-height: 1.08;
+        text-wrap: balance;
       }
 
       .hero-copy {
         display: grid;
-        gap: 10px;
-        max-width: 72ch;
+        gap: 9px;
+        max-width: 64ch;
       }
 
       .hero-copy p {
         color: var(--muted);
-        font-size: 0.9rem;
-        line-height: 1.52;
+        font-size: 0.94rem;
+        line-height: 1.58;
+        max-width: 58ch;
       }
 
       .hero-header {
-        display: flex;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) auto;
         gap: 16px;
         align-items: flex-start;
+      }
+
+      body[data-home="workspace"] .hero-header {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+      }
+
+      body[data-home="workspace"] .hero-copy {
+        gap: 7px;
+        max-width: 56ch;
+      }
+
+      body[data-home="workspace"] .hero-copy p {
+        font-size: 0.86rem;
+        line-height: 1.5;
+        max-width: 52ch;
       }
 
       .hero-controls {
@@ -284,19 +313,19 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .meta {
-        margin-top: 12px;
+        margin-top: 8px;
       }
 
       .badge {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        padding: 5px 11px;
+        padding: 5px 10px;
         border-radius: 10px;
         border: 1px solid var(--line);
         background: rgba(255, 255, 255, 0.7);
         color: var(--muted);
-        font-size: 0.76rem;
+        font-size: 0.74rem;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
       }
 
@@ -307,9 +336,9 @@ GUI_HTML_TEMPLATE = r"""
 
       .preset-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 9px;
-        margin-top: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
       }
 
       .preset {
@@ -317,11 +346,11 @@ GUI_HTML_TEMPLATE = r"""
         position: relative;
         width: 100%;
         text-align: left;
-        min-height: 84px;
-        padding: 14px;
-        border-radius: 10px;
+        min-height: 92px;
+        padding: 13px 14px;
+        border-radius: 12px;
         border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.9);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 242, 234, 0.9));
         color: var(--ink);
         cursor: pointer;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
@@ -349,17 +378,34 @@ GUI_HTML_TEMPLATE = r"""
 
       .preset b {
         display: block;
-        margin-bottom: 5px;
-        font-size: 0.86rem;
-        letter-spacing: 0.02em;
+        margin-bottom: 6px;
+        font-size: 0.9rem;
+        letter-spacing: 0.01em;
         font-weight: 600;
-        line-height: 1.25;
+        line-height: 1.2;
       }
 
       .preset span {
         color: var(--muted);
-        font-size: 0.76rem;
-        line-height: 1.42;
+        font-size: 0.8rem;
+        line-height: 1.46;
+      }
+
+      body[data-home="workspace"] #preset-grid {
+        grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+        gap: 8px;
+      }
+
+      body[data-home="workspace"] #preset-grid .preset {
+        min-height: 72px;
+        padding: 10px 12px;
+      }
+
+      body[data-home="workspace"] #preset-grid .preset span {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
 
       .layout {
@@ -370,53 +416,54 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .workspace-nav {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 8px;
-        align-items: center;
+        align-items: stretch;
       }
 
       .workspace-tab {
         display: grid;
-        gap: 2px;
+        gap: 3px;
         align-content: center;
         justify-items: start;
         appearance: none;
         border: 1px solid var(--line);
         background: rgba(255, 255, 255, 0.72);
         color: var(--muted);
-        border-radius: 10px;
-        min-height: 40px;
-        min-width: 136px;
-        padding: 8px 14px 9px;
+        border-radius: 12px;
+        min-height: 52px;
+        min-width: 0;
+        padding: 10px 14px 11px;
         font: inherit;
-        font-size: 0.8rem;
+        font-size: 0.82rem;
         font-weight: 600;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.02em;
         cursor: pointer;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.46);
       }
 
       .workspace-tab.active {
         border-color: var(--accent);
-        background: rgba(47, 75, 92, 0.1);
+        background: linear-gradient(180deg, rgba(47, 75, 92, 0.12), rgba(47, 75, 92, 0.06));
         color: var(--ink);
         box-shadow: 0 0 0 1px rgba(47, 75, 92, 0.08), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.52);
       }
 
       .workspace-tab-label {
         color: var(--ink);
-        font-size: 0.8rem;
+        font-size: 0.84rem;
         font-weight: 700;
-        letter-spacing: 0.03em;
+        letter-spacing: 0.02em;
       }
 
       .workspace-tab-meta {
         color: var(--muted);
-        font-size: 0.68rem;
+        font-size: 0.72rem;
         font-weight: 600;
         letter-spacing: 0.02em;
         text-transform: none;
+        line-height: 1.28;
       }
 
       .workspace-tab.active .workspace-tab-meta {
@@ -425,15 +472,15 @@ GUI_HTML_TEMPLATE = r"""
 
       .workspace-strip {
         display: grid;
-        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
         gap: 10px;
       }
 
       .workspace-chip {
         display: grid;
         gap: 4px;
-        min-height: 72px;
-        padding: 11px 12px;
+        min-height: 78px;
+        padding: 12px 13px;
         border-radius: 12px;
         border: 1px solid rgba(217, 204, 184, 0.78);
         background: rgba(255, 255, 255, 0.76);
@@ -450,8 +497,9 @@ GUI_HTML_TEMPLATE = r"""
 
       .workspace-chip span {
         color: var(--ink);
-        font-size: 0.84rem;
-        line-height: 1.28;
+        font-size: 0.88rem;
+        line-height: 1.3;
+        font-variant-numeric: tabular-nums;
       }
 
       .workspace-chip small {
@@ -502,22 +550,22 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .card {
-        padding: 16px;
+        padding: 18px;
       }
 
       .card-head {
         display: grid;
-        gap: 6px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
+        gap: 7px;
+        margin-bottom: 14px;
+        padding-bottom: 12px;
         border-bottom: 1px solid rgba(217, 204, 184, 0.75);
       }
 
       .card-head p {
         color: var(--muted);
-        font-size: 0.82rem;
-        line-height: 1.45;
-        max-width: 66ch;
+        font-size: 0.86rem;
+        line-height: 1.52;
+        max-width: 60ch;
       }
 
       .card-head p:empty,
@@ -527,9 +575,9 @@ GUI_HTML_TEMPLATE = r"""
 
       .card-kicker {
         color: var(--muted);
-        font-size: 0.68rem;
+        font-size: 0.7rem;
         font-weight: 500;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.09em;
         text-transform: uppercase;
       }
 
@@ -543,13 +591,13 @@ GUI_HTML_TEMPLATE = r"""
 
       .stage-note {
         margin: 0 0 12px;
-        padding: 9px 10px;
+        padding: 10px 12px;
         border: 1px dashed rgba(217, 204, 184, 0.9);
-        border-radius: 9px;
+        border-radius: 11px;
         color: var(--muted);
-        font-size: 0.76rem;
-        line-height: 1.4;
-        background: rgba(255, 255, 255, 0.42);
+        font-size: 0.8rem;
+        line-height: 1.48;
+        background: rgba(255, 255, 255, 0.56);
       }
 
       .disclosure {
@@ -614,7 +662,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .status-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
         gap: 8px;
       }
 
@@ -637,8 +685,9 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .stat span {
-        font-size: 0.84rem;
+        font-size: 0.88rem;
         font-weight: 500;
+        font-variant-numeric: tabular-nums;
       }
 
       .card--live .stat:nth-child(1) {
@@ -664,7 +713,7 @@ GUI_HTML_TEMPLATE = r"""
       .row {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
+        gap: 12px;
         align-items: start;
       }
 
@@ -676,9 +725,9 @@ GUI_HTML_TEMPLATE = r"""
         display: block;
         margin-bottom: 5px;
         color: var(--muted);
-        font-size: 0.72rem;
+        font-size: 0.76rem;
         font-weight: 500;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.035em;
         line-height: 1.25;
         text-transform: uppercase;
       }
@@ -689,14 +738,19 @@ GUI_HTML_TEMPLATE = r"""
       pre {
         width: 100%;
         padding: 9px var(--control-padding-x);
-        border: 1px solid var(--line);
         border-radius: 9px;
-        background: rgba(255, 255, 255, 0.88);
-        color: var(--ink);
         font: inherit;
-        font-size: 0.86rem;
-        line-height: 1.3;
-        box-shadow: inset 0 1px 1px rgba(34, 29, 24, 0.02), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+        line-height: 1.35;
+      }
+
+      input,
+      select,
+      textarea {
+        border: 1px solid color-mix(in oklab, var(--line) 76%, white);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 243, 236, 0.98));
+        color: var(--ink);
+        font-size: 0.9rem;
+        box-shadow: inset 0 1px 1px rgba(34, 29, 24, 0.02), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
       }
 
       input,
@@ -708,8 +762,8 @@ GUI_HTML_TEMPLATE = r"""
       pre {
         min-height: 120px;
         font-family: "IBM Plex Mono", "Consolas", monospace;
-        font-size: 0.76rem;
-        line-height: 1.42;
+        font-size: 0.79rem;
+        line-height: 1.5;
       }
 
       textarea {
@@ -718,11 +772,16 @@ GUI_HTML_TEMPLATE = r"""
 
       select[size] {
         min-height: 208px;
-        background: rgba(250, 245, 237, 0.96);
+        background: linear-gradient(180deg, rgba(252, 248, 241, 0.98), rgba(247, 241, 233, 0.98));
+      }
+
+      textarea:not([readonly]) {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 240, 232, 0.98));
       }
 
       textarea[readonly],
       pre {
+        border: 1px solid #233243;
         border-color: #233243;
         background: #17212f;
         color: #d8e4f0;
@@ -738,10 +797,42 @@ GUI_HTML_TEMPLATE = r"""
 
       #stream-box,
       #status-box,
+      #audit-box,
+      #pending-detail,
       #log-box,
       #capture-a-box,
       #capture-b-box {
         border-left: 4px solid var(--card-accent);
+      }
+
+      .panel-field {
+        display: grid;
+        gap: 8px;
+        min-height: 100%;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(217, 204, 184, 0.78);
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
+      }
+
+      .panel-field--input {
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 243, 236, 0.9));
+      }
+
+      .panel-field--display {
+        background: linear-gradient(180deg, rgba(245, 240, 233, 0.92), rgba(240, 234, 226, 0.88));
+      }
+
+      .panel-field--display label {
+        color: var(--accent-strong);
+      }
+
+      .panel-actions {
+        padding: 0;
+        border: 0;
+        background: transparent;
+        box-shadow: none;
       }
 
       button {
@@ -852,7 +943,12 @@ GUI_HTML_TEMPLATE = r"""
 
       .queue {
         display: grid;
-        gap: 10px;
+        gap: 12px;
+      }
+
+      #pending-work {
+        display: grid;
+        gap: 12px;
       }
 
       .note {
@@ -862,8 +958,8 @@ GUI_HTML_TEMPLATE = r"""
         border: 1px solid #d8ccb9;
         border-left: 4px solid var(--accent-alt);
         color: #5d5146;
-        font-size: 0.78rem;
-        line-height: 1.45;
+        font-size: 0.8rem;
+        line-height: 1.5;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
       }
 
@@ -948,14 +1044,16 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .relation-scroller {
-        overflow-x: auto;
+        overflow: clip;
         padding-bottom: 2px;
       }
 
       .relation-diagram {
         position: relative;
-        min-width: 930px;
-        min-height: 456px;
+        width: 100%;
+        min-width: 0;
+        min-height: clamp(330px, 34vw, 424px);
+        aspect-ratio: 920 / 424;
         border-radius: 18px;
         border: 1px solid color-mix(in oklab, var(--line) 74%, white);
         background:
@@ -974,13 +1072,13 @@ GUI_HTML_TEMPLATE = r"""
         background-image:
           linear-gradient(rgba(217, 204, 184, 0.14) 1px, transparent 1px),
           linear-gradient(90deg, rgba(217, 204, 184, 0.14) 1px, transparent 1px);
-        background-size: 32px 32px;
+        background-size: 28px 28px;
         mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 100%);
       }
 
       .relation-lanes {
         position: absolute;
-        inset: 12px;
+        inset: 10px;
         pointer-events: none;
       }
 
@@ -1012,18 +1110,18 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .relation-lane--operator {
-        left: 14px;
-        width: 26%;
+        left: 10px;
+        width: 28.5%;
       }
 
       .relation-lane--control {
-        left: 37%;
-        width: 26%;
+        left: 35.75%;
+        width: 28.5%;
       }
 
       .relation-lane--execution {
-        right: 14px;
-        width: 26%;
+        right: 10px;
+        width: 28.5%;
       }
 
       .relation-lines {
@@ -1119,16 +1217,16 @@ GUI_HTML_TEMPLATE = r"""
       .relation-node {
         position: absolute;
         z-index: 2;
-        width: 180px;
-        min-height: 118px;
-        padding: 12px 14px;
+        width: 152px;
+        min-height: 110px;
+        padding: 10px 12px;
         border: 1px solid color-mix(in oklab, var(--line) 76%, white);
         border-radius: 18px;
         background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 243, 235, 0.985));
         box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.68);
         transform: translate(-50%, -50%);
         display: grid;
-        gap: 6px;
+        gap: 5px;
         cursor: pointer;
       }
 
@@ -1225,13 +1323,13 @@ GUI_HTML_TEMPLATE = r"""
         align-items: center;
         justify-content: center;
         width: fit-content;
-        min-height: 24px;
-        padding: 3px 8px;
+        min-height: 22px;
+        padding: 3px 7px;
         border-radius: 999px;
         border: 1px solid rgba(217, 204, 184, 0.78);
         background: rgba(255, 255, 255, 0.84);
         color: var(--accent);
-        font-size: 0.62rem;
+        font-size: 0.58rem;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -1239,25 +1337,25 @@ GUI_HTML_TEMPLATE = r"""
 
       .relation-node strong {
         color: var(--ink);
-        font-size: 0.88rem;
+        font-size: 0.81rem;
         line-height: 1.18;
       }
 
       .relation-node span {
         color: var(--muted);
-        font-size: 0.74rem;
+        font-size: 0.7rem;
         line-height: 1.32;
       }
 
       .relation-node code {
         display: inline-flex;
         align-items: center;
-        min-height: 28px;
-        padding: 5px 8px;
+        min-height: 24px;
+        padding: 4px 7px;
         border-radius: 10px;
         background: rgba(240, 236, 228, 0.92);
         color: var(--accent-strong);
-        font-size: 0.68rem;
+        font-size: 0.63rem;
         font-family: "IBM Plex Mono", "Consolas", monospace;
         word-break: break-word;
       }
@@ -1273,13 +1371,13 @@ GUI_HTML_TEMPLATE = r"""
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        min-height: 28px;
-        padding: 4px 9px;
+        min-height: 24px;
+        padding: 4px 8px;
         border-radius: 999px;
         border: 1px solid rgba(217, 204, 184, 0.84);
         background: rgba(255, 255, 255, 0.96);
         color: var(--accent-strong);
-        font-size: 0.67rem;
+        font-size: 0.63rem;
         font-weight: 700;
         letter-spacing: 0.03em;
       }
@@ -1346,8 +1444,8 @@ GUI_HTML_TEMPLATE = r"""
 
       .relation-controls {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+        gap: 12px;
         align-items: end;
       }
 
@@ -1382,7 +1480,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .runtime-compare {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 10px;
       }
 
@@ -1511,7 +1609,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .relation-spotlight-facts {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
         gap: 9px;
       }
 
@@ -1541,7 +1639,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .relation-facts {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
         gap: 9px;
       }
 
@@ -1617,10 +1715,10 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 8px;
         margin-bottom: 10px;
-        padding: 12px;
+        padding: 14px;
         border-radius: 12px;
         border: 1px solid rgba(217, 204, 184, 0.82);
-        background: rgba(255, 255, 255, 0.74);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 243, 235, 0.78));
       }
 
       .queue-guide strong {
@@ -1634,13 +1732,13 @@ GUI_HTML_TEMPLATE = r"""
         margin: 0;
         padding-left: 18px;
         color: var(--muted);
-        font-size: 0.76rem;
-        line-height: 1.45;
+        font-size: 0.8rem;
+        line-height: 1.5;
       }
 
       .summary-strip {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
         gap: 10px;
       }
 
@@ -1664,8 +1762,8 @@ GUI_HTML_TEMPLATE = r"""
 
       .summary-tile span {
         color: var(--ink);
-        font-size: 0.84rem;
-        line-height: 1.28;
+        font-size: 0.88rem;
+        line-height: 1.3;
       }
 
       .summary-tile small {
@@ -1695,10 +1793,10 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 8px;
         margin-bottom: 10px;
-        padding: 12px;
+        padding: 14px;
         border-radius: 12px;
         border: 1px solid rgba(217, 204, 184, 0.82);
-        background: rgba(255, 255, 255, 0.74);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 243, 235, 0.78));
       }
 
       .inspect-guide strong {
@@ -1711,13 +1809,13 @@ GUI_HTML_TEMPLATE = r"""
       .inspect-guide p {
         margin: 0;
         color: var(--muted);
-        font-size: 0.76rem;
-        line-height: 1.45;
+        font-size: 0.8rem;
+        line-height: 1.5;
       }
 
       .subtle {
         color: var(--muted);
-        font-size: 0.76rem;
+        font-size: 0.8rem;
       }
 
       .card--launch {
@@ -1744,12 +1842,48 @@ GUI_HTML_TEMPLATE = r"""
         display: flex;
         flex-direction: column;
         gap: 12px;
+        position: sticky;
+        top: 18px;
       }
 
       .workstream-panel {
         display: flex;
         flex-direction: column;
         gap: 16px;
+      }
+
+      #fleet-summary-meta {
+        font-size: 0.78rem;
+        line-height: 1.4;
+      }
+
+      #workstream-list .preset {
+        min-height: 0;
+        padding: 11px 12px 11px 14px;
+        border-radius: 12px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 241, 233, 0.92));
+      }
+
+      #workstream-list .preset::before {
+        inset: 0 auto 0 0;
+        width: 4px;
+        height: auto;
+        border-radius: 12px 0 0 12px;
+        background: rgba(47, 75, 92, 0.28);
+      }
+
+      #workstream-list .preset.active::before {
+        background: var(--accent);
+      }
+
+      #workstream-list .preset b {
+        margin-bottom: 4px;
+        font-size: 0.86rem;
+      }
+
+      #workstream-list .preset span {
+        font-size: 0.77rem;
+        line-height: 1.42;
       }
 
       [data-tooltip] {
@@ -1805,6 +1939,10 @@ GUI_HTML_TEMPLATE = r"""
           grid-template-columns: 1fr;
         }
 
+        .fleet-sidebar {
+          position: static;
+        }
+
         .workspace-strip {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
@@ -1820,7 +1958,6 @@ GUI_HTML_TEMPLATE = r"""
 
       @media (max-width: 820px) {
         .workspace-nav {
-          display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
@@ -1846,7 +1983,7 @@ GUI_HTML_TEMPLATE = r"""
         }
 
         .hero-header {
-          display: grid;
+          grid-template-columns: 1fr;
         }
 
         .hero-controls,
@@ -1866,7 +2003,13 @@ GUI_HTML_TEMPLATE = r"""
         }
 
         .relation-diagram {
-          min-width: 760px;
+          min-height: 360px;
+        }
+
+        .relation-node {
+          width: 138px;
+          min-height: 104px;
+          padding: 10px 11px;
         }
       }
 
@@ -2142,7 +2285,7 @@ GUI_HTML_TEMPLATE = r"""
                         <div class="relation-lane relation-lane--control"><span data-i18n="relationLanes.control">Control Plane</span></div>
                         <div class="relation-lane relation-lane--execution"><span data-i18n="relationLanes.execution">Execution Plane</span></div>
                       </div>
-                      <svg class="relation-lines" id="relation-lines" viewBox="0 0 980 428" preserveAspectRatio="xMidYMid meet"></svg>
+                      <svg class="relation-lines" id="relation-lines" viewBox="0 0 920 424" preserveAspectRatio="xMidYMid meet"></svg>
                     </div>
                   </div>
                 </div>
@@ -2153,11 +2296,11 @@ GUI_HTML_TEMPLATE = r"""
                       <span data-i18n="cards.relationConfigCopy">Edit the same launch settings used by the main console without leaving the topology view.</span>
                     </div>
                     <div class="relation-controls">
-                      <div>
+                      <div class="panel-field panel-field--input">
                         <label for="relation-backend" data-i18n="fields.backend">backend</label>
                         <select id="relation-backend">__BACKEND_OPTIONS__</select>
                       </div>
-                      <div>
+                      <div class="panel-field panel-field--input">
                         <label for="relation-profile" data-i18n="fields.profile">profile</label>
                         <select id="relation-profile">
                           <option value="generic">generic</option>
@@ -2168,7 +2311,7 @@ GUI_HTML_TEMPLATE = r"""
                           <option value="llama">llama</option>
                         </select>
                       </div>
-                      <div>
+                      <div class="panel-field panel-field--input">
                         <label for="relation-transport" data-i18n="fields.transport">live room transport</label>
                         <select id="relation-transport">
                           <option value="sse" data-i18n="transport.sse">SSE</option>
@@ -2176,7 +2319,7 @@ GUI_HTML_TEMPLATE = r"""
                           <option value="poll" data-i18n="transport.poll">room_poll</option>
                         </select>
                       </div>
-                      <div>
+                      <div class="panel-field panel-field--input">
                         <label for="relation-deliver" data-i18n="fields.deliver">human delivery target</label>
                         <select id="relation-deliver">
                           <option value="" data-i18n="deliver.roomOnly">room only</option>
@@ -2260,20 +2403,20 @@ GUI_HTML_TEMPLATE = r"""
                   <button id="approve-all" class="ok" type="button" data-i18n="actions.approveAll">Approve All</button>
                   <button id="reject-all" class="warn" type="button" data-i18n="actions.rejectAll">Reject All</button>
                 </div>
-                <div id="pending-work">
-                  <div>
+                  <div id="pending-work">
+                  <div class="panel-field panel-field--input">
                     <label for="pending-select" data-i18n="fields.pendingSelect">pending intervention items</label>
                     <select id="pending-select" size="8"></select>
                   </div>
-                  <div style="margin-top: 10px;">
+                  <div class="panel-field panel-field--display">
                     <label for="pending-detail" data-i18n="fields.pendingDetail">selected pending detail</label>
                     <pre id="pending-detail"></pre>
                   </div>
-                  <div style="margin-top: 10px;">
+                  <div class="panel-field panel-field--input">
                     <label for="pending-edit" data-i18n="fields.pendingEdit">edited approval text</label>
                     <textarea id="pending-edit" placeholder="Optional replacement text for the selected pending message" data-i18n-placeholder="placeholders.pendingEdit"></textarea>
                   </div>
-                  <div class="actions" style="margin-top: 10px;">
+                  <div class="actions panel-actions">
                     <button id="approve-selected" class="ok" type="button" data-i18n="actions.approveSelected">Approve Selected</button>
                     <button id="reject-selected" class="warn" type="button" data-i18n="actions.rejectSelected">Reject Selected</button>
                   </div>
@@ -2305,12 +2448,12 @@ GUI_HTML_TEMPLATE = r"""
               <div class="summary-strip" id="inspect-strip"></div>
               <div class="note" id="status-note" data-i18n="cards.statusNote">Presets hide complexity, but they do not remove it. Open raw status when pane IDs, bridge IDs, or transport state matter.</div>
               <div class="badge-row" id="status-badges"></div>
-              <div class="row">
-                <div>
+                <div class="row">
+                <div class="panel-field panel-field--display">
                   <label for="status-box" data-i18n="fields.status">server status</label>
                   <pre id="status-box"></pre>
                 </div>
-                <div>
+                <div class="panel-field panel-field--display">
                   <label for="log-box" data-i18n="fields.log">activity log</label>
                   <pre id="log-box"></pre>
                 </div>
@@ -2344,14 +2487,14 @@ GUI_HTML_TEMPLATE = r"""
               <div style="margin-top: 14px;">
                 <label for="audit-box" data-i18n="fields.audit">audit trail</label>
                 <div class="row" style="margin-top: 8px;">
-                  <div>
+                  <div class="panel-field panel-field--input">
                     <label for="audit-event" data-i18n="fields.auditEvent">audit event</label>
                     <select id="audit-event">
                       <option value="" data-i18n="auditEvents.all">all events</option>
                       __AUDIT_EVENT_OPTIONS__
                     </select>
                   </div>
-                  <div>
+                  <div class="panel-field panel-field--input">
                     <label for="audit-limit" data-i18n="fields.auditLimit">recent audit limit</label>
                     <input id="audit-limit" type="number" min="1" max="50" value="12">
                   </div>
@@ -2360,16 +2503,18 @@ GUI_HTML_TEMPLATE = r"""
                   <button id="refresh-audit" class="ghost" type="button" data-i18n="actions.refreshAudit">Refresh Audit</button>
                 </div>
                 <div class="note" id="audit-note" data-i18n="cards.auditDisabled">Audit trail is off. Set TB2_AUDIT=1 or TB2_AUDIT_DIR and restart the server to persist events.</div>
-                <pre id="audit-box"></pre>
+                <div class="panel-field panel-field--display">
+                  <pre id="audit-box"></pre>
+                </div>
               </div>
               <details>
                 <summary data-i18n="cards.captureSummary">Captured terminal state</summary>
                 <div class="row" style="margin-top: 12px;">
-                  <div>
+                  <div class="panel-field panel-field--display">
                     <label for="capture-a-box" data-i18n="fields.captureHost">Host capture</label>
                     <textarea id="capture-a-box" readonly></textarea>
                   </div>
-                  <div>
+                  <div class="panel-field panel-field--display">
                     <label for="capture-b-box" data-i18n="fields.captureGuest">Guest capture</label>
                     <textarea id="capture-b-box" readonly></textarea>
                   </div>
@@ -3251,18 +3396,18 @@ GUI_HTML_TEMPLATE = r"""
         }
       };
 
-      const RELATION_CANVAS = { width: 980, height: 428 };
-      const RELATION_NODE_BOX = { width: 180, height: 126 };
+      const RELATION_CANVAS = { width: 920, height: 424 };
+      const RELATION_NODE_BOX = { width: 152, height: 118 };
       const RELATION_POSITIONS = {
-        gui: { x: 150, y: 96 },
-        mcp: { x: 150, y: 214 },
-        audit: { x: 150, y: 332 },
-        room: { x: 490, y: 96 },
-        server: { x: 490, y: 214 },
-        review: { x: 490, y: 332 },
-        host: { x: 830, y: 96 },
-        bridge: { x: 830, y: 214 },
-        guest: { x: 830, y: 332 },
+        gui: { x: 142, y: 94 },
+        mcp: { x: 142, y: 212 },
+        audit: { x: 142, y: 330 },
+        room: { x: 460, y: 94 },
+        server: { x: 460, y: 212 },
+        review: { x: 460, y: 330 },
+        host: { x: 778, y: 94 },
+        bridge: { x: 778, y: 212 },
+        guest: { x: 778, y: 330 },
       };
 
       const state = {
@@ -3332,6 +3477,21 @@ GUI_HTML_TEMPLATE = r"""
           // Ignore storage failures and fall back to the default tab.
         }
         return 'workflow';
+      }
+
+      function readQueryOverrides() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          return {
+            locale: params.get('lang') || '',
+            layout: params.get('layout') || '',
+            tab: params.get('tab') || '',
+            preset: params.get('preset') || '',
+            home: params.get('home') || '',
+          };
+        } catch (_) {
+          return { locale: '', layout: '', tab: '', preset: '', home: '' };
+        }
       }
 
       function recommendedWorkspaceTab(name) {
@@ -3840,7 +4000,7 @@ GUI_HTML_TEMPLATE = r"""
         const preset = PRESETS[name] || PRESETS.quick;
         state.preset = name;
         state.relationFocus = null;
-        revealWorkspace();
+        if (!(options && options.keepHome)) revealWorkspace();
         document.body.dataset.scene = preset.scene || name;
         const label = t('presets.' + name + '.label');
         $('preset-badge').textContent = label;
@@ -4544,7 +4704,7 @@ GUI_HTML_TEMPLATE = r"""
           x: end.x - (end.x >= start.x ? halfWidth : -halfWidth),
           y: end.y,
         };
-        const spread = Math.max(54, Math.abs(target.x - source.x) * 0.26);
+        const spread = Math.max(46, Math.abs(target.x - source.x) * 0.24);
         const lift = definition.routeLift || 0;
         const direction = end.x >= start.x ? 1 : -1;
         const c1x = source.x + spread * direction;
@@ -5585,14 +5745,24 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       async function boot() {
-        state.locale = preferredLocale();
-        state.layout = preferredLayout();
-        state.workspaceTab = preferredWorkspaceTab();
+        const query = readQueryOverrides();
+        const forcedTab = query.tab === 'workflow' || query.tab === 'topology' || query.tab === 'review' || query.tab === 'inspect'
+          ? query.tab
+          : '';
+        const forcedPreset = query.preset && PRESETS[query.preset] ? query.preset : '';
+        const forceWorkspace = query.home === 'workspace' || Boolean(forcedTab) || Boolean(forcedPreset);
+        state.locale = query.locale && I18N[query.locale] ? query.locale : preferredLocale();
+        state.layout = query.layout === 'balanced' || query.layout === 'wide' || query.layout === 'stacked'
+          ? query.layout
+          : preferredLayout();
+        state.workspaceTab = forcedTab || preferredWorkspaceTab();
+        state.preset = forcedPreset || state.preset;
         bind();
         translatePage();
         setWorkspaceTab(state.workspaceTab, { persist: false });
         applyLayout(state.layout);
-        document.body.dataset.home = 'preset-only';
+        applyPreset(state.preset, { keepTab: true, keepHome: !forceWorkspace });
+        document.body.dataset.home = forceWorkspace ? 'workspace' : 'preset-only';
         log(format('logs.ready', { endpoint: MCP_ENDPOINT }));
         await run(async () => {
           const profiles = await tool('list_profiles', {});
