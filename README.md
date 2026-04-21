@@ -25,6 +25,20 @@
   <img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="860">
 </p>
 
+## Direction Update
+
+As of `2026-04-22`, TB2 is being developed as a local-first, operator-grade governance layer for terminal-native multi-agent workflows.
+
+That means:
+
+- TB2 stays focused on Host / Guest / Human orchestration, review, audit, and workstream governance
+- TB2 does not try to become a replacement for Codex native remote-control or computer-use surfaces
+- Windows and WSL are treated as a deliberate dual-track operator model:
+  - native Windows for lower-friction day-to-day use
+  - WSL `tmux` for the most stable interactive collaboration loops
+- a separate external runtime / workflow experiment is being used alongside TB2 to explore that dual-track model
+- `codex_bridge_service` is treated as a closed side prototype for Codex-native remote control and is no longer part of the TB2 mainline direction
+
 ## Why TB2
 
 `tb2` is a local orchestration layer for teams that want terminal-native AI workflows without losing human control.
@@ -47,7 +61,8 @@ TB2 is most useful when you want terminal-native agents to collaborate, but you 
 TB2 is best treated today as:
 
 - local-first, high-trust operator tooling
-- an experimental control surface for teams that already understand terminal-native AI workflows
+- an experimental operator control surface for teams that already understand terminal-native AI workflows
+- a governance layer over terminal-native workstreams rather than a general remote-control replacement
 
 TB2 is not designed to be:
 
@@ -62,6 +77,29 @@ TB2 is not designed to be:
 | `private-network-experimental` | experimental | private-network access with explicit `--allow-remote` acknowledgment and external controls |
 | `public-edge-unsupported` | unsupported | internet-facing exposure or any expectation that TB2 itself is a hard auth boundary |
 
+## Governance Direction
+
+TB2 governance is moving toward a layered policy model so platform differences, model differences, and task-mode differences do not stay scattered across docs and operator habit.
+
+The current intended layering order is:
+
+1. `base`
+2. `model`
+3. `environment`
+4. `instruction_profile`
+
+The near-term goal is a simulation-first, report-first, no-mutation governance surface that can explain:
+
+- which layers matched
+- which effective config is currently implied
+- where each effective key came from
+
+This future no-mutation posture applies to the layered governance resolver.
+It does not replace the existing mutable per-workstream controls such as review pause / resume, dependency updates, or `workstream_update_policy`.
+In other words, TB2 should first become better at explaining layered governance before it starts auto-mutating that higher-level policy surface.
+
+See [Governance Layering](docs/governance-layering.md).
+
 ## Why Teams Choose TB2
 
 | Decision point | TB2 answer |
@@ -69,7 +107,7 @@ TB2 is not designed to be:
 | You want real terminals, not a toy chat sandbox | Bridges map onto actual panes, shells, and operator workflows |
 | You need Host AI, Guest AI, and Human review in one loop | Rooms, interventions, and approval gates are first-class |
 | Your agents use different clients | CLI, browser GUI, and MCP can drive the same local control plane |
-| Your fleet is mixed-platform | Backend fallback and shell policy are documented and tested per environment |
+| Your fleet is mixed-platform | Backend fallback and shell policy are documented, with Linux runtime verification and simulated coverage for Windows, macOS, and WSL |
 | You need a UI that is approachable without losing power | Task presets simplify the first screen while keeping advanced controls reachable |
 
 ## Which Surface To Choose
@@ -109,10 +147,10 @@ Recent operator-facing guardrails now show up in the surfaces as well:
 - operators can inspect persisted entries through `tb2 service audit` or the MCP `audit_recent` tool
 - the GUI Diagnostics card now shows audit enablement plus recent persisted events for the active room or bridge
 - the GUI audit view now supports event filtering and a bounded recent-entry limit for faster incident triage
-- persisted audit entries default to `mask` mode and redact text-bearing fields; use `TB2_AUDIT_TEXT_MODE=full|mask|drop` to request whether the durable record keeps raw text, masked placeholders, or metadata-only summaries, and acknowledge raw-text storage explicitly before `full` can take effect in service/config-driven flows
+- persisted audit entries default to `mask` mode and redact text-bearing fields; use `TB2_AUDIT_TEXT_MODE=full|mask|drop` to request whether the durable record keeps raw text, masked placeholders, or metadata-only summaries, and set `TB2_AUDIT_ALLOW_FULL_TEXT=1` before `full` can take effect in service/config-driven flows
 - audit clients should treat `status.audit.redaction.requested_mode`, the effective `mode`, `raw_text_opt_in_acknowledged`, and `raw_text_opt_in_blocked` as the machine-readable policy boundary for durable text storage
-- live runtime state is still memory-only for now, so `tb2 service stop` / `restart` preserves audit history and managed-service audit policy inputs, but not active rooms, bridges, or pending interventions
-- `status.runtime` now distinguishes direct local runs from service-managed fresh starts or restart-after-loss flows via `launch_mode`, `snapshot_schema_version`, and `continuity` metadata
+- direct local runs are still `memory_only` / `state_lost`, while service-managed runs persist workstream snapshots with `best_effort_restore` semantics; active room, bridge, and pending intervention state should still be treated as not fully durable
+- `status.runtime` now distinguishes direct local runs from service-managed fresh starts, restart-after-loss flows, and best-effort restored service runs via `launch_mode`, `snapshot_schema_version`, and `continuity` metadata
 - `status.workstreams[*].health` now surfaces per-workstream severity, alert summaries, escalation level, and silent-stream detection
 - `status.fleet` now aggregates `healthy`, `warn`, `critical`, and escalation counts so one noisy workstream is easier to isolate
 - `audit_recent` now accepts `workstream_id` for fleet-safe governance review
@@ -141,6 +179,11 @@ python -m tb2 doctor
 ```
 
 If `doctor` reports that the Windows `process` backend is unavailable, install `pywinpty` or use the WSL `tmux` path.
+
+Recommended operator split:
+
+- use native Windows when the goal is lower-friction day-to-day launching and local operator work
+- use WSL `tmux` when the goal is the most stable terminal-native collaboration loop
 
 ## Five-Minute First Session
 
@@ -180,6 +223,28 @@ Non-loopback MCP binding now requires explicit acknowledgment:
 ```bash
 python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 ```
+
+## Chrome Sidepanel Compatibility
+
+TB2 now also exposes a localhost compatibility layer for the existing `chrome-sidepanel-ai-terminal` client.
+
+- `GET /health`
+- `POST /v1/tb2/rooms`
+- `GET /v1/tb2/poll?roomId=<id>&afterId=<n>`
+- `POST /v1/tb2/message`
+
+Current behavior:
+
+- room creation initializes a real TB2 session and room id
+- prompt dispatch uses one-shot `codex exec` runs and wraps recent room transcript into each request
+- poll returns streaming log previews via `streamKey` / `replace` / `final` metadata before the final assistant message lands
+- browser-origin checks still assume loopback, but localhost browser apps and `chrome-extension://...` clients are both accepted on loopback
+
+See [Sidepanel Compatibility](docs/sidepanel-compat.md).
+
+### Sidepanel preview
+
+<img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="960">
 
 ## Choose Your Role
 
@@ -237,7 +302,9 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 ### Architecture and integration
 
 - [AI Orchestration](docs/ai-orchestration.md)
+- [Governance Layering](docs/governance-layering.md)
 - [MCP Client Setup](docs/mcp-client-setup.md)
+- [Sidepanel Compatibility](docs/sidepanel-compat.md)
 - [Use Cases and Workflow Index](docs/use-cases.md)
 - [Development Execution Plan (zh-TW)](docs/development-execution-plan.zh-TW.md)
 
@@ -248,6 +315,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 - [docs/role-guides.zh-TW.md](docs/role-guides.zh-TW.md)
 - [docs/control-console.zh-TW.md](docs/control-console.zh-TW.md)
 - [docs/platform-behavior.zh-TW.md](docs/platform-behavior.zh-TW.md)
+- [docs/governance-layering.zh-TW.md](docs/governance-layering.zh-TW.md)
 - [docs/platforms/compatibility-matrix.zh-TW.md](docs/platforms/compatibility-matrix.zh-TW.md)
 - [docs/platforms/standard-operations.zh-TW.md](docs/platforms/standard-operations.zh-TW.md)
 - [docs/development-execution-plan.zh-TW.md](docs/development-execution-plan.zh-TW.md)
@@ -258,6 +326,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 - Keep server binding on `127.0.0.1` unless you fully trust the network path.
 - If you bind to a non-loopback address, TB2 now requires explicit `--allow-remote` acknowledgment.
 - Browser-origin checks are intentionally limited to localhost-style origins, so keep GUI and MCP access on loopback.
+- Chrome extension origins are accepted only on loopback for the sidepanel compatibility surface; do not treat that as remote auth.
 - Treat the MCP endpoint and browser console as sensitive local control surfaces.
 - Approval gates and `intervention` flows support supervised delivery, but they are workflow controls rather than a security boundary.
 - Use `intervention` mode when you are validating a new profile, a new client, or a risky workflow.

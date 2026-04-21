@@ -28,7 +28,46 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 
 - `.venv/bin/python -m pytest -q` => `310 passed in 14.59s`
 
+這裡是 `2026-03-28` 的歷史快照，不代表目前最新主線驗證結果。
+
 ## 狀態更新（2026-03-28）
+
+## 方向補充（2026-04-22）
+
+經過新一輪定位收斂，這份執行書需要補上 3 個正式前提：
+
+- TB2 主線要做的是 terminal-native multi-agent orchestration 與 governance，不是做一套通用 Codex remote-control 替代品
+- 實務上 TB2 在 WSL 的互動協作通常更順，但日常一般使用在 native Windows 的環境摩擦較少；因此 Windows / WSL 雙軌是預期架構，不是暫時繞路
+- 一條獨立的外部 runtime / workflow 實驗線應視為這條雙軌策略下的驗證沙盒；`codex_bridge_service` 則視為已結束的附屬原型，不納入主線規劃
+
+基於上述前提，接下來的批次應優先補：
+
+1. 文件與 package metadata 的定位對齊
+2. Windows / WSL platform guidance 與驗證敘述
+3. governance、audit、fleet、operator workflow 的主線深化
+4. 治理解析層採漏斗狀 layer resolver，而不是把 policy 散落到各文件與各 surface
+
+而不應再優先投入：
+
+- 追逐 Codex 原生 remote-control surface
+- 擴寫只服務 `codex exec` one-shot relay 的平行產品線
+
+可借鏡的核心結構：
+
+- layer order：`base -> model -> environment -> instruction_profile`
+- resolver output：`matched_layers`、`effective_config`、`provenance`
+- rollout posture：simulation-first、report-first、no-mutation
+
+對 TB2 的意義：
+
+- `base` 可承接 repo 預設 guardrail、audit、review baseline
+- `model` 可表達不同 agent client / model 的 review cadence、handoff 密度、更新節奏
+- `environment` 可表達 native Windows、WSL、Linux、private-network operator 等執行環境差異
+- `instruction_profile` 可表達 `quick-pairing`、`approval-gate`、`mcp-operator`、`diagnostics` 等任務模式
+
+這一層目前應先以文件與 contract 為主，不應直接宣稱已能自動改寫 runtime。
+這裡的 no-mutation 是指未來 layered governance resolver 的 rollout 姿態，不是要否定現有的 `workstream_update_policy`、pause / resume review 等 per-workstream mutable controls。
+最小契約已整理到 [governance-layering.zh-TW.md](./governance-layering.zh-TW.md)。
 
 本輪已直接落地的項目：
 
@@ -48,11 +87,17 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 3. audit privacy boundary
 4. GUI / QA contract hardening
 
+另有一個新的橫切主題必須納入：
+
+5. product positioning and platform guidance alignment
+6. governance layering and policy provenance
+
 ## 已確認缺口
 
-### 1. Runtime continuity 仍是 memory-only
+### 1. Runtime continuity 尚未成為完整 durable state
 
-目前 `rooms`、active `bridges`、pending interventions 都只存在記憶體中。
+目前 `rooms`、active `bridges`、pending interventions 仍不是完整 durable state。
+直接本機啟動的 runtime 仍是 `memory_only` / `state_lost`；service-managed flow 雖已有 workstream snapshot 與 `best_effort_restore` 契約，但還不能把 live operator state 視為完整可恢復。
 
 風險：
 
@@ -116,6 +161,45 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 - `tests/test_server.py`
 
 ## 執行批次
+
+## Batch 0：Positioning and Platform Guidance Alignment
+
+### 目標
+
+讓 repo 對外與對內敘事，正式對齊目前主線方向與實際平台策略。
+
+### 範圍
+
+- `README*`
+- `pyproject.toml`
+- `tb2/__init__.py`
+- roadmap / status / remediation / getting-started 類文件
+
+### 驗收條件
+
+- 不再把 TB2 描述成通用 remote control plane
+- 文件明確說明 native Windows 與 WSL 的建議使用分工
+- `tb2-claude-subagent-workflow` 被記錄為平行 runtime / workflow 實驗線
+- `codex_bridge_service` 被記錄為已關閉的附屬原型，不再出現在主線規劃
+
+## Batch E：Governance Layering Contract
+
+### 目標
+
+把目前分散在文件、GUI preset、workstream policy 與 operator 習慣中的治理敘事，收斂成單一可解析的 layer contract。
+
+### 範圍
+
+- 定義 `base`、`model`、`environment`、`instruction_profile` 四層
+- 定義 `matched_layers`、`effective_config`、`provenance` payload shape
+- 定義哪些 key 先只做 report，哪些 key 未來才可 apply
+
+### 驗收條件
+
+- 文件明確描述 layer precedence 與 override semantics
+- 至少有一份 sample governance resolution 報告格式
+- `status` 或獨立 governance surface 未來可安全暴露 provenance，而不必讓 operator 猜測 policy 來源
+- rollout 先維持 simulation-first、report-first、no-mutation
 
 ## Batch A：Audit Contract Hardening
 
@@ -192,17 +276,21 @@ description: 2026-03-28 通盤審查後整理的 terminal-bridge-v2 開發執行
 
 ## 建議優先順序
 
-1. Batch A：Audit Contract Hardening
-2. Batch B：Restart-State Contract
-3. Batch C：Audit Privacy Boundary
-4. Batch D：GUI / QA Contract Hardening
+1. Batch 0：Positioning and Platform Guidance Alignment
+2. Batch A：Audit Contract Hardening
+3. Batch B：Restart-State Contract
+4. Batch C：Audit Privacy Boundary
+5. Batch D：GUI / QA Contract Hardening
+6. Batch E：Governance Layering Contract
 
 原因：
 
+- 0 決定主線敘事與邊界，若不先收斂，後續文件與功能投資仍會持續偏移
 - A 決定事件契約，是後續 GUI、MCP、incident review 的基礎
 - B 決定 service restart 後的正式邊界，屬於 operator safety 問題
 - C 關乎 durable data 的安全性
 - D 是讓既有功能更穩，但前提仍是先把 A/B/C 的契約定好
+- E 讓後續 policy inheritance、platform guidance、preset semantics 與 model-specific governance 有單一來源，而不是持續散落
 
 ## 本輪已完成的直接修補
 

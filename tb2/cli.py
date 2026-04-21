@@ -11,6 +11,7 @@ Usage:
     python -m tb2 gui [--host ADDR] [--port PORT] [--no-browser]
     python -m tb2 profiles [--verbose]
     python -m tb2 doctor [--json]
+    python -m tb2 governance resolve [--model NAME] [--environment NAME] [--instruction-profile NAME] [--json]
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from typing import Sequence
 
 from .backend import TmuxBackend, TmuxError
 from .broker import BrokerConfig, broker_loop
+from .governance import resolve_governance
 from .osutils import default_backend_name
 from .profile import list_profiles
 from .support import doctor_report, profile_rows, render_doctor
@@ -165,6 +167,29 @@ def cmd_doctor(_backend: TmuxBackend, args: argparse.Namespace) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0
     print(render_doctor(report))
+    return 0
+
+
+def cmd_governance(_backend: TmuxBackend, args: argparse.Namespace) -> int:
+    result = resolve_governance(
+        model=args.model,
+        environment=args.environment,
+        instruction_profile=args.instruction_profile,
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    print("matched_layers:")
+    for item in result["matched_layers"]:
+        print(f"  - {item['layer']}: {item['name']}")
+    if result["missing_layers"]:
+        print("missing_layers:")
+        for item in result["missing_layers"]:
+            print(f"  - {item['layer']}: {item['name']}")
+    print("effective_config:")
+    print(json.dumps(result["effective_config"], ensure_ascii=False, indent=2))
+    print("provenance:")
+    print(json.dumps(result["provenance"], ensure_ascii=False, indent=2))
     return 0
 
 
@@ -431,6 +456,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("doctor", help="check local backend and supported CLI compatibility")
     s.add_argument("--json", action="store_true", help="emit machine-readable JSON report")
     s.set_defaults(fn=cmd_doctor)
+
+    # governance
+    s = sub.add_parser("governance", help="resolve layered governance config")
+    gs = s.add_subparsers(dest="governance_cmd", required=True)
+
+    g_resolve = gs.add_parser("resolve", help="resolve governance layers into effective config")
+    g_resolve.add_argument("--model", default="", help="model or agent profile name")
+    g_resolve.add_argument("--environment", default="", help="execution environment name")
+    g_resolve.add_argument("--instruction-profile", default="", help="instruction profile or preset name")
+    g_resolve.add_argument("--json", action="store_true", help="emit machine-readable JSON report")
+    g_resolve.set_defaults(fn=cmd_governance)
 
     # server
     s = sub.add_parser("server", help="start MCP HTTP server")

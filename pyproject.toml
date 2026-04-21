@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "terminal-bridge-v2"
 version = "0.2.0"
-description = "Universal CLI LLM remote control + monitoring + human intervention"
+description = "Operator-grade local-first orchestration and governance for terminal-native multi-agent workflows"
 requires-python = ">=3.9"
 readme = "README.md"
 license = {text = "MIT"}

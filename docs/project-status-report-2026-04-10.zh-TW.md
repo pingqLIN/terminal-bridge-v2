@@ -6,6 +6,14 @@ description: 2026-04-10 terminal-bridge-v2 專案現況審核、git 分支評估
 
 日期：2026-04-10
 
+> 2026-04-22 補充：本文件保留 `2026-04-10` 的審核基線，但後續方向已正式收斂為
+> local-first、operator-grade、multi-agent orchestration / governance。
+> 實務平台策略採 native Windows 與 WSL 雙軌；
+> 另有一條外部 runtime / workflow 實驗線作為雙軌策略的驗證沙盒；
+> `codex_bridge_service` 視為已結束的 Codex 原生遙控附屬原型，不再納入主線。
+> 本文件若提到 service-managed restore，應理解為 workstream snapshot 與 continuity contract；
+> 它不等於 active room、bridge、pending intervention 已成為完整 durable state。
+
 ## 狀態更新
 
 2026-04-10 同日後續開發已完成 `Phase 1` 到 `Phase 3` 的主體交付。
@@ -38,8 +46,16 @@ description: 2026-04-10 terminal-bridge-v2 專案現況審核、git 分支評估
 - 提供一個 local-first 的 terminal orchestration control plane
 - 讓 Host AI、Guest AI、Human operator 可在真實 terminal 中協作
 - 同時暴露 CLI、browser GUI、MCP 三種操作面
+- 接受 native Windows 與 WSL 的操作分流，而不是假設單一路徑覆蓋所有情境
 
 這一點可以從 [README.md](../README.md)、[tb2/server.py](../tb2/server.py)、[tb2/gui.py](../tb2/gui.py) 的對齊程度確認，不再只是概念型專案。
+
+補充判讀：
+
+- 若目標是穩定的 terminal 協作 loop，WSL `tmux` 路徑通常更順
+- 若目標是日常低摩擦啟動與一般 Windows 使用情境，native Windows 問題通常更少
+- 因此與其把這個差異視為「平台缺陷」，更合理的做法是把它文件化為正式 operator guidance
+- 若後續要把這些平台差異、model 差異與 preset 差異正式治理化，較合理的方向是採用漏斗狀 layer resolver，而不是持續把 policy 散在多份說明文件
 
 ### 1.2 Git 與分支現況
 
@@ -161,7 +177,7 @@ description: 2026-04-10 terminal-bridge-v2 專案現況審核、git 分支評估
 
 #### 1. 認證與授權邊界仍不足
 
-目前 repo 已經比舊審查更安全，但仍不應被視為 production-grade remote control plane。
+目前 repo 已經比舊審查更安全，但仍不應被視為 production-grade remote control plane，也不應再以此作為主線競爭方向。
 
 核心原因：
 
@@ -176,6 +192,13 @@ description: 2026-04-10 terminal-bridge-v2 專案現況審核、git 分支評估
 - parent / child policy inheritance 尚未定義
 - cross-workstream orchestration 仍偏 operator-driven
 - GUI 雖可操作 remediation，但還沒完整 productize policy editing flow
+
+補充：
+
+- 若要補這一塊，建議不要直接從 runtime mutation 開始
+- 先定義 layer precedence：`base -> model -> environment -> instruction_profile`
+- 先讓 operator 能看見 `effective_config` 與 `provenance`
+- 再決定哪些治理 key 可以安全進入 apply / rollback
 
 #### 3. 核心模組過大
 

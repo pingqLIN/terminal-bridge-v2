@@ -10,6 +10,7 @@ from tb2.cli import (
     _tool_call,
     build_parser,
     cmd_doctor,
+    cmd_governance,
     cmd_gui,
     cmd_init,
     cmd_room_approve,
@@ -124,6 +125,26 @@ class TestBuildParser:
         assert args.cmd == "doctor"
         assert args.json is True
 
+    def test_governance_resolve_args(self):
+        p = build_parser()
+        args = p.parse_args([
+            "governance",
+            "resolve",
+            "--model",
+            "gpt-5.4",
+            "--environment",
+            "wsl-tmux",
+            "--instruction-profile",
+            "approval-gate",
+            "--json",
+        ])
+        assert args.cmd == "governance"
+        assert args.governance_cmd == "resolve"
+        assert args.model == "gpt-5.4"
+        assert args.environment == "wsl-tmux"
+        assert args.instruction_profile == "approval-gate"
+        assert args.json is True
+
     def test_room_watch_args(self):
         p = build_parser()
         args = p.parse_args(["room", "watch", "--room-id", "demo-room"])
@@ -218,6 +239,28 @@ class TestCreateBackend:
         backend = _create_backend(args)
         from tb2.backend import TmuxBackend
         assert isinstance(backend, TmuxBackend)
+
+
+class TestGovernanceCommand:
+    def test_cmd_governance_json_output(self, capsys):
+        args = build_parser().parse_args([
+            "governance",
+            "resolve",
+            "--model",
+            "gpt-5.4",
+            "--environment",
+            "wsl-tmux",
+            "--instruction-profile",
+            "approval-gate",
+            "--json",
+        ])
+
+        result = cmd_governance(MagicMock(), args)
+
+        assert result == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["effective_config"]["preferred_backend"] == "tmux"
+        assert out["effective_config"]["review_mode"] == "manual"
 
     def test_process_backend(self):
         p = build_parser()

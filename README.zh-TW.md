@@ -25,6 +25,20 @@
   <img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="860">
 </p>
 
+## 方向更新
+
+截至 `2026-04-22`，TB2 的主線方向已正式收斂為：local-first、operator-grade、面向 terminal-native multi-agent workflow 的治理層。
+
+這代表：
+
+- TB2 繼續聚焦 Host / Guest / Human 的 orchestration、review、audit 與 workstream governance
+- TB2 不再追逐或複製 Codex 原生 remote-control / computer-use 產品面
+- Windows 與 WSL 被視為正式雙軌 operator 模型：
+  - native Windows 負責日常低摩擦使用
+  - WSL `tmux` 負責最穩定的互動協作 loop
+- 另有一條獨立的外部 runtime / workflow 實驗線，專門探索這個雙軌模型
+- `codex_bridge_service` 視為已關閉的 Codex 原生遙控附屬原型，不再屬於 TB2 主線
+
 ## 為什麼是 TB2
 
 `tb2` 是一個本地 orchestration layer，給想要保留真實 terminal 工作流、又不想失去人工控制的團隊使用。
@@ -49,7 +63,8 @@ TB2 特別適合這類情境：
 目前比較適合把 TB2 視為：
 
 - local-first、high-trust 的 operator tooling
-- 給已熟悉 terminal-native AI workflow 團隊使用的實驗性控制面
+- 給已熟悉 terminal-native AI workflow 團隊使用的實驗性 operator control surface
+- 面向 terminal-native workstream 的治理層，而不是通用 remote-control 替代品
 
 目前不適合把 TB2 視為：
 
@@ -64,6 +79,28 @@ TB2 特別適合這類情境：
 | `private-network-experimental` | experimental | 有明確 `--allow-remote` 確認，且外部另有控制的私網存取 |
 | `public-edge-unsupported` | unsupported | 直接對外網暴露，或期待 TB2 自己就是硬 auth 邊界 |
 
+## 治理方向
+
+TB2 的治理方向正往「分層 policy 模型」收斂，避免把平台差異、model 差異與任務模式差異散落在文件與 operator 習慣裡。
+
+目前預期的層級順序是：
+
+1. `base`
+2. `model`
+3. `environment`
+4. `instruction_profile`
+
+近期目標不是直接自動改寫 runtime，而是先做成 simulation-first、report-first、no-mutation 的治理解析面，能明確說明：
+
+- 哪些 layer 有命中
+- 目前推導出的 effective config 是什麼
+- 每個生效 key 最後來自哪一層
+
+這裡的 no-mutation 是指未來分層治理 resolver 的 rollout 姿態，並不取代現有可變動的 per-workstream controls，例如 review pause / resume、dependency update 與 `workstream_update_policy`。
+也就是先把高層治理說清楚、可追溯，再決定哪些 key 之後能安全接進 runtime。
+
+詳情請見 [治理分層](docs/governance-layering.zh-TW.md)。
+
 ## 為什麼團隊會選 TB2
 
 | 決策問題 | TB2 的回答 |
@@ -71,7 +108,7 @@ TB2 特別適合這類情境：
 | 你要的是真實 terminal，不是 toy chat sandbox | bridge 直接對應實際 pane、shell 與 operator workflow |
 | 你要把 Host AI、Guest AI、Human review 放進同一個 loop | rooms、interventions、approval gates 都是 first-class 能力 |
 | 你的 agents 來自不同 client | CLI、browser GUI、MCP 可以共用同一個本地 control plane |
-| 你的環境跨 Windows / macOS / Linux / WSL | backend fallback 與 shell policy 已寫進文件並由測試覆蓋 |
+| 你的環境跨 Windows / macOS / Linux / WSL | backend fallback 與 shell policy 已寫進文件；Linux 為 runtime 驗證，其餘平台目前以 simulated coverage 為主 |
 | 你要 UI 好上手，但不能犧牲完整功能 | task preset 先精簡主畫面，進階控制仍完整保留 |
 
 ## 入口怎麼選
@@ -111,10 +148,10 @@ TB2 特別適合這類情境：
 - operator 可透過 `tb2 service audit` 或 MCP `audit_recent` 直接查看已落盤的事件
 - GUI 的 Diagnostics 卡現在也會顯示 audit 是否啟用，以及目前 room / bridge 的最近持久化事件
 - GUI audit 視窗現在也支援 event filter 與最近筆數限制，方便 incident triage
-- 持久化 audit entry 現在預設採 `mask` mode 來遮罩文字欄位；可用 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 指定想要的策略，但在 service / config-driven flow 裡若要讓 `full` 真正生效，還必須先明確確認 raw-text storage
+- 持久化 audit entry 現在預設採 `mask` mode 來遮罩文字欄位；可用 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 指定想要的策略，但在 service / config-driven flow 裡若要讓 `full` 真正生效，還必須先設 `TB2_AUDIT_ALLOW_FULL_TEXT=1`
 - audit client 應把 `status.audit.redaction.requested_mode`、實際生效的 `mode`、`raw_text_opt_in_acknowledged` 與 `raw_text_opt_in_blocked` 視為持久化文字策略的 machine-readable policy boundary
-- 目前 live runtime state 仍是記憶體態，因此 `tb2 service stop` / `restart` 只會保留 audit history 與 managed-service audit policy 輸入，不會保留 active rooms、bridges、pending interventions
-- `status.runtime` 現在也會透過 `launch_mode`、`snapshot_schema_version`、`continuity` metadata 區分 direct local run、service-managed fresh start，或 restart 後 state lost 的情境
+- direct local run 目前仍是 `memory_only` / `state_lost`；service-managed run 則會保留 workstream snapshot 並採 `best_effort_restore` 契約，但 active room、bridge 與 pending intervention 仍不應視為完整 durable state
+- `status.runtime` 現在也會透過 `launch_mode`、`snapshot_schema_version`、`continuity` metadata 區分 direct local run、service-managed fresh start、restart 後 state lost，或 best-effort restored 的情境
 - `status.workstreams[*].health` 現在會公開每條 workstream 的 severity、alert summary、escalation 與 silent-stream 偵測
 - `status.fleet` 現在會聚合 `healthy`、`warn`、`critical` 與 escalation 數量，方便快速隔離出有風險的工作線
 - `audit_recent` 現在也可直接接受 `workstream_id`，讓治理與回溯不必再先轉成 bridge / room
@@ -143,6 +180,11 @@ python -m tb2 doctor
 ```
 
 如果 `doctor` 顯示 Windows 的 `process` backend 不可用，請安裝 `pywinpty`，或改走 WSL `tmux` 路徑。
+
+建議的 operator 分工：
+
+- 若重點是日常低摩擦啟動與一般本機操作，優先用 native Windows
+- 若重點是最穩定的 terminal-native 協作 loop，優先用 WSL `tmux`
 
 ## 五分鐘跑起第一個 Session
 
@@ -182,6 +224,28 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 ```bash
 python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 ```
+
+## Chrome Sidepanel 相容性
+
+TB2 目前也提供給現有 `chrome-sidepanel-ai-terminal` client 使用的 localhost 相容介面。
+
+- `GET /health`
+- `POST /v1/tb2/rooms`
+- `GET /v1/tb2/poll?roomId=<id>&afterId=<n>`
+- `POST /v1/tb2/message`
+
+目前行為：
+
+- 建立 room 時會啟動一個實際 TB2 的 room 與 session
+- prompt 會透過一次性 `codex exec` 發送，並把最近的 room 對話紀錄包進 request
+- poll 會先以 `streamKey` / `replace` / `final` metadata 形式輸出串流預覽，再回傳最終 assistant 訊息
+- 瀏覽器來源仍以 loopback 為主，但在 loopback 下會同時接受 localhost 頁面與 `chrome-extension://...` 來源
+
+詳情請見 [Sidepanel 相容性](docs/sidepanel-compat.zh-TW.md)。
+
+### Sidepanel 預覽截圖
+
+<img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="960">
 
 ## 依角色選入口
 
@@ -230,6 +294,7 @@ python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 
 - [入門指南](docs/getting-started.zh-TW.md)
 - [角色導向指南](docs/role-guides.zh-TW.md)
+- [Chrome Sidepanel 相容性](docs/sidepanel-compat.zh-TW.md)
 - [控制台指南](docs/control-console.zh-TW.md)
 - [平台行為說明](docs/platform-behavior.zh-TW.md)
 - [平台相容矩陣](docs/platforms/compatibility-matrix.zh-TW.md)
@@ -239,7 +304,9 @@ python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 ### 架構與整合
 
 - [AI 協作說明](docs/ai-orchestration.zh-TW.md)
+- [治理分層](docs/governance-layering.zh-TW.md)
 - [MCP 用戶端設定](docs/mcp-client-setup.zh-TW.md)
+- [Sidepanel 相容性](docs/sidepanel-compat.zh-TW.md)
 - [使用場景與工作流索引](docs/use-cases.zh-TW.md)
 - [開發執行書](docs/development-execution-plan.zh-TW.md)
 
@@ -250,9 +317,9 @@ python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 - [docs/role-guides.md](docs/role-guides.md)
 - [docs/control-console.md](docs/control-console.md)
 - [docs/platform-behavior.md](docs/platform-behavior.md)
+- [docs/governance-layering.md](docs/governance-layering.md)
 - [docs/platforms/compatibility-matrix.md](docs/platforms/compatibility-matrix.md)
 - [docs/platforms/standard-operations.md](docs/platforms/standard-operations.md)
-- [docs/development-execution-plan.zh-TW.md](docs/development-execution-plan.zh-TW.md)
 
 ## 安全提醒
 
