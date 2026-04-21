@@ -8,6 +8,8 @@ state.
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 LayerMap = Dict[str, Dict[str, Dict[str, Any]]]
@@ -86,10 +88,82 @@ _DEFAULTS: LayerMap = {
     },
 }
 
+_SAMPLE_OVERLAY: LayerMap = {
+    "environment": {
+        "wsl-tmux": {
+            "preferred_backend": "tmux",
+            "operator_visibility": "transport-and-room",
+        },
+        "native-windows": {
+            "preferred_backend": "process",
+            "platform_bias": "day-to-day",
+        },
+    },
+    "instruction_profile": {
+        "approval-gate": {
+            "approval_mode": "required",
+            "review_mode": "manual",
+        },
+        "governance-review": {
+            "status_density": "dense",
+            "provenance_required": True,
+        },
+    },
+}
+
+_SCHEMA: Dict[str, Any] = {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://tb2.local/schemas/governance.layers.schema.json",
+    "title": "TB2 Governance Layer Overlay",
+    "description": "Optional JSON overlay that extends or overrides built-in TB2 governance layers.",
+    "type": "object",
+    "properties": {
+        layer: {
+            "type": "object",
+            "description": f"Overlay entries for the '{layer}' layer.",
+            "propertyNames": {
+                "type": "string",
+                "minLength": 1,
+            },
+            "additionalProperties": {
+                "type": "object",
+                "description": "Freeform effective-config keys merged onto the matched entry.",
+            },
+        }
+        for layer in _ORDER
+    },
+    "additionalProperties": False,
+}
+
 
 def governance_layers() -> LayerMap:
     """Return a copy of the built-in governance layer config."""
     return deepcopy(_DEFAULTS)
+
+
+def governance_overlay_schema() -> Dict[str, Any]:
+    """Return the JSON schema for governance layer overlays."""
+    return deepcopy(_SCHEMA)
+
+
+def governance_sample_overlay() -> LayerMap:
+    """Return a sample governance layer overlay."""
+    return deepcopy(_SAMPLE_OVERLAY)
+
+
+def load_governance_layers(path: str = "") -> LayerMap:
+    """Load governance layers from built-ins plus an optional JSON overlay."""
+    merged = governance_layers()
+    if not path.strip():
+        return merged
+    try:
+        overlay = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError(f"governance config not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid governance JSON: {path}") from exc
+    overlay_dict = validate_governance_overlay(overlay)
+    return merge_governance_layers(merged, overlay_dict)
 
 
 def governance_order() -> List[str]:
@@ -97,15 +171,49 @@ def governance_order() -> List[str]:
     return list(_ORDER)
 
 
+def merge_governance_layers(base: LayerMap, overlay: LayerMap) -> LayerMap:
+    """Merge a governance layer overlay onto a base layer map."""
+    merged = deepcopy(base)
+    for layer, entries in overlay.items():
+        if layer not in merged:
+            merged[layer] = {}
+        for name, values in entries.items():
+            current = merged[layer].get(name, {})
+            next_values = deepcopy(values)
+            merged[layer][name] = {**current, **next_values}
+    return merged
+
+
+def validate_governance_overlay(payload: Any) -> LayerMap:
+    if not isinstance(payload, dict):
+        raise ValueError("governance overlay must be a JSON object")
+    validated: LayerMap = {}
+    for layer, entries in payload.items():
+        if layer not in _ORDER:
+            raise ValueError(f"unknown governance layer: {layer}")
+        if not isinstance(entries, dict):
+            raise ValueError(f"governance layer '{layer}' must map names to objects")
+        next_entries: Dict[str, Dict[str, Any]] = {}
+        for name, values in entries.items():
+            if not isinstance(name, str) or not name.strip():
+                raise ValueError(f"governance layer '{layer}' contains an invalid entry name")
+            if not isinstance(values, dict):
+                raise ValueError(f"governance entry '{layer}.{name}' must be an object")
+            next_entries[name] = deepcopy(values)
+        validated[layer] = next_entries
+    return validated
+
+
 def resolve_governance(
     *,
     model: str = "",
     environment: str = "",
     instruction_profile: str = "",
+    config_path: str = "",
     layers: Optional[LayerMap] = None,
 ) -> Resolution:
     """Resolve layered governance config and provenance."""
-    source = governance_layers() if layers is None else deepcopy(layers)
+    source = load_governance_layers(config_path) if layers is None else deepcopy(layers)
     effective: Dict[str, Any] = {}
     provenance: Dict[str, Dict[str, str]] = {}
     matched: List[Dict[str, str]] = []
@@ -132,6 +240,7 @@ def resolve_governance(
             provenance[key] = {"layer": layer, "name": name}
 
     return {
+        "config_path": str(config_path).strip(),
         "layer_order": governance_order(),
         "requested": requested,
         "matched_layers": matched,

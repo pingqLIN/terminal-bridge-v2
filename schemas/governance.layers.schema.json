@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tb2.local/schemas/governance.layers.schema.json",
+  "title": "TB2 Governance Layer Overlay",
+  "description": "Optional JSON overlay that extends or overrides built-in TB2 governance layers.",
+  "type": "object",
+  "properties": {
+    "base": {
+      "type": "object",
+      "description": "Overlay entries for the 'base' layer.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "Freeform effective-config keys merged onto the matched entry."
+      }
+    },
+    "model": {
+      "type": "object",
+      "description": "Overlay entries for the 'model' layer.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "Freeform effective-config keys merged onto the matched entry."
+      }
+    },
+    "environment": {
+      "type": "object",
+      "description": "Overlay entries for the 'environment' layer.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "Freeform effective-config keys merged onto the matched entry."
+      }
+    },
+    "instruction_profile": {
+      "type": "object",
+      "description": "Overlay entries for the 'instruction_profile' layer.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "description": "Freeform effective-config keys merged onto the matched entry."
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+{
+  "environment": {
+    "wsl-tmux": {
+      "preferred_backend": "tmux",
+      "operator_visibility": "transport-and-room"
+    },
+    "native-windows": {
+      "preferred_backend": "process",
+      "platform_bias": "day-to-day"
+    }
+  },
+  "instruction_profile": {
+    "approval-gate": {
+      "approval_mode": "required",
+      "review_mode": "manual"
+    },
+    "governance-review": {
+      "status_density": "dense",
+      "provenance_required": true
+    }
+  }
+}

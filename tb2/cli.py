@@ -28,6 +28,7 @@ from typing import Sequence
 from .backend import TmuxBackend, TmuxError
 from .broker import BrokerConfig, broker_loop
 from .governance import resolve_governance
+from .governance import governance_overlay_schema, governance_sample_overlay
 from .osutils import default_backend_name
 from .profile import list_profiles
 from .support import doctor_report, profile_rows, render_doctor
@@ -171,11 +172,25 @@ def cmd_doctor(_backend: TmuxBackend, args: argparse.Namespace) -> int:
 
 
 def cmd_governance(_backend: TmuxBackend, args: argparse.Namespace) -> int:
-    result = resolve_governance(
-        model=args.model,
-        environment=args.environment,
-        instruction_profile=args.instruction_profile,
-    )
+    if args.governance_cmd == "schema":
+        print(json.dumps(governance_overlay_schema(), ensure_ascii=False, indent=2))
+        return 0
+    if args.governance_cmd == "sample":
+        print(json.dumps(governance_sample_overlay(), ensure_ascii=False, indent=2))
+        return 0
+    try:
+        result = resolve_governance(
+            model=args.model,
+            environment=args.environment,
+            instruction_profile=args.instruction_profile,
+            config_path=args.config,
+        )
+    except ValueError as exc:
+        if args.json:
+            print(json.dumps({"error": str(exc)}, ensure_ascii=False, indent=2))
+            return 1
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
@@ -465,8 +480,13 @@ def build_parser() -> argparse.ArgumentParser:
     g_resolve.add_argument("--model", default="", help="model or agent profile name")
     g_resolve.add_argument("--environment", default="", help="execution environment name")
     g_resolve.add_argument("--instruction-profile", default="", help="instruction profile or preset name")
+    g_resolve.add_argument("--config", default="", help="optional governance layer JSON overlay path")
     g_resolve.add_argument("--json", action="store_true", help="emit machine-readable JSON report")
     g_resolve.set_defaults(fn=cmd_governance)
+    g_schema = gs.add_parser("schema", help="print the governance overlay JSON schema")
+    g_schema.set_defaults(fn=cmd_governance)
+    g_sample = gs.add_parser("sample", help="print a sample governance overlay JSON document")
+    g_sample.set_defaults(fn=cmd_governance)
 
     # server
     s = sub.add_parser("server", help="start MCP HTTP server")

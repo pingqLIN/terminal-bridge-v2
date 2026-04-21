@@ -1,6 +1,7 @@
 """Tests for tb2.cli — CLI argument parsing and backend factory."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -136,6 +137,8 @@ class TestBuildParser:
             "wsl-tmux",
             "--instruction-profile",
             "approval-gate",
+            "--config",
+            "governance.json",
             "--json",
         ])
         assert args.cmd == "governance"
@@ -143,7 +146,20 @@ class TestBuildParser:
         assert args.model == "gpt-5.4"
         assert args.environment == "wsl-tmux"
         assert args.instruction_profile == "approval-gate"
+        assert args.config == "governance.json"
         assert args.json is True
+
+    def test_governance_schema_args(self):
+        p = build_parser()
+        args = p.parse_args(["governance", "schema"])
+        assert args.cmd == "governance"
+        assert args.governance_cmd == "schema"
+
+    def test_governance_sample_args(self):
+        p = build_parser()
+        args = p.parse_args(["governance", "sample"])
+        assert args.cmd == "governance"
+        assert args.governance_cmd == "sample"
 
     def test_room_watch_args(self):
         p = build_parser()
@@ -242,6 +258,25 @@ class TestCreateBackend:
 
 
 class TestGovernanceCommand:
+    def test_cmd_governance_schema_output(self, capsys):
+        args = build_parser().parse_args(["governance", "schema"])
+
+        result = cmd_governance(MagicMock(), args)
+
+        assert result == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["type"] == "object"
+        assert "environment" in out["properties"]
+
+    def test_cmd_governance_sample_output(self, capsys):
+        args = build_parser().parse_args(["governance", "sample"])
+
+        result = cmd_governance(MagicMock(), args)
+
+        assert result == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["environment"]["wsl-tmux"]["preferred_backend"] == "tmux"
+
     def test_cmd_governance_json_output(self, capsys):
         args = build_parser().parse_args([
             "governance",
@@ -261,6 +296,49 @@ class TestGovernanceCommand:
         out = json.loads(capsys.readouterr().out)
         assert out["effective_config"]["preferred_backend"] == "tmux"
         assert out["effective_config"]["review_mode"] == "manual"
+
+    def test_cmd_governance_uses_config_overlay(self, capsys, tmp_path):
+        config = Path(tmp_path) / "governance.json"
+        config.write_text(json.dumps({
+            "environment": {
+                "wsl-tmux": {
+                    "preferred_backend": "pipe",
+                }
+            }
+        }), encoding="utf-8")
+        args = build_parser().parse_args([
+            "governance",
+            "resolve",
+            "--environment",
+            "wsl-tmux",
+            "--config",
+            str(config),
+            "--json",
+        ])
+
+        result = cmd_governance(MagicMock(), args)
+
+        assert result == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["config_path"] == str(config)
+        assert out["effective_config"]["preferred_backend"] == "pipe"
+
+    def test_cmd_governance_json_error_output(self, capsys, tmp_path):
+        config = Path(tmp_path) / "bad.json"
+        config.write_text(json.dumps({"unknown": {"x": {"y": 1}}}), encoding="utf-8")
+        args = build_parser().parse_args([
+            "governance",
+            "resolve",
+            "--config",
+            str(config),
+            "--json",
+        ])
+
+        result = cmd_governance(MagicMock(), args)
+
+        assert result == 1
+        out = json.loads(capsys.readouterr().out)
+        assert out["error"] == "unknown governance layer: unknown"
 
     def test_process_backend(self):
         p = build_parser()

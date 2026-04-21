@@ -86,6 +86,44 @@ python -m tb2 governance resolve \
 
 這會回傳目前模擬解析出的治理結果，不會改動 runtime state。
 
+同一份 read-only 解析結果也已透過 MCP/server tool 暴露：
+
+- `governance_resolve`
+
+目前 governance overlay 契約也已在 repo 內正式提供：
+
+- schema：[`../schemas/governance.layers.schema.json`](../schemas/governance.layers.schema.json)
+- sample：[`../examples/governance.layers.sample.json`](../examples/governance.layers.sample.json)
+- CLI schema 輸出：`python -m tb2 governance schema`
+- CLI sample 輸出：`python -m tb2 governance sample`
+
+也支援額外的 JSON overlay：
+
+```bash
+python -m tb2 governance resolve \
+  --environment wsl-tmux \
+  --instruction-profile approval-gate \
+  --config ./governance.layers.json \
+  --json
+```
+
+overlay 檔案沿用相同的 top-level layer keys：
+
+```json
+{
+  "environment": {
+    "wsl-tmux": {
+      "preferred_backend": "tmux"
+    }
+  },
+  "instruction_profile": {
+    "approval-gate": {
+      "approval_mode": "required"
+    }
+  }
+}
+```
+
 ## 這份文件目前不宣稱的事
 
 這份文件目前不宣稱 TB2 已有：

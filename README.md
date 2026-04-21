@@ -100,6 +100,18 @@ In other words, TB2 should first become better at explaining layered governance 
 
 See [Governance Layering](docs/governance-layering.md).
 
+Current read-only governance entry points:
+
+- CLI: `python -m tb2 governance resolve ...`
+- CLI schema: `python -m tb2 governance schema`
+- CLI sample: `python -m tb2 governance sample`
+- MCP: `governance_resolve`
+
+Repo-local governance contract artifacts:
+
+- schema: [schemas/governance.layers.schema.json](schemas/governance.layers.schema.json)
+- sample overlay: [examples/governance.layers.sample.json](examples/governance.layers.sample.json)
+
 ## Why Teams Choose TB2
 
 | Decision point | TB2 answer |

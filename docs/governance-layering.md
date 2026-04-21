@@ -87,6 +87,44 @@ python -m tb2 governance resolve \
 
 This returns the current simulated governance resolution without mutating runtime state.
 
+The same read-only resolution is also available through the MCP/server tool:
+
+- `governance_resolve`
+
+The governance overlay contract is now published in-repo:
+
+- schema: [`../schemas/governance.layers.schema.json`](../schemas/governance.layers.schema.json)
+- sample: [`../examples/governance.layers.sample.json`](../examples/governance.layers.sample.json)
+- CLI schema output: `python -m tb2 governance schema`
+- CLI sample output: `python -m tb2 governance sample`
+
+An optional JSON overlay is also supported:
+
+```bash
+python -m tb2 governance resolve \
+  --environment wsl-tmux \
+  --instruction-profile approval-gate \
+  --config ./governance.layers.json \
+  --json
+```
+
+The overlay file should use the same top-level layer keys:
+
+```json
+{
+  "environment": {
+    "wsl-tmux": {
+      "preferred_backend": "tmux"
+    }
+  },
+  "instruction_profile": {
+    "approval-gate": {
+      "approval_mode": "required"
+    }
+  }
+}
+```
+
 ## What This Doc Does Not Claim
 
 This document does not claim that TB2 already has:
