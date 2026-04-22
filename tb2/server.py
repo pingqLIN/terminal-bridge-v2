@@ -8,21 +8,30 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 import re
 import socket
+import subprocess
 import struct
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+import shutil
+from tempfile import gettempdir
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .audit import AuditTrail
 from .backend import TerminalBackend, TmuxBackend, TmuxError
 from .diff import diff_new_lines, strip_prompt_tail
+from .governance import resolve_governance
+from .governance import governance_authoritative_keys, governance_exception_keys
 from .intervention import Action, InterventionLayer
 from .osutils import default_backend_name
 from .profile import get_profile, list_profiles, strip_ansi
@@ -40,6 +49,7 @@ from .service import (
 from .workstream import (
     BackendSpec,
     WorkstreamRecord,
+    default_workstream_policy,
     normalize_workstream_policy,
     validate_workstream_id,
     validate_workstream_tier,
@@ -63,6 +73,7 @@ class Bridge:
                  restored: bool = False,
                  last_activity_at: Optional[float] = None,
                  policy: Optional[Dict[str, Any]] = None,
+                 governance: Optional[Dict[str, Any]] = None,
                  operator_review_paused: bool = False,
                  tier: str = "main",
                  parent_workstream_id: Optional[str] = None):
@@ -80,6 +91,7 @@ class Bridge:
         self._intervention_default = intervention
         self._operator_review_paused = operator_review_paused
         self.policy = normalize_workstream_policy(policy, poll_ms=poll_ms)
+        self.governance = dict(governance or {})
         self.tier = validate_workstream_tier(tier)
         self.parent_workstream_id = parent_workstream_id
         self.intervention_layer = InterventionLayer(active=intervention or operator_review_paused)
@@ -398,6 +410,7 @@ _MAX_STREAM_LIMIT = 1000
 _MAX_CAPTURE_LINES = 5000
 _MAX_POLL_MS = 60000
 _LOCAL_ORIGIN_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_EXTENSION_ORIGIN_SCHEMES = {"chrome-extension", "moz-extension", "edge-extension"}
 _BRIDGE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _AUTO_FORWARD_MAX_PER_WINDOW = 6
 _AUTO_FORWARD_WINDOW_SECONDS = 3.0
@@ -473,10 +486,22 @@ def _origin_allowed(origin: str) -> bool:
     if not text:
         return True
     parsed = urlparse(text)
+    if parsed.scheme in _EXTENSION_ORIGIN_SCHEMES:
+        return str(_server_context.get("host", "127.0.0.1")) in _LOCAL_ORIGIN_HOSTS
     if parsed.scheme not in {"http", "https"}:
         return False
     host = (parsed.hostname or "").lower()
     return host in _LOCAL_ORIGIN_HOSTS
+
+
+def _sidepanel_request_allowed(origin: str, client_host: str) -> bool:
+    try:
+        client_is_loopback = ipaddress.ip_address(client_host).is_loopback
+    except ValueError:
+        client_is_loopback = client_host in _LOCAL_ORIGIN_HOSTS
+    if not client_is_loopback:
+        return False
+    return not origin.strip() or _origin_allowed(origin)
 
 
 def _server_security_payload() -> Dict[str, Any]:
@@ -901,6 +926,7 @@ def _bridge_workstream_record(bridge: Bridge, *, restore_error: Optional[str] = 
         auto_forward_guard=bridge.auto_forward_guard(),
         policy=dict(bridge.policy),
         review_mode=bridge.review_mode(),
+        governance=dict(bridge.governance),
         tier=bridge.tier,
         parent_workstream_id=bridge.parent_workstream_id,
         restore_error=restore_error,
@@ -984,10 +1010,13 @@ def _restore_workstreams_from_service_state() -> None:
             restored=True,
             last_activity_at=record.last_activity_at,
             policy=record.policy,
+            governance=record.governance,
             operator_review_paused=record.review_mode == "paused",
             tier=record.tier,
             parent_workstream_id=record.parent_workstream_id,
         )
+        _refresh_bridge_governance_review_mode_state(bridge)
+        _refresh_bridge_governance_policy_state(bridge)
         bridge._auto_forward_guard_reason = str(record.auto_forward_guard.get("guard_reason") or "")
         bridge._pending_quota_reason = str(record.auto_forward_guard.get("quota_reason") or "")
         if bridge._pending_quota_reason and bridge._auto_forward_guard_reason == bridge._pending_quota_reason:
@@ -1034,6 +1063,7 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
         "auto_forward_guard": bridge.auto_forward_guard(),
         "policy": dict(bridge.policy),
         "review_mode": bridge.review_mode(),
+        "governance": dict(bridge.governance),
         "tier": bridge.tier,
         "parent_workstream_id": bridge.parent_workstream_id,
         "backend": bridge.backend_spec.to_dict(),
@@ -1581,6 +1611,22 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
     if reusable_record:
         _drop_workstream(reusable_record.workstream_id)
 
+    governance = _resolve_workstream_governance(backend_spec=backend_spec, args=args)
+    auto_forward_enabled = bool(args.get("auto_forward", False))
+    intervention_enabled = bool(args.get("intervention", False))
+    operator_review_paused = reusable_record.review_mode == "paused" if reusable_record else False
+    auto_forward_enabled, intervention_enabled, operator_review_paused, applied_controls = _apply_governance_start_controls(
+        governance=governance,
+        auto_forward=auto_forward_enabled,
+        intervention=intervention_enabled,
+        operator_review_paused=operator_review_paused,
+    )
+    governance_snapshot = _workstream_governance_snapshot(
+        governance=governance,
+        poll_ms=poll_ms,
+        applied_controls=applied_controls,
+    )
+
     bridge = Bridge(
         bridge_id=bridge_id,
         backend=backend,
@@ -1592,13 +1638,16 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         profile_name=profile_name,
         poll_ms=poll_ms,
         lines=lines,
-        auto_forward=bool(args.get("auto_forward", False)),
-        intervention=bool(args.get("intervention", False)),
+        auto_forward=auto_forward_enabled,
+        intervention=intervention_enabled,
         policy=reusable_record.policy if reusable_record else None,
-        operator_review_paused=reusable_record.review_mode == "paused" if reusable_record else False,
+        governance=governance_snapshot,
+        operator_review_paused=operator_review_paused,
         tier=tier,
         parent_workstream_id=parent_workstream_id,
     )
+    _refresh_bridge_governance_review_mode_state(bridge)
+    _refresh_bridge_governance_policy_state(bridge)
     with _bridges_lock:
         _bridges[bridge_id] = bridge
     _set_workstream(_bridge_workstream_record(bridge))
@@ -1614,6 +1663,7 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         profile=profile_name,
         auto_forward=bridge.auto_forward,
         intervention=bridge.intervention_layer.active,
+        governance=bridge.governance,
         tier=bridge.tier,
         parent_workstream_id=bridge.parent_workstream_id,
     )
@@ -1795,13 +1845,21 @@ def handle_workstream_pause_review(args: Dict[str, Any]) -> Dict[str, Any]:
         return error
     if not bridge or not bridge_id:
         return {"error": "bridge not found"}
+    previous_mode = bridge.review_mode()
     bridge.pause_review()
+    _set_bridge_governance_review_override(
+        bridge,
+        active=previous_mode == "auto",
+        mode="paused" if previous_mode == "auto" else None,
+        reason="operator_pause_review" if previous_mode == "auto" else None,
+    )
     bridge.last_activity_at = time.time()
     _audit(
         "workstream.review_paused",
         workstream_id=bridge.workstream_id,
         bridge_id=bridge_id,
         room_id=bridge.room.room_id,
+        governance=bridge.governance,
     )
     _sync_workstream_from_bridge(bridge)
     return {"workstream": _decorate_workstream_status_payload(_bridge_workstream_record(bridge))}
@@ -1826,12 +1884,19 @@ def handle_workstream_resume_review(args: Dict[str, Any]) -> Dict[str, Any]:
     if pending_count:
         return {"error": f"cannot resume review with {pending_count} pending item(s)", "pending_count": pending_count}
     bridge.resume_review()
+    _set_bridge_governance_review_override(
+        bridge,
+        active=False,
+        mode=None,
+        reason=None,
+    )
     bridge.last_activity_at = time.time()
     _audit(
         "workstream.review_resumed",
         workstream_id=bridge.workstream_id,
         bridge_id=bridge_id,
         room_id=bridge.room.room_id,
+        governance=bridge.governance,
     )
     _sync_workstream_from_bridge(bridge)
     return {"workstream": _decorate_workstream_status_payload(_bridge_workstream_record(bridge))}
@@ -1856,6 +1921,7 @@ def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         if bridge is not None:
             bridge.update_policy(payload)
+            _refresh_bridge_governance_policy_state(bridge, reason="workstream_update_policy")
             bridge.last_activity_at = time.time()
             _audit(
                 "workstream.policy_updated",
@@ -1863,12 +1929,35 @@ def handle_workstream_update_policy(args: Dict[str, Any]) -> Dict[str, Any]:
                 bridge_id=bridge.bridge_id,
                 room_id=bridge.room.room_id,
                 policy=dict(bridge.policy),
+                governance=bridge.governance,
             )
             _sync_workstream_from_bridge(bridge)
             return {"workstream": _decorate_workstream_status_payload(_bridge_workstream_record(bridge))}
         record.policy = normalize_workstream_policy(payload, poll_ms=record.poll_ms, base=record.policy)
     except ValueError as exc:
         return {"error": str(exc)}
+    state = dict(_governance_policy_state(record.governance))
+    baseline = dict(state.get("baseline", {})) if isinstance(state.get("baseline"), dict) else default_workstream_policy(poll_ms=record.poll_ms)
+    baseline_source = dict(state.get("baseline_source", {})) if isinstance(state.get("baseline_source"), dict) else {key: "runtime_default" for key in baseline}
+    overrides: Dict[str, Dict[str, Any]] = {}
+    for key, value in record.policy.items():
+        baseline_value = baseline.get(key)
+        if baseline_value == value:
+            continue
+        overrides[key] = {
+            "value": value,
+            "source": "operator_exception",
+            "reason": "workstream_update_policy",
+            "baseline_value": baseline_value,
+            "baseline_source": baseline_source.get(key, "runtime_default"),
+        }
+    record.governance["policy_state"] = {
+        "baseline": baseline,
+        "baseline_source": baseline_source,
+        "effective": dict(record.policy),
+        "overrides": overrides,
+    }
+    record.governance["decision_trace"] = _governance_decision_trace(record.governance)
     record.updated_at = time.time()
     _set_workstream(record)
     _persist_workstream_snapshot()
@@ -2056,6 +2145,273 @@ def handle_doctor(args: Dict[str, Any]) -> Dict[str, Any]:
     return doctor_report(distro=str(distro) if distro else None)
 
 
+def handle_governance_resolve(args: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        return resolve_governance(
+            model=str(args.get("model", "") or ""),
+            environment=str(args.get("environment", "") or ""),
+            instruction_profile=str(args.get("instruction_profile", "") or ""),
+            config_path=str(args.get("config_path", "") or ""),
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+
+def _inside_wsl_runtime() -> bool:
+    try:
+        return "microsoft" in Path("/proc/version").read_text(encoding="utf-8").lower()
+    except OSError:
+        return False
+
+
+def _governance_environment_for_backend(backend_spec: BackendSpec) -> str:
+    if os.name == "nt":
+        return "native-windows"
+    if backend_spec.kind == "tmux" and _inside_wsl_runtime():
+        return "wsl-tmux"
+    return "codex-local-dev"
+
+
+def _governance_instruction_profile_for_start(args: Dict[str, Any]) -> str:
+    explicit = str(args.get("instruction_profile", "") or "").strip()
+    if explicit:
+        return explicit
+    if bool(args.get("intervention", False)):
+        return "approval-gate"
+    if bool(args.get("auto_forward", False)):
+        return "quick-pairing"
+    return ""
+
+
+def _resolve_workstream_governance(
+    *,
+    backend_spec: BackendSpec,
+    args: Dict[str, Any],
+) -> Dict[str, Any]:
+    return resolve_governance(
+        model=str(args.get("model", "") or ""),
+        environment=_governance_environment_for_backend(backend_spec),
+        instruction_profile=_governance_instruction_profile_for_start(args),
+        config_path=str(args.get("governance_config_path", "") or ""),
+    )
+
+
+def _apply_governance_start_controls(
+    *,
+    governance: Dict[str, Any],
+    auto_forward: bool,
+    intervention: bool,
+    operator_review_paused: bool,
+) -> Tuple[bool, bool, bool, Dict[str, Dict[str, Any]]]:
+    projection = dict(governance.get("runtime_projection", {})) if isinstance(governance.get("runtime_projection"), dict) else {}
+    applied: Dict[str, Dict[str, Any]] = {}
+    review_mode_projection = projection.get("review_mode")
+    if not isinstance(review_mode_projection, dict):
+        return auto_forward, intervention, operator_review_paused, applied
+    state = str(review_mode_projection.get("state", "advisory"))
+    desired = str(review_mode_projection.get("value", "")).strip()
+    if state != "enforced" or desired not in {"auto", "manual"}:
+        return auto_forward, intervention, operator_review_paused, applied
+    if desired == "manual":
+        applied["review_mode"] = {
+            "state": "enforced",
+            "value": "manual",
+            "reason": "governance_authoritative_projection",
+        }
+        return auto_forward, True, False, applied
+    applied["review_mode"] = {
+        "state": "enforced",
+        "value": "auto",
+        "reason": "governance_authoritative_projection",
+    }
+    return auto_forward, False, False, applied
+
+
+def _workstream_governance_snapshot(
+    *,
+    governance: Dict[str, Any],
+    poll_ms: int = 400,
+    applied_controls: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    projection = dict(governance.get("runtime_projection", {})) if isinstance(governance.get("runtime_projection"), dict) else {}
+    review_mode_projection = projection.get("review_mode") if isinstance(projection.get("review_mode"), dict) else {}
+    projection_state = str(review_mode_projection.get("state", "") or "")
+    baseline_review_mode = str(review_mode_projection.get("value", "") or "") if projection_state == "enforced" else ""
+    effective_config = dict(governance.get("effective_config", {})) if isinstance(governance.get("effective_config"), dict) else {}
+    baseline_policy = default_workstream_policy(poll_ms=poll_ms)
+    for key in governance_exception_keys():
+        if key == "review_mode":
+            continue
+        if key in effective_config:
+            baseline_policy[key] = effective_config[key]
+    snapshot = {
+        "requested": dict(governance.get("requested", {})) if isinstance(governance.get("requested"), dict) else {},
+        "matched_layers": list(governance.get("matched_layers", [])) if isinstance(governance.get("matched_layers"), list) else [],
+        "missing_layers": list(governance.get("missing_layers", [])) if isinstance(governance.get("missing_layers"), list) else [],
+        "authoritative_keys": list(governance.get("authoritative_keys", governance_authoritative_keys())),
+        "exception_keys": list(governance.get("exception_keys", governance_exception_keys())),
+        "key_classes": dict(governance.get("key_classes", {})) if isinstance(governance.get("key_classes"), dict) else {},
+        "runtime_projection": projection,
+        "applied_controls": dict(applied_controls or {}),
+        "effective_config": effective_config,
+        "provenance": dict(governance.get("provenance", {})) if isinstance(governance.get("provenance"), dict) else {},
+        "review_mode_state": {
+            "baseline": baseline_review_mode,
+            "baseline_source": "governance" if baseline_review_mode else "runtime_default",
+            "effective": baseline_review_mode,
+            "effective_source": "governance" if baseline_review_mode else "runtime_default",
+            "override_active": False,
+            "override_mode": None,
+            "override_reason": None,
+        },
+        "policy_state": {
+            "baseline": baseline_policy,
+            "baseline_source": {
+                key: ("governance" if key in effective_config else "runtime_default")
+                for key in baseline_policy
+            },
+            "effective": dict(baseline_policy),
+            "overrides": {},
+        },
+    }
+    snapshot["decision_trace"] = _governance_decision_trace(snapshot)
+    return snapshot
+
+
+def _governance_review_mode_state(governance: Dict[str, Any]) -> Dict[str, Any]:
+    state = governance.get("review_mode_state")
+    if isinstance(state, dict):
+        return state
+    return {
+        "baseline": "",
+        "baseline_source": "runtime_default",
+        "effective": "",
+        "effective_source": "runtime_default",
+        "override_active": False,
+        "override_mode": None,
+        "override_reason": None,
+    }
+
+
+def _refresh_bridge_governance_review_mode_state(bridge: Bridge) -> None:
+    state = dict(_governance_review_mode_state(bridge.governance))
+    baseline = str(state.get("baseline", "") or "")
+    override_active = bool(state.get("override_active", False))
+    override_mode = state.get("override_mode")
+    effective = bridge.review_mode()
+    if override_active and override_mode == "paused":
+        state["effective"] = effective
+        state["effective_source"] = "operator_override"
+    elif baseline:
+        state["effective"] = effective
+        state["effective_source"] = "governance"
+        state["override_active"] = False
+        state["override_mode"] = None
+        state["override_reason"] = None
+    else:
+        state["effective"] = effective
+        state["effective_source"] = "runtime_default"
+    bridge.governance["review_mode_state"] = state
+    bridge.governance["decision_trace"] = _governance_decision_trace(bridge.governance)
+
+
+def _set_bridge_governance_review_override(
+    bridge: Bridge,
+    *,
+    active: bool,
+    mode: Optional[str],
+    reason: Optional[str],
+) -> None:
+    state = dict(_governance_review_mode_state(bridge.governance))
+    state["override_active"] = active
+    state["override_mode"] = mode if active else None
+    state["override_reason"] = reason if active else None
+    bridge.governance["review_mode_state"] = state
+    _refresh_bridge_governance_review_mode_state(bridge)
+
+
+def _governance_policy_state(governance: Dict[str, Any]) -> Dict[str, Any]:
+    state = governance.get("policy_state")
+    if isinstance(state, dict):
+        return state
+    baseline = default_workstream_policy(poll_ms=400)
+    return {
+        "baseline": baseline,
+        "baseline_source": {key: "runtime_default" for key in baseline},
+        "effective": dict(baseline),
+        "overrides": {},
+    }
+
+
+def _refresh_bridge_governance_policy_state(bridge: Bridge, *, reason: str = "") -> None:
+    state = dict(_governance_policy_state(bridge.governance))
+    baseline = dict(state.get("baseline", {})) if isinstance(state.get("baseline"), dict) else {}
+    baseline_source = dict(state.get("baseline_source", {})) if isinstance(state.get("baseline_source"), dict) else {}
+    overrides: Dict[str, Dict[str, Any]] = {}
+    for key, value in bridge.policy.items():
+        baseline_value = baseline.get(key)
+        if baseline_value == value:
+            continue
+        overrides[key] = {
+            "value": value,
+            "source": "operator_exception",
+            "reason": reason or "workstream_update_policy",
+            "baseline_value": baseline_value,
+            "baseline_source": baseline_source.get(key, "runtime_default"),
+        }
+    state["effective"] = dict(bridge.policy)
+    state["overrides"] = overrides
+    bridge.governance["policy_state"] = state
+    bridge.governance["decision_trace"] = _governance_decision_trace(bridge.governance)
+
+
+def _governance_decision_trace(governance: Dict[str, Any]) -> List[Dict[str, Any]]:
+    trace: List[Dict[str, Any]] = []
+    review_state = _governance_review_mode_state(governance)
+    effective_review_mode = str(review_state.get("effective", "") or "")
+    effective_review_source = str(review_state.get("effective_source", "") or "runtime_default")
+    if effective_review_mode:
+        trace.append({
+            "kind": "review_mode",
+            "state": "override" if bool(review_state.get("override_active", False)) else "baseline",
+            "effective": effective_review_mode,
+            "source": effective_review_source,
+            "baseline": review_state.get("baseline"),
+            "baseline_source": review_state.get("baseline_source"),
+            "reason": review_state.get("override_reason") if bool(review_state.get("override_active", False)) else None,
+        })
+    policy_state = _governance_policy_state(governance)
+    baseline = dict(policy_state.get("baseline", {})) if isinstance(policy_state.get("baseline"), dict) else {}
+    overrides = dict(policy_state.get("overrides", {})) if isinstance(policy_state.get("overrides"), dict) else {}
+    for key in sorted(overrides):
+        entry = overrides.get(key)
+        if not isinstance(entry, dict):
+            continue
+        trace.append({
+            "kind": "policy",
+            "key": key,
+            "state": "override",
+            "value": entry.get("value"),
+            "source": entry.get("source", "operator_exception"),
+            "reason": entry.get("reason"),
+            "baseline_value": entry.get("baseline_value", baseline.get(key)),
+            "baseline_source": entry.get("baseline_source", "runtime_default"),
+        })
+    return trace
+
+
+def _status_governance_snapshot() -> Dict[str, Any]:
+    environment = "codex-local-dev"
+    if os.name == "nt":
+        environment = "native-windows"
+    elif _inside_wsl_runtime():
+        environment = "wsl-tmux"
+    return resolve_governance(
+        environment=environment,
+        instruction_profile="mcp-operator",
+    )
+
+
 def handle_audit_recent(args: Dict[str, Any]) -> Dict[str, Any]:
     try:
         limit = _parse_int(args.get("limit"), name="limit", default=50, minimum=1, maximum=200)
@@ -2108,6 +2464,16 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
     recovery = _recovery_status_snapshot(workstreams, continuity=runtime.get("continuity"))
     transports = _transport_snapshot()
     transport_by_room = {item["room_id"]: item for item in transports["rooms"]}
+    governance_review_overrides = sum(
+        1
+        for item in workstreams
+        if bool(item.get("governance", {}).get("review_mode_state", {}).get("override_active"))
+    )
+    governance_policy_override_total = sum(
+        len(item.get("governance", {}).get("policy_state", {}).get("overrides", {}))
+        for item in workstreams
+        if isinstance(item.get("governance", {}).get("policy_state", {}).get("overrides"), dict)
+    )
     return {
         "rooms": [{"id": r.room_id, "messages": r.message_count, "age": time.time() - r.created_at,
                    "subscribers": transport_by_room.get(
@@ -2140,6 +2506,9 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
             "alerts": sum(int(item["health"]["alert_count"]) for item in workstreams),
             "review": sum(1 for item in workstreams if item["health"]["escalation"] == "review"),
             "intervene": sum(1 for item in workstreams if item["health"]["escalation"] == "intervene"),
+            "governance_review_overrides": governance_review_overrides,
+            "governance_policy_overrides": governance_policy_override_total,
+            "governance_exceptions": governance_review_overrides + governance_policy_override_total,
             "orphaned_rooms": len(reconciliation["orphaned_rooms"]),
             "orphaned_workstreams": len(reconciliation["orphaned_workstreams"]),
             "stale_workstreams": len(reconciliation["stale_workstreams"]),
@@ -2150,6 +2519,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         "audit": _audit_trail.describe(),
         "runtime": runtime,
         "security": _server_security_payload(),
+        "governance": _status_governance_snapshot(),
     }
 
 
@@ -2176,6 +2546,7 @@ HANDLERS = {
     "intervention_reject": handle_intervention_reject,
     "list_profiles": handle_list_profiles,
     "doctor": handle_doctor,
+    "governance_resolve": handle_governance_resolve,
     "audit_recent": handle_audit_recent,
     "status": handle_status,
 }
@@ -2203,6 +2574,7 @@ TOOL_DESCRIPTIONS = {
     "intervention_reject": "Reject pending message(s).",
     "list_profiles": "List available parsing profiles.",
     "doctor": "Report local backend support and first-class CLI compatibility.",
+    "governance_resolve": "Resolve layered governance config into matched layers, effective config, and provenance.",
     "audit_recent": "Return recent persisted audit events for rooms, bridges, and operator actions.",
     "status": "Return active rooms and bridge ids.",
 }
@@ -2248,6 +2620,9 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "shell": {"type": "string"},
             "distro": {"type": "string"},
             "profile": {"type": "string"},
+            "model": {"type": "string"},
+            "instruction_profile": {"type": "string"},
+            "governance_config_path": {"type": "string"},
             "auto_forward": {"type": "boolean"},
             "intervention": {"type": "boolean"},
             "poll_ms": {"type": "integer", "minimum": 10, "maximum": _MAX_POLL_MS},
@@ -2395,10 +2770,456 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
         },
         "additionalProperties": False,
     },
+    "governance_resolve": {
+        "type": "object",
+        "properties": {
+            "model": {"type": "string"},
+            "environment": {"type": "string"},
+            "instruction_profile": {"type": "string"},
+            "config_path": {"type": "string"},
+        },
+        "additionalProperties": False,
+    },
 }
 
 SERVER_INFO = {"name": "terminal-bridge-v2", "version": "0.2.0"}
 LATEST_PROTOCOL_VERSION = "2025-11-25"
+@dataclass
+class SidepanelRuntime:
+    codex_available: bool
+    codex_path: str
+    host_platform: str
+    provider: str
+    workdir: str
+
+
+@dataclass
+class SidepanelRoomState:
+    backend: TerminalBackend
+    pane_a: str
+    pane_b: str
+    room_id: str
+    session: str
+    pending: bool = False
+    mode: str = "tb2-codex"
+    output_path: str = ""
+    log_path: str = ""
+    run_id: str = ""
+    preview_text: str = ""
+    process: Optional[subprocess.Popen[str]] = None
+
+
+_sidepanel_lock = threading.RLock()
+_sidepanel_rooms: Dict[str, SidepanelRoomState] = {}
+_sidepanel_probe_cache: Dict[str, Any] = {"checked_at": 0.0, "detail": "", "ok": None}
+_SIDEPANEL_PROBE_TTL_SECONDS = 5.0
+
+
+def _host_platform_name() -> str:
+    if os.name == "nt":
+        return "windows"
+    if os.path.exists("/proc/version"):
+        try:
+            text = Path("/proc/version").read_text(encoding="utf-8").lower()
+        except OSError:
+            text = ""
+        if "microsoft" in text:
+            return "wsl"
+    return "posix"
+
+
+def _sidepanel_runtime() -> SidepanelRuntime:
+    codex_path = str(os.environ.get("TB2_SIDEPANEL_CODEX", "")).strip() or str(shutil.which("codex") or "")
+    workdir = str(os.environ.get("TB2_SIDEPANEL_WORKDIR", "")).strip() or str(Path.home())
+    provider = "local-tb2-codex-bridge"
+    return SidepanelRuntime(
+        codex_available=bool(codex_path),
+        codex_path=codex_path or "codex",
+        host_platform=_host_platform_name(),
+        provider=provider,
+        workdir=workdir,
+    )
+
+
+def _sidepanel_backend_ready(*, force: bool = False) -> Tuple[bool, str]:
+    with _sidepanel_lock:
+        checked_at = float(_sidepanel_probe_cache.get("checked_at", 0.0) or 0.0)
+        ok = _sidepanel_probe_cache.get("ok")
+        detail = str(_sidepanel_probe_cache.get("detail", "") or "")
+        if not force and ok is not None and time.time() - checked_at <= _SIDEPANEL_PROBE_TTL_SECONDS:
+            return bool(ok), detail
+    session = "sp-health-probe"
+    backend = None
+    try:
+        backend = _make_backend({
+            "backend": default_backend_name(),
+            "backend_id": "sidepanel-health-probe",
+        })
+        backend.init_session(session)
+        backend.kill_session(session)
+        ok = True
+        detail = ""
+    except Exception as exc:
+        ok = False
+        detail = str(exc)
+    with _sidepanel_lock:
+        _sidepanel_probe_cache["checked_at"] = time.time()
+        _sidepanel_probe_cache["ok"] = ok
+        _sidepanel_probe_cache["detail"] = detail
+    return ok, detail
+
+
+def _sidepanel_health_payload() -> Dict[str, Any]:
+    runtime = _sidepanel_runtime()
+    backend_ready, backend_detail = _sidepanel_backend_ready()
+    note = (
+        "Sidepanel compatibility uses TB2 rooms plus one-shot Codex exec subprocess runs. "
+        "Recent room transcript is wrapped into each prompt, and poll returns streaming log previews "
+        "followed by the final assistant message."
+    )
+    if backend_detail:
+        note = note + f" Backend bootstrap check failed: {backend_detail}"
+    with _sidepanel_lock:
+        room_count = len(_sidepanel_rooms)
+    return {
+        "ok": True,
+        "ready": runtime.codex_available and backend_ready,
+        "provider": runtime.provider,
+        "bridgeMode": "tb2-codex",
+        "codexAvailable": runtime.codex_available,
+        "tb2RuntimeInstalled": True,
+        "backendReady": backend_ready,
+        "roomCount": room_count,
+        "note": note,
+        "hostPlatform": runtime.host_platform,
+        "runtimeCodexPath": runtime.codex_path,
+        "runtimeWorkdir": runtime.workdir,
+    }
+
+
+def _sidepanel_iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+
+
+def _sidepanel_role(msg: RoomMessage) -> str:
+    role = str(msg.meta.get("sidepanelRole", "")).strip()
+    if role in {"user", "assistant", "system"}:
+        return role
+    if msg.author == "assistant" or msg.source_role == "assistant":
+        return "assistant"
+    if msg.kind in {"system", "intervention"} or msg.author == "bridge":
+        return "system"
+    return "user"
+
+
+def _sidepanel_message_payload(msg: RoomMessage) -> Dict[str, Any]:
+    return {
+        "id": msg.id,
+        "role": _sidepanel_role(msg),
+        "text": msg.text,
+        "created_at": _sidepanel_iso(msg.ts),
+        "meta": dict(msg.meta),
+    }
+
+
+def _sidepanel_render_prompt(room: Room, prompt: str) -> str:
+    after_id = max(0, room.latest_id - 12)
+    transcript: List[str] = []
+    for item in room.poll(after_id=after_id, limit=12):
+        if item.meta.get("streamKey") and item.meta.get("final") is False:
+            continue
+        transcript.append(f"{_sidepanel_role(item).upper()}:\n{item.text}")
+    transcript.append(f"USER:\n{prompt}")
+    return "\n\n".join(
+        [
+            "You are continuing a browser side panel terminal conversation.",
+            "Use the room transcript below as context and answer the latest user message.",
+            "\n\n".join(transcript),
+        ]
+    )
+
+
+def _sidepanel_render_live_log(text: str) -> str:
+    return "Streaming bridge log:\n" + text
+
+
+def _sidepanel_run_paths(room_id: str) -> Tuple[str, str, str]:
+    run_id = hashlib.sha1(f"{room_id}:{time.time()}".encode("utf-8")).hexdigest()[:12]
+    temp = Path(gettempdir())
+    return (
+        run_id,
+        str(temp / f"tb2-sidepanel-{room_id}-{run_id}.log"),
+        str(temp / f"tb2-sidepanel-{room_id}-{run_id}.out"),
+    )
+
+
+def _read_text_if_exists(path: str) -> str:
+    if not path:
+        return ""
+    target = Path(path)
+    if not target.exists():
+        return ""
+    try:
+        return target.read_text(encoding="utf-8", errors="ignore").strip()
+    except OSError:
+        return ""
+
+
+def _read_tail_if_exists(path: str, *, limit: int = 4000) -> str:
+    text = _read_text_if_exists(path)
+    return text[-limit:].strip() if text else ""
+
+
+def _sidepanel_finalize_run(room_id: str, run_id: str, proc: subprocess.Popen[str], log_file: Any) -> None:
+    try:
+        proc.wait()
+    finally:
+        try:
+            log_file.close()
+        except OSError:
+            pass
+
+    with _sidepanel_lock:
+        state = _sidepanel_rooms.get(room_id)
+        if state is None or state.run_id != run_id:
+            return
+        output_path = state.output_path
+        log_path = state.log_path
+        provider = _sidepanel_runtime().provider
+        session = state.session
+        state.pending = False
+        state.process = None
+        state.preview_text = ""
+        state.run_id = ""
+        state.log_path = ""
+        state.output_path = ""
+    room = get_room(room_id)
+    if room is None:
+        return
+    text = _read_text_if_exists(output_path) or _read_text_if_exists(log_path) or "Codex completed without a final message."
+    _post_room_message(
+        room,
+        author="assistant",
+        text=text,
+        kind="chat",
+        meta={
+            "provider": provider,
+            "session": session,
+            "streamKey": run_id,
+            "replace": True,
+            "final": True,
+            "sidepanelRole": "assistant",
+        },
+        source_type="sidepanel",
+        source_role="assistant",
+        trusted=True,
+    )
+
+
+def _sidepanel_room_state(room_id: str) -> Optional[SidepanelRoomState]:
+    with _sidepanel_lock:
+        return _sidepanel_rooms.get(room_id)
+
+
+def _sidepanel_create_room() -> Dict[str, Any]:
+    room = create_room()
+    existing = _sidepanel_room_state(room.room_id)
+    if existing is not None:
+        return {"ok": True, "roomId": existing.room_id}
+    backend_args = {
+        "backend": default_backend_name(),
+        "backend_id": f"sidepanel-{room.room_id}",
+    }
+    backend = _make_backend(backend_args)
+    session = f"sp-{room.room_id}"
+    pane_a, pane_b = backend.init_session(session)
+    with _sidepanel_lock:
+        _sidepanel_rooms[room.room_id] = SidepanelRoomState(
+            backend=backend,
+            pane_a=pane_a,
+            pane_b=pane_b,
+            room_id=room.room_id,
+            session=session,
+        )
+    return {"ok": True, "roomId": room.room_id}
+
+
+def _sidepanel_create_room_response() -> Tuple[int, Dict[str, Any]]:
+    try:
+        result = _sidepanel_create_room()
+        with _sidepanel_lock:
+            _sidepanel_probe_cache["checked_at"] = time.time()
+            _sidepanel_probe_cache["ok"] = True
+            _sidepanel_probe_cache["detail"] = ""
+        return 200, result
+    except Exception as exc:
+        with _sidepanel_lock:
+            _sidepanel_probe_cache["checked_at"] = time.time()
+            _sidepanel_probe_cache["ok"] = False
+            _sidepanel_probe_cache["detail"] = str(exc)
+        return 503, {
+            "ok": False,
+            "error": f"failed to initialize TB2 room session: {exc}",
+        }
+
+
+def _sidepanel_poll_response(room_id: str, after_id: Any) -> Tuple[int, Dict[str, Any]]:
+    try:
+        normalized_room_id = validate_room_id(room_id)
+        cursor = _parse_int(after_id, name="afterId", default=0, minimum=0)
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    room = get_room(normalized_room_id)
+    state = _sidepanel_room_state(normalized_room_id)
+    if room is None or state is None:
+        return 404, {"ok": False, "error": "room not found", "roomId": normalized_room_id}
+    if state.pending and state.log_path:
+        preview = _read_tail_if_exists(state.log_path)
+        if preview and preview != state.preview_text:
+            with _sidepanel_lock:
+                current = _sidepanel_rooms.get(normalized_room_id)
+                if current is not None and current.run_id == state.run_id:
+                    current.preview_text = preview
+            _post_room_message(
+                room,
+                author="bridge",
+                text=_sidepanel_render_live_log(preview),
+                kind="system",
+                meta={
+                    "provider": _sidepanel_runtime().provider,
+                    "session": state.session,
+                    "streamKey": state.run_id,
+                    "replace": True,
+                    "final": False,
+                    "sidepanelRole": "system",
+                },
+                source_type="sidepanel",
+                source_role="bridge",
+                trusted=True,
+            )
+    messages = room.poll(after_id=cursor, limit=_MAX_STREAM_LIMIT)
+    return 200, {
+        "ok": True,
+        "roomId": normalized_room_id,
+        "latestId": room.latest_id,
+        "messages": [_sidepanel_message_payload(item) for item in messages],
+    }
+
+
+def _sidepanel_message_response(payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+    prompt = str(payload.get("prompt", "")).strip()
+    room_id = str(payload.get("roomId", "")).strip()
+    mode = str(payload.get("mode", "tb2-codex")).strip() or "tb2-codex"
+    if not prompt:
+        return 400, {"ok": False, "error": "prompt is required"}
+    try:
+        normalized_room_id = validate_room_id(room_id)
+    except ValueError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    room = get_room(normalized_room_id)
+    state = _sidepanel_room_state(normalized_room_id)
+    if room is None or state is None:
+        return 404, {"ok": False, "error": "room not found", "roomId": normalized_room_id}
+    if state.pending:
+        return 409, {
+            "ok": False,
+            "error": "room already has a pending prompt",
+            "roomId": normalized_room_id,
+        }
+    runtime = _sidepanel_runtime()
+    if not runtime.codex_available:
+        return 503, {
+            "ok": False,
+            "error": "codex CLI not found in PATH",
+            "roomId": normalized_room_id,
+        }
+    run_id, log_path, output_path = _sidepanel_run_paths(normalized_room_id)
+    command = [
+        runtime.codex_path,
+        "exec",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "workspace-write",
+        "-C",
+        runtime.workdir,
+        "--output-last-message",
+        output_path,
+        "-",
+    ]
+    prompt_text = _sidepanel_render_prompt(room, prompt)
+    try:
+        log_file = open(log_path, "w", encoding="utf-8")
+    except OSError as exc:
+        return 503, {
+            "ok": False,
+            "error": f"failed to prepare codex log file: {exc}",
+            "roomId": normalized_room_id,
+        }
+
+    try:
+        proc = subprocess.Popen(
+            command,
+            cwd=runtime.workdir,
+            stdin=subprocess.PIPE,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        try:
+            log_file.close()
+        except OSError:
+            pass
+        return 503, {
+            "ok": False,
+            "error": f"failed to start codex exec: {exc}",
+            "roomId": normalized_room_id,
+        }
+    if proc.stdin is not None:
+        proc.stdin.write(prompt_text)
+        proc.stdin.close()
+    user = _post_room_message(
+        room,
+        author="user",
+        text=prompt,
+        kind="chat",
+        meta={
+            "mode": mode,
+            "provider": runtime.provider,
+            "session": state.session,
+            "sidepanelRole": "user",
+        },
+        source_type="client",
+        source_role="sidepanel",
+        trusted=False,
+    )
+    with _sidepanel_lock:
+        current = _sidepanel_rooms.get(normalized_room_id)
+        if current is None:
+            current = state
+            _sidepanel_rooms[normalized_room_id] = current
+        current.pending = True
+        current.mode = mode
+        current.process = proc
+        current.run_id = run_id
+        current.log_path = log_path
+        current.output_path = output_path
+        current.preview_text = ""
+    thread = threading.Thread(
+        target=_sidepanel_finalize_run,
+        args=(normalized_room_id, run_id, proc, log_file),
+        daemon=True,
+        name=f"sidepanel-{run_id}",
+    )
+    thread.start()
+    return 202, {
+        "ok": True,
+        "provider": runtime.provider,
+        "roomId": normalized_room_id,
+        "latestId": user.id,
+        "text": "Prompt accepted. Poll the room for Codex output.",
+    }
 
 
 def _tool_specs() -> List[Dict[str, Any]]:
@@ -2555,6 +3376,26 @@ def _handle_get_path(path: str) -> Tuple[int, str, bytes]:
     })
 
 
+def _handle_sidepanel_get(parsed: Any) -> Optional[Tuple[int, Dict[str, Any]]]:
+    path = parsed.path
+    if path == "/health":
+        return 200, _sidepanel_health_payload()
+    if path != "/v1/tb2/poll":
+        return None
+    query = parse_qs(parsed.query)
+    room_id = query.get("roomId", [""])[0]
+    after_id = query.get("afterId", ["0"])[0]
+    return _sidepanel_poll_response(room_id, after_id)
+
+
+def _handle_sidepanel_post(path: str, payload: Dict[str, Any]) -> Optional[Tuple[int, Dict[str, Any]]]:
+    if path == "/v1/tb2/rooms":
+        return _sidepanel_create_room_response()
+    if path == "/v1/tb2/message":
+        return _sidepanel_message_response(payload)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # HTTP handler (MCP JSON-RPC)
 # ---------------------------------------------------------------------------
@@ -2563,6 +3404,31 @@ class MCPHandler(BaseHTTPRequestHandler):
     def _sanitize_header_value(self, value: str) -> str:
         """Remove CR/LF to prevent HTTP response splitting in header values."""
         return value.replace("\r", "").replace("\n", "")
+
+    def _write_cors_headers(self) -> None:
+        headers = getattr(self, "headers", None)
+        if headers is None:
+            return
+        origin = headers.get("Origin", "").strip()
+        if not origin or not _origin_allowed(origin):
+            return
+        safe_origin = self._sanitize_header_value(origin)
+        self.send_header("Access-Control-Allow-Origin", safe_origin)
+        self.send_header("Access-Control-Allow-Headers", "content-type")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+        self.send_header("Vary", "Origin")
+
+    def do_OPTIONS(self) -> None:
+        origin = self.headers.get("Origin", "")
+        path = urlparse(self.path).path
+        if path in {"/health", "/v1/tb2/poll", "/v1/tb2/rooms", "/v1/tb2/message"}:
+            allowed = _sidepanel_request_allowed(origin, self.client_address[0])
+        else:
+            allowed = _origin_allowed(origin)
+        if not allowed:
+            self._reply(403, {"error": "forbidden origin"})
+            return
+        self._reply_empty(204)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -2577,6 +3443,14 @@ class MCPHandler(BaseHTTPRequestHandler):
                 return
             self._serve_room_sse(room_id, after_id=after_id, backlog_limit=backlog_limit)
             return
+        sidepanel = _handle_sidepanel_get(parsed)
+        if sidepanel is not None:
+            if not _sidepanel_request_allowed(self.headers.get("Origin", ""), self.client_address[0]):
+                self._reply(403, {"ok": False, "error": "forbidden sidepanel origin"})
+                return
+            code, body = sidepanel
+            self._reply(code, body)
+            return
         if path == "/ws":
             if not _origin_allowed(self.headers.get("Origin", "")):
                 self._reply(403, {"error": "forbidden origin"})
@@ -2588,13 +3462,24 @@ class MCPHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        if path != "/mcp":
-            self._reply(404, {"error": "not found", "path": path})
+        origin = self.headers.get("Origin", "")
+        if path == "/v1/tb2/rooms":
+            if not _sidepanel_request_allowed(origin, self.client_address[0]):
+                self._reply(403, {"ok": False, "error": "forbidden sidepanel origin"})
+                return
+            code, body = _sidepanel_create_room_response()
+            self._reply(code, body)
             return
-        if not _origin_allowed(self.headers.get("Origin", "")):
+        if path == "/v1/tb2/message":
+            if not _sidepanel_request_allowed(origin, self.client_address[0]):
+                self._reply(403, {"ok": False, "error": "forbidden sidepanel origin"})
+                return
+        elif not _origin_allowed(origin):
             self._reply(403, {"error": "forbidden origin"})
             return
-
+        if path not in {"/mcp", "/v1/tb2/message"}:
+            self._reply(404, {"error": "not found", "path": path})
+            return
         raw_length = self.headers.get("Content-Length")
         try:
             length = _parse_int(raw_length, name="Content-Length", minimum=0)
@@ -2620,6 +3505,13 @@ class MCPHandler(BaseHTTPRequestHandler):
             req = json.loads(body)
         except json.JSONDecodeError:
             self._reply(400, {"error": "invalid JSON"})
+            return
+        if path == "/v1/tb2/message":
+            if not isinstance(req, dict):
+                self._reply(400, {"ok": False, "error": "invalid JSON object"})
+                return
+            code, payload = _sidepanel_message_response(req)
+            self._reply(code, payload)
             return
 
         # JSON-RPC batch support
@@ -2754,6 +3646,7 @@ class MCPHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
+        self._write_cors_headers()
         self.end_headers()
         self.wfile.write(data)
 
@@ -2762,12 +3655,14 @@ class MCPHandler(BaseHTTPRequestHandler):
         safe_content_type = self._sanitize_header_value(content_type)
         self.send_header("Content-Type", safe_content_type)
         self.send_header("Content-Length", str(len(body)))
+        self._write_cors_headers()
         self.end_headers()
         self.wfile.write(body)
 
     def _reply_empty(self, code: int) -> None:
         self.send_response(code)
         self.send_header("Content-Length", "0")
+        self._write_cors_headers()
         self.end_headers()
 
     def _serve_room_sse(self, room_id: str, *, after_id: int, backlog_limit: int) -> None:

@@ -60,6 +60,19 @@ description: TB2 治理分層最小契約，定義 precedence、effective config
 - `effective_config`
 - `provenance`
 
+`Batch A` 也先建立一條最小 runtime 邊界：
+
+- `review_mode` 是第一個 authoritative governance key
+- `preferred_backend` 目前仍是 advisory
+- `rate_limit`、`pending_limit` 這類 per-workstream policy key 仍屬 mutable exception keys，不在第一批 authoritative subset 內
+- operator `pause_review` / `resume_review` 現在只會在 baseline 為 `auto` 時形成明確的 review-mode exception；不會覆蓋 authoritative `manual` baseline
+- `workstream_update_policy` 現在會把 policy mutation 記錄成 policy baseline 之上的 mutable exception，而不是沒有語義的設定更新
+
+`Batch B` 目前開始把治理決策做成可消費的機器輸出：
+
+- 每個 workstream 的 governance payload 會附帶 `decision_trace`
+- fleet status 會額外摘要 `governance_review_overrides`、`governance_policy_overrides`、`governance_exceptions`
+
 ### `matched_layers`
 
 列出這次解析實際命中的 layer。
@@ -85,6 +98,8 @@ python -m tb2 governance resolve \
 ```
 
 這會回傳目前模擬解析出的治理結果，不會改動 runtime state。
+
+若 caller 在 `bridge_start` 明確指定 `instruction_profile`，TB2 可以把 authoritative `review_mode` 的最小子集投影到啟動時行為。這一批刻意只做很窄的 projection，不代表已經進入一般化 auto-apply。
 
 同一份 read-only 解析結果也已透過 MCP/server tool 暴露：
 

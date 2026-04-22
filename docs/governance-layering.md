@@ -61,6 +61,19 @@ When a governance resolver is implemented, its minimal output should include:
 - `effective_config`
 - `provenance`
 
+Batch A also establishes a minimal runtime boundary:
+
+- `review_mode` is the first authoritative governance key
+- `preferred_backend` remains advisory
+- per-workstream policy keys such as `rate_limit` and `pending_limit` remain mutable exception keys outside the authoritative subset
+- operator `pause_review` / `resume_review` now behave as explicit review-mode exceptions only when the baseline is `auto`; they do not override an authoritative `manual` baseline
+- `workstream_update_policy` now records policy mutation as a mutable exception layer over the policy baseline rather than as an unqualified config change
+
+Batch B starts exposing machine-readable decision consumption:
+
+- each workstream governance payload now includes `decision_trace`
+- fleet status now summarizes governance exception pressure through `governance_review_overrides`, `governance_policy_overrides`, and `governance_exceptions`
+
 ### `matched_layers`
 
 Lists the layers that actually matched for the current resolution.
@@ -86,6 +99,8 @@ python -m tb2 governance resolve \
 ```
 
 This returns the current simulated governance resolution without mutating runtime state.
+
+When a caller explicitly sets an `instruction_profile` during `bridge_start`, TB2 may project the authoritative `review_mode` subset into runtime startup behavior. This is intentionally narrow and does not yet imply general auto-apply.
 
 The same read-only resolution is also available through the MCP/server tool:
 

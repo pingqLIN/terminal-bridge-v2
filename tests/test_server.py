@@ -3,10 +3,13 @@
 import io
 import json
 import os
+from pathlib import Path
 import shutil
 import socket
 import subprocess
+import threading
 from unittest.mock import MagicMock, patch
+import urllib.request
 
 import pytest
 
@@ -60,6 +63,11 @@ const messages = {
   'cards.statusBadgeSecurity': 'Security {tier}',
   'cards.statusBadgeHealth': 'Health {state}',
   'cards.statusBadgeEscalation': 'Escalation {mode}',
+  'cards.statusBadgeGovernance': 'Governance {name}',
+  'cards.statusBadgeReviewMode': 'Review {mode}',
+  'cards.statusBadgeBackend': 'Preferred backend {backend}',
+  'cards.governanceSummary': 'Governance {layers}',
+  'cards.governanceSummaryEmpty': 'No governance layers matched.',
   'fleet.healthOk': 'healthy',
   'fleet.healthWarn': 'warn',
   'fleet.healthCritical': 'critical',
@@ -71,6 +79,12 @@ function t(path) {
 }
 function format(path, values) {
   return t(path).replace(/\\{(\\w+)\\}/g, (_, key) => String((values && values[key]) ?? ''));
+}
+function governancePrimaryName() {
+  return '';
+}
+function governanceEffective() {
+  return '';
 }
 """ + function_src + "\nconst result = " + expression + ";\nconsole.log(JSON.stringify(result));\n"
     done = subprocess.run(
@@ -90,6 +104,18 @@ def clean_server_state():
         for b in server_mod._bridges.values():
             b.stop.set()
         server_mod._bridges.clear()
+    with server_mod._sidepanel_lock:
+        for item in server_mod._sidepanel_rooms.values():
+            proc = item.process
+            if proc is None:
+                continue
+            try:
+                if proc.poll() is None:
+                    proc.terminate()
+            except Exception:
+                pass
+        server_mod._sidepanel_rooms.clear()
+        server_mod._sidepanel_probe_cache.update({"checked_at": 0.0, "detail": "", "ok": None})
     with server_mod._workstreams_lock:
         server_mod._workstreams.clear()
     with server_mod._backend_cache_lock:
@@ -254,6 +280,229 @@ class TestRoomHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "br-invalid"})
 
 
+class DummyPipe:
+    def __init__(self):
+        self.buffer = ""
+        self.closed = False
+
+    def write(self, text: str) -> None:
+        self.buffer += text
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class DummyProc:
+    def __init__(self):
+        self.stdin = DummyPipe()
+        self.returncode = None
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self):
+        self.returncode = 0
+        return 0
+
+    def terminate(self) -> None:
+        self.returncode = -15
+
+
+class DummyThread:
+    def __init__(self, *, target=None, args=(), **_kwargs):
+        self.target = target
+        self.args = args
+        self.started = False
+
+    def start(self) -> None:
+        self.started = True
+
+
+class TestSidepanelCompat:
+    @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_create_room_response_surfaces_backend_failure(self, mock_factory):
+        mock_factory.side_effect = FileNotFoundError("backend missing")
+
+        code, payload = server_mod._sidepanel_create_room_response()
+
+        assert code == 503
+        assert payload["ok"] is False
+        assert "failed to initialize TB2 room session" in payload["error"]
+
+    @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_create_room_initializes_session(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.init_session.return_value = ("sp-room:a", "sp-room:b")
+        mock_factory.return_value = mock_backend
+
+        result = server_mod._sidepanel_create_room()
+
+        assert result["ok"] is True
+        room_id = result["roomId"]
+        assert get_room(room_id) is not None
+        state = server_mod._sidepanel_room_state(room_id)
+        assert state is not None
+        assert state.session == f"sp-{room_id}"
+        assert state.pane_a == "sp-room:a"
+        assert state.pane_b == "sp-room:b"
+
+    def test_sidepanel_health_reports_expected_contract(self, monkeypatch):
+        monkeypatch.setattr(server_mod.shutil, "which", lambda name: "/usr/bin/codex" if name == "codex" else None)
+        monkeypatch.setattr(server_mod, "_sidepanel_backend_ready", lambda force=False: (True, ""))
+
+        payload = server_mod._sidepanel_health_payload()
+
+        assert payload["ok"] is True
+        assert payload["ready"] is True
+        assert payload["bridgeMode"] == "tb2-codex"
+        assert payload["provider"] == "local-tb2-codex-bridge"
+        assert payload["codexAvailable"] is True
+        assert payload["backendReady"] is True
+        assert payload["tb2RuntimeInstalled"] is True
+        assert "streaming log previews" in payload["note"]
+
+    @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_message_poll_and_finalize_flow(self, mock_factory, monkeypatch, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.init_session.return_value = ("sp-flow:a", "sp-flow:b")
+        mock_factory.return_value = mock_backend
+        monkeypatch.setattr(server_mod.shutil, "which", lambda name: "/usr/bin/codex" if name == "codex" else None)
+        monkeypatch.setenv("TB2_SIDEPANEL_WORKDIR", str(tmp_path))
+
+        proc = DummyProc()
+        monkeypatch.setattr(server_mod.subprocess, "Popen", lambda *args, **kwargs: proc)
+        monkeypatch.setattr(server_mod.threading, "Thread", DummyThread)
+
+        created = server_mod._sidepanel_create_room()
+        room_id = created["roomId"]
+
+        code, accepted = server_mod._sidepanel_message_response({
+            "roomId": room_id,
+            "prompt": "Summarize this tab",
+            "mode": "tb2-codex",
+        })
+
+        assert code == 202
+        assert accepted["ok"] is True
+        state = server_mod._sidepanel_room_state(room_id)
+        assert state is not None
+        assert state.pending is True
+        assert "Summarize this tab" in proc.stdin.buffer
+
+        log_path = state.log_path
+        output_path = state.output_path
+        assert log_path
+        assert output_path
+
+        Path(log_path).write_text("partial output", encoding="utf-8")
+        first_code, first_poll = server_mod._sidepanel_poll_response(room_id, 0)
+
+        assert first_code == 200
+        assert first_poll["messages"][0]["role"] == "user"
+        assert first_poll["messages"][1]["role"] == "system"
+        assert first_poll["messages"][1]["meta"]["streamKey"] == state.run_id
+        assert first_poll["messages"][1]["meta"]["replace"] is True
+        assert first_poll["messages"][1]["meta"]["final"] is False
+
+        Path(output_path).write_text("Final assistant answer", encoding="utf-8")
+        server_mod._sidepanel_finalize_run(room_id, state.run_id, proc, open(log_path, "a", encoding="utf-8"))
+
+        second_code, second_poll = server_mod._sidepanel_poll_response(room_id, first_poll["latestId"])
+
+        assert second_code == 200
+        assert len(second_poll["messages"]) == 1
+        assert second_poll["messages"][0]["role"] == "assistant"
+        assert second_poll["messages"][0]["text"] == "Final assistant answer"
+        assert second_poll["messages"][0]["meta"]["streamKey"] == first_poll["messages"][1]["meta"]["streamKey"]
+        assert second_poll["messages"][0]["meta"]["final"] is True
+
+    @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_message_response_surfaces_launch_failure_without_posting_user_message(self, mock_factory, monkeypatch, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.init_session.return_value = ("sp-fail:a", "sp-fail:b")
+        mock_factory.return_value = mock_backend
+        monkeypatch.setattr(server_mod.shutil, "which", lambda name: "/usr/bin/codex" if name == "codex" else None)
+        monkeypatch.setenv("TB2_SIDEPANEL_WORKDIR", str(tmp_path))
+        monkeypatch.setattr(server_mod.subprocess, "Popen", MagicMock(side_effect=OSError("spawn failed")))
+
+        room_id = server_mod._sidepanel_create_room()["roomId"]
+        code, payload = server_mod._sidepanel_message_response({
+            "roomId": room_id,
+            "prompt": "Will this fail?",
+        })
+
+        assert code == 503
+        assert payload["ok"] is False
+        room = get_room(room_id)
+        assert room is not None
+        assert room.latest_id == 0
+
+    def test_origin_allows_extension_scheme_on_loopback(self):
+        server_mod._server_context["host"] = "127.0.0.1"
+
+        assert server_mod._origin_allowed("chrome-extension://abcdefghijklmnop")
+        assert server_mod._sidepanel_request_allowed("chrome-extension://abcdefghijklmnop", "127.0.0.1") is True
+        assert server_mod._sidepanel_request_allowed("", "127.0.0.1") is True
+        assert server_mod._sidepanel_request_allowed("", "10.0.0.5") is False
+        assert server_mod._sidepanel_request_allowed("chrome-extension://abcdefghijklmnop", "10.0.0.5") is False
+
+    @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_rejects_new_prompt_until_previous_run_finalizes(self, mock_factory, monkeypatch, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.init_session.return_value = ("sp-race:a", "sp-race:b")
+        mock_factory.return_value = mock_backend
+        monkeypatch.setattr(server_mod.shutil, "which", lambda name: "/usr/bin/codex" if name == "codex" else None)
+        monkeypatch.setenv("TB2_SIDEPANEL_WORKDIR", str(tmp_path))
+        monkeypatch.setattr(server_mod.threading, "Thread", DummyThread)
+
+        proc = DummyProc()
+        monkeypatch.setattr(server_mod.subprocess, "Popen", lambda *args, **kwargs: proc)
+
+        room_id = server_mod._sidepanel_create_room()["roomId"]
+        first_code, _first = server_mod._sidepanel_message_response({
+            "roomId": room_id,
+            "prompt": "first prompt",
+        })
+        assert first_code == 202
+
+        proc.returncode = 0
+        second_code, second = server_mod._sidepanel_message_response({
+            "roomId": room_id,
+            "prompt": "second prompt",
+        })
+
+        assert second_code == 409
+        assert second["error"] == "room already has a pending prompt"
+
+    @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_http_routes_work_on_loopback(self, mock_factory, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.init_session.return_value = ("sp-http:a", "sp-http:b")
+        mock_factory.return_value = mock_backend
+        monkeypatch.setattr(server_mod.shutil, "which", lambda name: "/usr/bin/codex" if name == "codex" else None)
+        monkeypatch.setattr(server_mod, "_sidepanel_backend_ready", lambda force=False: (True, ""))
+
+        server = server_mod.ThreadingHTTPServer(("127.0.0.1", 0), server_mod.MCPHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            port = server.server_address[1]
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as resp:
+                health = json.loads(resp.read().decode("utf-8"))
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/tb2/rooms", data=b"", method="POST")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                created = json.loads(resp.read().decode("utf-8"))
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2.0)
+
+        assert health["ok"] is True
+        assert health["ready"] is True
+        assert created["ok"] is True
+        assert get_room(created["roomId"]) is not None
+
+
 class TestTerminalHandlers:
     @patch.object(server_mod, "_make_backend")
     def test_terminal_init(self, mock_factory):
@@ -301,6 +550,34 @@ class TestProfileHandlers:
         assert result["platform"] == "Windows"
         mock_doctor.assert_called_once_with(distro="Ubuntu")
 
+    def test_governance_resolve(self, tmp_path):
+        config = tmp_path / "governance.json"
+        config.write_text(json.dumps({
+            "environment": {
+                "wsl-tmux": {
+                    "preferred_backend": "pipe",
+                }
+            }
+        }), encoding="utf-8")
+        result = server_mod.handle_governance_resolve({
+            "environment": "wsl-tmux",
+            "config_path": str(config),
+        })
+        assert result["effective_config"]["preferred_backend"] == "pipe"
+        assert result["config_path"] == str(config)
+
+    def test_governance_resolve_invalid_config(self, tmp_path):
+        config = tmp_path / "governance.json"
+        config.write_text(json.dumps({
+            "unknown": {
+                "demo": {"x": 1},
+            }
+        }), encoding="utf-8")
+        result = server_mod.handle_governance_resolve({
+            "config_path": str(config),
+        })
+        assert result["error"] == "unknown governance layer: unknown"
+
 
 class TestStatusHandler:
     @patch.object(server_mod, "_make_backend")
@@ -341,6 +618,19 @@ class TestStatusHandler:
         assert result["runtime"]["audit_policy_persistence"] == "process_env_only"
         assert result["runtime"]["continuity"]["mode"] == "process_local_only"
         assert result["runtime"]["continuity"]["runtime_restored"] is False
+        assert result["governance"]["requested"]["instruction_profile"] == "mcp-operator"
+        assert result["governance"]["layer_order"] == [
+            "base",
+            "model",
+            "environment",
+            "instruction_profile",
+        ]
+        assert any(item["layer"] == "base" for item in result["governance"]["matched_layers"])
+        assert result["governance"]["effective_config"]["review_mode"] in {"guarded", "manual", "auto"}
+        assert result["governance"]["authoritative_keys"] == ["review_mode"]
+        assert "review_mode" in result["workstreams"][0]["governance"]["authoritative_keys"]
+        assert result["workstreams"][0]["governance"]["key_classes"]["review_mode"] == "authoritative"
+        assert result["workstreams"][0]["governance"]["policy_state"]["overrides"] == {}
         room_ids = [r["id"] for r in result["rooms"]]
         assert "status-test" in room_ids
         assert result["bridges"] == ["status-bridge"]
@@ -362,6 +652,9 @@ class TestStatusHandler:
         assert result["fleet"]["live"] == 1
         assert result["fleet"]["healthy"] == 1
         assert result["fleet"]["alerts"] == 0
+        assert result["fleet"]["governance_review_overrides"] == 0
+        assert result["fleet"]["governance_policy_overrides"] == 0
+        assert result["fleet"]["governance_exceptions"] == 0
         assert result["fleet"]["orphaned_rooms"] == 0
         assert result["fleet"]["orphaned_workstreams"] == 0
         assert result["fleet"]["stale_workstreams"] == 0
@@ -506,6 +799,32 @@ class TestStatusHandler:
         assert result["audit"]["redaction"]["raw_text_opt_in_env"] == "TB2_AUDIT_ALLOW_FULL_TEXT"
         assert result["security"]["support_tier"] == "local-first-supported"
 
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_applies_authoritative_governance_review_mode(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        started = server_mod.handle_bridge_start({
+            "pane_a": "gov:a",
+            "pane_b": "gov:b",
+            "room_id": "gov-room",
+            "bridge_id": "gov-bridge",
+            "workstream_id": "gov-main",
+            "instruction_profile": "approval-gate",
+            "intervention": False,
+        })
+
+        assert started["workstream_id"] == "gov-main"
+        workstream = server_mod.handle_workstream_get({"workstream_id": "gov-main"})["workstream"]
+        assert workstream["review_mode"] == "manual"
+        assert workstream["intervention"] is True
+        assert workstream["governance"]["requested"]["instruction_profile"] == "approval-gate"
+        assert workstream["governance"]["runtime_projection"]["review_mode"]["state"] == "enforced"
+        assert workstream["governance"]["applied_controls"]["review_mode"]["value"] == "manual"
+
+        server_mod.handle_bridge_stop({"bridge_id": "gov-bridge"})
+
 
 class TestAuditTrail:
     @patch.object(server_mod, "_make_backend")
@@ -598,6 +917,40 @@ class TestWorkstreamHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "ws-bridge"})
 
     @patch.object(server_mod, "_make_backend")
+    def test_status_reports_governance_exception_summary(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:summary:a",
+            "pane_b": "ws:summary:b",
+            "room_id": "ws-summary-room",
+            "bridge_id": "ws-summary-bridge",
+            "workstream_id": "ws-summary-main",
+            "auto_forward": True,
+        })
+
+        server_mod.handle_workstream_pause_review({"workstream_id": "ws-summary-main"})
+        server_mod.handle_workstream_update_policy({
+            "workstream_id": "ws-summary-main",
+            "rate_limit": 2,
+            "silent_seconds": 45,
+        })
+        result = server_mod.handle_status({})
+
+        assert result["fleet"]["governance_review_overrides"] == 1
+        assert result["fleet"]["governance_policy_overrides"] == 2
+        assert result["fleet"]["governance_exceptions"] == 3
+        workstream = next(item for item in result["workstreams"] if item["workstream_id"] == "ws-summary-main")
+        trace = workstream["governance"]["decision_trace"]
+        assert any(item["kind"] == "review_mode" and item["state"] == "override" for item in trace)
+        assert any(item["kind"] == "policy" and item["key"] == "rate_limit" for item in trace)
+        assert any(item["kind"] == "policy" and item["key"] == "silent_seconds" for item in trace)
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-summary-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
     def test_workstream_pause_and_resume_review(self, mock_factory, tmp_path, monkeypatch):
         mock_backend = MagicMock()
         mock_backend.capture_both.return_value = ([], [])
@@ -622,8 +975,17 @@ class TestWorkstreamHandlers:
         })
 
         assert paused["workstream"]["review_mode"] == "paused"
+        assert paused["workstream"]["governance"]["review_mode_state"]["baseline"] == "auto"
+        assert paused["workstream"]["governance"]["review_mode_state"]["override_active"] is True
+        assert paused["workstream"]["governance"]["review_mode_state"]["effective_source"] == "operator_override"
+        assert paused["workstream"]["governance"]["decision_trace"][0]["kind"] == "review_mode"
+        assert paused["workstream"]["governance"]["decision_trace"][0]["state"] == "override"
+        assert paused["workstream"]["governance"]["decision_trace"][0]["reason"] == "operator_pause_review"
         assert paused["workstream"]["health"]["alerts"][0]["code"] == "review_paused"
         assert resumed["workstream"]["review_mode"] == "auto"
+        assert resumed["workstream"]["governance"]["review_mode_state"]["override_active"] is False
+        assert resumed["workstream"]["governance"]["review_mode_state"]["effective_source"] == "governance"
+        assert resumed["workstream"]["governance"]["decision_trace"][0]["state"] == "baseline"
         assert [item["event"] for item in audit["events"] if item["event"].startswith("workstream.review_")] == [
             "workstream.review_paused",
             "workstream.review_resumed",
@@ -656,6 +1018,34 @@ class TestWorkstreamHandlers:
         assert resumed["pending_count"] == 1
 
         server_mod.handle_bridge_stop({"bridge_id": "ws-pending-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
+    def test_governance_manual_review_mode_survives_pause_resume_without_override(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:gov:a",
+            "pane_b": "ws:gov:b",
+            "room_id": "ws-gov-room",
+            "bridge_id": "ws-gov-bridge",
+            "workstream_id": "ws-gov-main",
+            "instruction_profile": "approval-gate",
+        })
+
+        paused = server_mod.handle_workstream_pause_review({"workstream_id": "ws-gov-main"})
+        resumed = server_mod.handle_workstream_resume_review({"workstream_id": "ws-gov-main"})
+
+        assert paused["workstream"]["review_mode"] == "manual"
+        assert paused["workstream"]["governance"]["review_mode_state"]["baseline"] == "manual"
+        assert paused["workstream"]["governance"]["review_mode_state"]["override_active"] is False
+        assert paused["workstream"]["governance"]["review_mode_state"]["effective_source"] == "governance"
+        assert resumed["workstream"]["review_mode"] == "manual"
+        assert resumed["workstream"]["governance"]["review_mode_state"]["override_active"] is False
+        assert resumed["workstream"]["governance"]["review_mode_state"]["effective_source"] == "governance"
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-gov-bridge"})
 
     @patch.object(server_mod, "_make_backend")
     def test_workstream_resume_review_respects_parent_dependency_state(self, mock_factory):
@@ -736,6 +1126,12 @@ class TestWorkstreamHandlers:
         assert bridge.policy["rate_limit"] == 2
         assert audit["count"] == 1
         assert audit["events"][0]["policy"]["rate_limit"] == 2
+        assert updated["workstream"]["governance"]["policy_state"]["effective"]["rate_limit"] == 2
+        assert updated["workstream"]["governance"]["policy_state"]["overrides"]["rate_limit"]["source"] == "operator_exception"
+        assert updated["workstream"]["governance"]["policy_state"]["overrides"]["rate_limit"]["reason"] == "workstream_update_policy"
+        assert audit["events"][0]["governance"]["policy_state"]["overrides"]["rate_limit"]["value"] == 2
+        policy_trace = [item for item in updated["workstream"]["governance"]["decision_trace"] if item["kind"] == "policy"]
+        assert any(item["key"] == "rate_limit" and item["value"] == 2 for item in policy_trace)
 
         server_mod.handle_bridge_stop({"bridge_id": "ws-policy-bridge"})
 
@@ -836,6 +1232,9 @@ class TestWorkstreamHandlers:
 
         assert updated["workstream"]["policy"]["silent_seconds"] == 90.0
         assert updated["workstream"]["bridge_active"] is False
+        assert updated["workstream"]["governance"]["policy_state"]["overrides"]["silent_seconds"]["value"] == 90.0
+        policy_trace = [item for item in updated["workstream"]["governance"]["decision_trace"] if item["kind"] == "policy"]
+        assert any(item["key"] == "silent_seconds" and item["value"] == 90.0 for item in policy_trace)
 
     def test_workstream_update_policy_requires_fields(self):
         server_mod._set_workstream(
@@ -2244,6 +2643,9 @@ class TestMCPProtocol:
         assert audit_recent["properties"]["workstream_id"]["type"] == "string"
         assert audit_recent["properties"]["event"]["type"] == "string"
         assert audit_recent["properties"]["limit"]["maximum"] == 200
+        governance_resolve = tools["governance_resolve"]["inputSchema"]
+        assert governance_resolve["properties"]["model"]["type"] == "string"
+        assert governance_resolve["properties"]["config_path"]["type"] == "string"
 
     @patch.object(server_mod, "_make_backend")
     def test_tools_call_workstream_list_returns_structured_payload(self, mock_factory):
@@ -2298,6 +2700,62 @@ class TestMCPProtocol:
         tool_result = result["result"]["structuredContent"]
         assert "backends" in tool_result
         assert "clients" in tool_result
+
+    def test_tools_call_governance_resolve_returns_resolution(self, tmp_path):
+        config = tmp_path / "governance.json"
+        config.write_text(json.dumps({
+            "instruction_profile": {
+                "approval-gate": {
+                    "approval_mode": "strict-required",
+                }
+            }
+        }), encoding="utf-8")
+
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 16,
+            "method": "tools/call",
+            "params": {
+                "name": "governance_resolve",
+                "arguments": {
+                    "environment": "wsl-tmux",
+                    "instruction_profile": "approval-gate",
+                    "config_path": str(config),
+                },
+            },
+        })
+
+        tool_result = result["result"]["structuredContent"]
+        assert tool_result["effective_config"]["preferred_backend"] == "tmux"
+        assert tool_result["effective_config"]["approval_mode"] == "strict-required"
+        assert tool_result["provenance"]["approval_mode"] == {
+            "layer": "instruction_profile",
+            "name": "approval-gate",
+        }
+
+    def test_tools_call_governance_resolve_returns_error(self, tmp_path):
+        config = tmp_path / "governance.json"
+        config.write_text(json.dumps({
+            "unknown": {
+                "demo": {"x": 1},
+            }
+        }), encoding="utf-8")
+
+        result = self._rpc({
+            "jsonrpc": "2.0",
+            "id": 17,
+            "method": "tools/call",
+            "params": {
+                "name": "governance_resolve",
+                "arguments": {
+                    "config_path": str(config),
+                },
+            },
+        })
+
+        tool_result = result["result"]
+        assert tool_result["structuredContent"]["error"] == "unknown governance layer: unknown"
+        assert tool_result["isError"] is True
 
     def test_tools_call_unknown_tool_uses_is_error(self):
         result = self._rpc({
@@ -2435,21 +2893,31 @@ class TestGuiRouting:
     def test_gui_html_surfaces_status_summary_badges(self):
         html = server_mod.build_gui_html("/mcp")
         assert 'id="status-badges"' in html
+        assert 'id="status-governance"' in html
         assert "function renderStatusSummary(status)" in html
         assert "function statusSummaryLabels(status, detail, subscribers)" in html
         assert "function workstreamDependencyLabel(detail)" in html
         assert "function workstreamDependencyBlocker(detail)" in html
+        assert "function governanceMatchedLayers(status)" in html
+        assert "function governanceSummaryText(status)" in html
+        assert "function governancePrimaryName(status)" in html
         assert "cards.statusBadgeAuditRaw" in html
         assert "cards.statusBadgeAuditRawBlocked" in html
         assert "cards.statusBadgeSecurity" in html
         assert "cards.statusBadgeHealth" in html
         assert "cards.statusBadgeEscalation" in html
+        assert "cards.statusBadgeGovernance" in html
+        assert "cards.statusBadgeReviewMode" in html
+        assert "cards.statusBadgeBackend" in html
+        assert "cards.governanceSummary" in html
+        assert "cards.inspectTileGovernance" in html
         assert "active.auto_forward_guard && active.auto_forward_guard.quota_reason" in html
         assert "workstreamDependencyBlocker(active)" in html
         assert "cards.inspectTileDependency" in html
         assert "status.audit.redaction && status.audit.redaction.raw_text_opt_in_blocked" in html
         assert "status.audit.redaction && status.audit.redaction.stores_raw_text" in html
         assert "format('cards.statusBadgePending'" in html
+        assert "if (governance) governance.textContent = governanceSummaryText(status);" in html
         assert "renderStatusSummary(res);" in html
 
     @pytest.mark.skipif(shutil.which("node") is None, reason="node is required for GUI behavior tests")
