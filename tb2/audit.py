@@ -187,6 +187,12 @@ _AUDIT_EVENT_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "profile": True,
         "auto_forward": True,
         "intervention": True,
+        "governance": {
+            "requested": True,
+            "matched_layers": True,
+            "authoritative_keys": True,
+            "applied_controls": True,
+        },
         "tier": True,
         "parent_workstream_id": True,
     },
@@ -227,11 +233,19 @@ _AUDIT_EVENT_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "workstream_id": True,
         "bridge_id": True,
         "room_id": True,
+        "governance": {
+            "review_mode_state": True,
+            "applied_controls": True,
+        },
     },
     "workstream.review_resumed": {
         "workstream_id": True,
         "bridge_id": True,
         "room_id": True,
+        "governance": {
+            "review_mode_state": True,
+            "applied_controls": True,
+        },
     },
     "workstream.policy_updated": {
         "workstream_id": True,
@@ -245,6 +259,9 @@ _AUDIT_EVENT_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "pending_critical": True,
             "pending_limit": True,
             "silent_seconds": True,
+        },
+        "governance": {
+            "policy_state": True,
         },
     },
     "workstream.dependency_updated": {

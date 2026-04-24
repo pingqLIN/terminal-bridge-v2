@@ -34,6 +34,11 @@ def test_resolve_governance_merges_in_layer_order() -> None:
     assert result["effective_config"]["network_access"] == "restricted"
     assert result["effective_config"]["review_mode"] == "manual"
     assert result["effective_config"]["approval_mode"] == "required"
+    assert result["authoritative_keys"] == ["review_mode"]
+    assert result["exception_keys"][0] == "review_mode"
+    assert result["key_classes"]["review_mode"] == "authoritative"
+    assert result["runtime_projection"]["review_mode"]["state"] == "enforced"
+    assert result["runtime_projection"]["review_mode"]["value"] == "manual"
     assert result["provenance"]["review_mode"] == {
         "layer": "instruction_profile",
         "name": "approval-gate",
@@ -164,6 +169,14 @@ def test_governance_sample_overlay_validates() -> None:
 
     assert validated["environment"]["wsl-tmux"]["preferred_backend"] == "tmux"
     assert validated["instruction_profile"]["approval-gate"]["review_mode"] == "manual"
+
+
+def test_resolve_governance_marks_preferred_backend_as_advisory() -> None:
+    result = resolve_governance(environment="wsl-tmux")
+
+    assert result["key_classes"]["review_mode"] == "authoritative"
+    assert result["key_classes"]["preferred_backend"] == "advisory"
+    assert result["runtime_projection"]["preferred_backend"]["state"] == "advisory"
 
 
 def test_repo_sample_file_matches_exported_sample() -> None:

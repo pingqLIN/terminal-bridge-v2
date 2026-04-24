@@ -277,16 +277,15 @@ class ProcessBackend(TerminalBackend):
             )
 
         env = self._merge_env(spec)
-        cmdline = subprocess.list2cmdline(spec.argv)
         spawn_kwargs: Dict[str, object] = {}
         if spec.cwd:
             spawn_kwargs["cwd"] = spec.cwd
         if env is not None:
             spawn_kwargs["env"] = env
         try:
-            proc = PtyProcess.spawn(cmdline, **spawn_kwargs)
+            proc = PtyProcess.spawn(list(spec.argv), **spawn_kwargs)
         except TypeError:
-            proc = PtyProcess.spawn(cmdline)
+            proc = PtyProcess.spawn(list(spec.argv))
 
         def write_fn(text: str) -> None:
             proc.write(text)

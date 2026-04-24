@@ -135,6 +135,18 @@ _SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
+_AUTHORITATIVE_KEYS = ("review_mode",)
+_EXCEPTION_KEYS = (
+    "review_mode",
+    "rate_limit",
+    "window_seconds",
+    "streak_limit",
+    "pending_warn",
+    "pending_critical",
+    "pending_limit",
+    "silent_seconds",
+)
+
 
 def governance_layers() -> LayerMap:
     """Return a copy of the built-in governance layer config."""
@@ -149,6 +161,51 @@ def governance_overlay_schema() -> Dict[str, Any]:
 def governance_sample_overlay() -> LayerMap:
     """Return a sample governance layer overlay."""
     return deepcopy(_SAMPLE_OVERLAY)
+
+
+def governance_authoritative_keys() -> List[str]:
+    """Return governance keys that Batch A treats as authoritative."""
+    return list(_AUTHORITATIVE_KEYS)
+
+
+def governance_exception_keys() -> List[str]:
+    """Return runtime keys that can be overridden as mutable exceptions."""
+    return list(_EXCEPTION_KEYS)
+
+
+def governance_key_classes(*, effective_config: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+    """Classify governance keys as authoritative or advisory."""
+    classes: Dict[str, str] = {}
+    if effective_config:
+        for key in effective_config:
+            classes[key] = "authoritative" if key in _AUTHORITATIVE_KEYS else "advisory"
+    for key in _AUTHORITATIVE_KEYS:
+        classes.setdefault(key, "authoritative")
+    return classes
+
+
+def governance_runtime_projection(
+    effective_config: Dict[str, Any],
+    provenance: Dict[str, Dict[str, str]],
+) -> Dict[str, Dict[str, Any]]:
+    """Project a small authoritative subset into runtime-facing controls."""
+    projection: Dict[str, Dict[str, Any]] = {}
+    review_mode = effective_config.get("review_mode")
+    if review_mode is not None:
+        state = "enforced" if str(review_mode) in {"auto", "manual"} else "advisory"
+        projection["review_mode"] = {
+            "value": str(review_mode),
+            "state": state,
+            "source": deepcopy(provenance.get("review_mode", {})),
+        }
+    preferred_backend = effective_config.get("preferred_backend")
+    if preferred_backend is not None:
+        projection["preferred_backend"] = {
+            "value": str(preferred_backend),
+            "state": "advisory",
+            "source": deepcopy(provenance.get("preferred_backend", {})),
+        }
+    return projection
 
 
 def load_governance_layers(path: str = "") -> LayerMap:
@@ -245,6 +302,10 @@ def resolve_governance(
         "requested": requested,
         "matched_layers": matched,
         "missing_layers": missing,
+        "authoritative_keys": governance_authoritative_keys(),
+        "exception_keys": governance_exception_keys(),
+        "key_classes": governance_key_classes(effective_config=effective),
         "effective_config": effective,
         "provenance": provenance,
+        "runtime_projection": governance_runtime_projection(effective, provenance),
     }

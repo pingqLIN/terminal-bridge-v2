@@ -2447,6 +2447,7 @@ GUI_HTML_TEMPLATE = r"""
               </div>
               <div class="summary-strip" id="inspect-strip"></div>
               <div class="note" id="status-note" data-i18n="cards.statusNote">Presets hide complexity, but they do not remove it. Open raw status when pane IDs, bridge IDs, or transport state matter.</div>
+              <div class="note" id="status-governance"></div>
               <div class="badge-row" id="status-badges"></div>
                 <div class="row">
                 <div class="panel-field panel-field--display">
@@ -2791,6 +2792,7 @@ GUI_HTML_TEMPLATE = r"""
             inspectTileTransport: 'Transport',
             inspectTileGuard: 'Guard',
             inspectTileDependency: 'Dependency',
+            inspectTileGovernance: 'Governance',
             inspectDependencyClear: 'No dependency blocker',
             inspectGuardActive: 'guarded',
             inspectGuardIdle: 'not guarding',
@@ -2808,7 +2810,13 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeAuditRawBlocked: 'Audit raw blocked',
             statusBadgeSecurity: 'Security {tier}',
             statusBadgeHealth: 'Health {state}',
-            statusBadgeEscalation: 'Escalation {mode}'
+            statusBadgeEscalation: 'Escalation {mode}',
+            statusBadgeGovernance: 'Governance {name}',
+            statusBadgeReviewMode: 'Review {mode}',
+            statusBadgeBackend: 'Preferred backend {backend}',
+            governanceSummary: 'Governance {layers}',
+            governanceSummaryEmpty: 'No governance layers matched.',
+            governanceInspectFallback: 'Open raw status to inspect effective governance and provenance.'
           },
           auditEvents: {
             all: 'all events'
@@ -3185,6 +3193,7 @@ GUI_HTML_TEMPLATE = r"""
             inspectTileTransport: 'Transport',
             inspectTileGuard: 'Guard',
             inspectTileDependency: 'Dependency',
+            inspectTileGovernance: 'Governance',
             inspectDependencyClear: '目前沒有 dependency blocker',
             inspectGuardActive: '警戒中',
             inspectGuardIdle: '未警戒',
@@ -3202,7 +3211,13 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeAuditRawBlocked: 'Audit raw 已阻擋',
             statusBadgeSecurity: 'Security {tier}',
             statusBadgeHealth: '健康度 {state}',
-            statusBadgeEscalation: '升級 {mode}'
+            statusBadgeEscalation: '升級 {mode}',
+            statusBadgeGovernance: '治理 {name}',
+            statusBadgeReviewMode: '審核 {mode}',
+            statusBadgeBackend: '偏好後端 {backend}',
+            governanceSummary: '治理 {layers}',
+            governanceSummaryEmpty: '目前沒有符合的治理層。',
+            governanceInspectFallback: '若要查看 effective governance 與 provenance，請打開 raw status。'
           },
           auditEvents: {
             all: '全部事件'
@@ -4267,6 +4282,13 @@ GUI_HTML_TEMPLATE = r"""
           workstreamDependencyBlocker(detail) || t('cards.inspectDependencyClear'),
           workstreamDependencyBlocker(detail) ? 'attention' : 'active'
         );
+        addSummaryTile(
+          container,
+          t('cards.inspectTileGovernance'),
+          governancePrimaryName(status || state.statusSnapshot) || t('relation.none'),
+          governanceSummaryText(status || state.statusSnapshot) || t('cards.governanceInspectFallback'),
+          governanceMatchedLayers(status || state.statusSnapshot).length ? 'active' : 'muted'
+        );
       }
 
       function renderPendingDetail() {
@@ -4350,6 +4372,31 @@ GUI_HTML_TEMPLATE = r"""
         const dependency = detail && detail.dependency ? detail.dependency : null;
         const blockers = dependency && Array.isArray(dependency.blocking_reasons) ? dependency.blocking_reasons : [];
         return blockers.length ? String(blockers[0]) : '';
+      }
+
+      function governanceMatchedLayers(status) {
+        return Array.isArray(status && status.governance && status.governance.matched_layers)
+          ? status.governance.matched_layers
+          : [];
+      }
+
+      function governanceSummaryText(status) {
+        const matched = governanceMatchedLayers(status);
+        if (!matched.length) return t('cards.governanceSummaryEmpty');
+        const layers = matched.map(item => String(item.layer || '?') + '/' + String(item.name || '?')).join(' -> ');
+        return format('cards.governanceSummary', { layers });
+      }
+
+      function governancePrimaryName(status) {
+        const matched = governanceMatchedLayers(status);
+        if (!matched.length) return '';
+        return String(matched[matched.length - 1].name || '');
+      }
+
+      function governanceEffective(status, key) {
+        if (!status || !status.governance || !status.governance.effective_config) return '';
+        const value = status.governance.effective_config[key];
+        return value == null ? '' : String(value);
       }
 
       function isInactiveBridgeError(message) {
@@ -4451,6 +4498,18 @@ GUI_HTML_TEMPLATE = r"""
         if (detail && detail.health && detail.health.escalation && detail.health.escalation !== 'observe' && escalationLabel) {
           labels.push(format('cards.statusBadgeEscalation', { mode: escalationLabel }));
         }
+        const governanceName = governancePrimaryName(status);
+        if (governanceName) {
+          labels.push(format('cards.statusBadgeGovernance', { name: governanceName }));
+        }
+        const reviewMode = governanceEffective(status, 'review_mode');
+        if (reviewMode) {
+          labels.push(format('cards.statusBadgeReviewMode', { mode: reviewMode }));
+        }
+        const preferredBackend = governanceEffective(status, 'preferred_backend');
+        if (preferredBackend) {
+          labels.push(format('cards.statusBadgeBackend', { backend: preferredBackend }));
+        }
         return labels;
       }
 
@@ -4473,6 +4532,8 @@ GUI_HTML_TEMPLATE = r"""
             : [];
           note.textContent = quotaReason || dependencyBlocker || alertSummary || (warnings.length ? warnings[0] : t('cards.statusNote'));
         }
+        const governance = $('status-governance');
+        if (governance) governance.textContent = governanceSummaryText(status);
         const detail = inferBridgeDetail(status);
         const roomId = $('room-id').value.trim() || (detail && detail.room_id) || '';
         const rooms = Array.isArray(status && status.rooms) ? status.rooms : [];

@@ -1,6 +1,7 @@
 """Tests for tb2.process_backend — ProcessBackend, PaneBuffer, SpawnSpec."""
 
 from collections import deque
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -235,3 +236,25 @@ class TestProcessBackend:
         backend._kill = MagicMock()
         backend.kill_session("test")
         assert backend._kill.call_count == 2
+
+    @patch("tb2.process_backend.threading.Thread")
+    def test_spawn_winpty_uses_argv_list(self, mock_thread):
+        backend = ProcessBackend(shell="C:\\Program Files\\PowerShell\\7\\pwsh.EXE")
+        spec = SpawnSpec(argv=[
+            "C:\\Program Files\\PowerShell\\7\\pwsh.EXE",
+            "-NoLogo",
+            "-NoProfile",
+        ])
+        fake_proc = MagicMock()
+        fake_proc.isalive.return_value = False
+        fake_spawn = MagicMock(return_value=fake_proc)
+
+        with patch.dict(
+            "sys.modules",
+            {"winpty": SimpleNamespace(PtyProcess=SimpleNamespace(spawn=fake_spawn))},
+        ):
+            managed = backend._spawn_winpty("demo:a", PaneBuffer(), spec)
+
+        fake_spawn.assert_called_once_with(list(spec.argv))
+        assert managed.proc is fake_proc
+        mock_thread.assert_called_once()

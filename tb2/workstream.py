@@ -199,6 +199,7 @@ class WorkstreamRecord:
     auto_forward_guard: Dict[str, Any] = field(default_factory=dict)
     policy: Dict[str, Any] = field(default_factory=dict)
     review_mode: str = "auto"
+    governance: Dict[str, Any] = field(default_factory=dict)
     tier: str = "main"
     parent_workstream_id: Optional[str] = None
     restore_error: Optional[str] = None
@@ -380,6 +381,7 @@ class WorkstreamRecord:
             "auto_forward_guard": dict(self.auto_forward_guard),
             "policy": dict(self.policy),
             "review_mode": self.review_mode,
+            "governance": dict(self.governance),
             "tier": self.tier,
             "parent_workstream_id": self.parent_workstream_id,
             "backend": self.backend.to_dict(),
@@ -421,6 +423,7 @@ class WorkstreamRecord:
                 poll_ms=int(payload.get("poll_ms", 400)),
             ),
             review_mode=str(payload.get("review_mode", "auto")),
+            governance=dict(payload.get("governance", {})) if isinstance(payload.get("governance"), dict) else {},
             tier=validate_workstream_tier(str(payload.get("tier", "main"))),
             parent_workstream_id=validate_workstream_id(str(payload.get("parent_workstream_id")))
             if payload.get("parent_workstream_id")
