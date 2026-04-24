@@ -38,6 +38,11 @@ description: 2026-04-24 project-development-loop overnight maintenance state and
 - `status.fleet` 現在提供 compact governance compliance counters，方便 operator 先掃描整體狀態。
 - 此批次只新增 read-only projection，不改 runtime auto-apply、不改 policy mutation 行為。
 
+### Batch 4: GUI governance compliance badge
+
+- GUI status badges 現在會在 fleet governance compliance 不是 `compliant` 時顯示治理合規狀態。
+- 只新增 read-only badge，不新增按鈕、不新增 mutation surface。
+
 ## 驗證
 
 - `python3 -m pytest tests/test_governance.py tests/test_process_backend.py`
@@ -50,6 +55,10 @@ description: 2026-04-24 project-development-loop overnight maintenance state and
   - 結果：`2 passed`
 - `python3 -m pytest tests/test_server.py`
   - 結果：`141 passed`
+- `python3 -m pytest tests/test_server.py::TestGuiRouting::test_gui_html_surfaces_status_summary_badges`
+  - 結果：`1 passed`
+- `python3 -m pytest tests/test_server.py`
+  - 結果：`141 passed`（Batch 4 rerun）
 
 ## 監控指令
 

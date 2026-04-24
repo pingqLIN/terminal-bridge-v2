@@ -2812,6 +2812,7 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeHealth: 'Health {state}',
             statusBadgeEscalation: 'Escalation {mode}',
             statusBadgeGovernance: 'Governance {name}',
+            statusBadgeGovernanceCompliance: 'Governance compliance {state}',
             statusBadgeReviewMode: 'Review {mode}',
             statusBadgeBackend: 'Preferred backend {backend}',
             governanceSummary: 'Governance {layers}',
@@ -3213,6 +3214,7 @@ GUI_HTML_TEMPLATE = r"""
             statusBadgeHealth: '健康度 {state}',
             statusBadgeEscalation: '升級 {mode}',
             statusBadgeGovernance: '治理 {name}',
+            statusBadgeGovernanceCompliance: '治理合規 {state}',
             statusBadgeReviewMode: '審核 {mode}',
             statusBadgeBackend: '偏好後端 {backend}',
             governanceSummary: '治理 {layers}',
@@ -4399,6 +4401,11 @@ GUI_HTML_TEMPLATE = r"""
         return value == null ? '' : String(value);
       }
 
+      function governanceComplianceState(status) {
+        if (!status || !status.governance_compliance || !status.governance_compliance.state) return '';
+        return String(status.governance_compliance.state);
+      }
+
       function isInactiveBridgeError(message) {
         if (!message) return false;
         return message === 'bridge not found'
@@ -4501,6 +4508,10 @@ GUI_HTML_TEMPLATE = r"""
         const governanceName = governancePrimaryName(status);
         if (governanceName) {
           labels.push(format('cards.statusBadgeGovernance', { name: governanceName }));
+        }
+        const complianceState = governanceComplianceState(status);
+        if (complianceState && complianceState !== 'compliant') {
+          labels.push(format('cards.statusBadgeGovernanceCompliance', { state: complianceState }));
         }
         const reviewMode = governanceEffective(status, 'review_mode');
         if (reviewMode) {

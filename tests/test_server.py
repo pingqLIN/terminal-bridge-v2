@@ -64,6 +64,7 @@ const messages = {
   'cards.statusBadgeHealth': 'Health {state}',
   'cards.statusBadgeEscalation': 'Escalation {mode}',
   'cards.statusBadgeGovernance': 'Governance {name}',
+  'cards.statusBadgeGovernanceCompliance': 'Governance compliance {state}',
   'cards.statusBadgeReviewMode': 'Review {mode}',
   'cards.statusBadgeBackend': 'Preferred backend {backend}',
   'cards.governanceSummary': 'Governance {layers}',
@@ -84,6 +85,9 @@ function governancePrimaryName() {
   return '';
 }
 function governanceEffective() {
+  return '';
+}
+function governanceComplianceState() {
   return '';
 }
 """ + function_src + "\nconst result = " + expression + ";\nconsole.log(JSON.stringify(result));\n"
@@ -2913,12 +2917,14 @@ class TestGuiRouting:
         assert "function governanceMatchedLayers(status)" in html
         assert "function governanceSummaryText(status)" in html
         assert "function governancePrimaryName(status)" in html
+        assert "function governanceComplianceState(status)" in html
         assert "cards.statusBadgeAuditRaw" in html
         assert "cards.statusBadgeAuditRawBlocked" in html
         assert "cards.statusBadgeSecurity" in html
         assert "cards.statusBadgeHealth" in html
         assert "cards.statusBadgeEscalation" in html
         assert "cards.statusBadgeGovernance" in html
+        assert "cards.statusBadgeGovernanceCompliance" in html
         assert "cards.statusBadgeReviewMode" in html
         assert "cards.statusBadgeBackend" in html
         assert "cards.governanceSummary" in html
