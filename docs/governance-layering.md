@@ -73,6 +73,7 @@ Batch B starts exposing machine-readable decision consumption:
 
 - each workstream governance payload now includes `decision_trace`
 - fleet status now summarizes governance exception pressure through `governance_review_overrides`, `governance_policy_overrides`, and `governance_exceptions`
+- `status.governance_compliance` now exposes a read-only fleet compliance state with per-workstream issues; compact counters also appear under `status.fleet`
 
 ### `matched_layers`
 

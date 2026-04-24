@@ -72,6 +72,7 @@ description: TB2 治理分層最小契約，定義 precedence、effective config
 
 - 每個 workstream 的 governance payload 會附帶 `decision_trace`
 - fleet status 會額外摘要 `governance_review_overrides`、`governance_policy_overrides`、`governance_exceptions`
+- `status.governance_compliance` 會提供 read-only fleet compliance state 與 per-workstream issue list；compact counters 也會放在 `status.fleet`
 
 ### `matched_layers`
 

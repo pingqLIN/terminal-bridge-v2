@@ -166,6 +166,7 @@ repo 內也已提供正式治理契約檔：
 - `status.runtime` 現在也會透過 `launch_mode`、`snapshot_schema_version`、`continuity` metadata 區分 direct local run、service-managed fresh start、restart 後 state lost，或 best-effort restored 的情境
 - `status.workstreams[*].health` 現在會公開每條 workstream 的 severity、alert summary、escalation 與 silent-stream 偵測
 - `status.fleet` 現在會聚合 `healthy`、`warn`、`critical` 與 escalation 數量，方便快速隔離出有風險的工作線
+- `status.governance_compliance` 現在會提供 read-only fleet governance compliance state、issue counts 與 per-workstream issue list；GUI status badge 會標出非 compliant 狀態
 - `audit_recent` 現在也可直接接受 `workstream_id`，讓治理與回溯不必再先轉成 bridge / room
 - `status.workstreams[*]` 現在也會公開 `policy` 與 `review_mode`，讓 operator 能直接分辨 `auto`、`guarded`、`paused`、`manual` 等審核狀態
 - MCP operator 現在可直接使用 `workstream_list`、`workstream_get`、`workstream_pause_review`、`workstream_resume_review`、`workstream_update_policy`，用 workstream 主語暫停審核或調整 guardrail policy，而不必回退到臨時的 bridge-only targeting
