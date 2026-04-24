@@ -2452,6 +2452,86 @@ def handle_audit_recent(args: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _workstream_governance_compliance(item: Dict[str, Any]) -> Dict[str, Any]:
+    governance = item.get("governance", {}) if isinstance(item.get("governance"), dict) else {}
+    review_state = governance.get("review_mode_state", {}) if isinstance(governance.get("review_mode_state"), dict) else {}
+    policy_state = governance.get("policy_state", {}) if isinstance(governance.get("policy_state"), dict) else {}
+    policy_overrides = policy_state.get("overrides", {}) if isinstance(policy_state.get("overrides"), dict) else {}
+    health = item.get("health", {}) if isinstance(item.get("health"), dict) else {}
+    recovery = item.get("recovery", {}) if isinstance(item.get("recovery"), dict) else {}
+    issues: List[Dict[str, Any]] = []
+
+    if bool(review_state.get("override_active")):
+        issues.append({
+            "kind": "review_mode_override",
+            "severity": "warn",
+            "summary": "review mode is under operator override",
+            "source": review_state.get("override_source", "operator_override"),
+        })
+    for key in sorted(policy_overrides):
+        override = policy_overrides.get(key, {}) if isinstance(policy_overrides.get(key), dict) else {}
+        issues.append({
+            "kind": "policy_exception",
+            "severity": "warn",
+            "key": key,
+            "summary": f"policy key {key} is overridden",
+            "source": override.get("source", "operator_exception"),
+        })
+    if bool(recovery.get("manual_takeover_required")):
+        issues.append({
+            "kind": "manual_takeover",
+            "severity": "critical",
+            "summary": "manual takeover is required after recovery failure",
+        })
+    health_state = str(health.get("state", "ok"))
+    if health_state == "critical":
+        issues.append({
+            "kind": "health_critical",
+            "severity": "critical",
+            "summary": str(health.get("summary", "critical workstream health")),
+        })
+    elif health_state == "warn":
+        issues.append({
+            "kind": "health_warn",
+            "severity": "warn",
+            "summary": str(health.get("summary", "workstream health warning")),
+        })
+
+    if any(issue["severity"] == "critical" for issue in issues):
+        state = "critical"
+    elif issues:
+        state = "exception"
+    else:
+        state = "compliant"
+    return {
+        "workstream_id": item.get("workstream_id"),
+        "state": state,
+        "issue_count": len(issues),
+        "issues": issues,
+    }
+
+
+def _fleet_governance_compliance_snapshot(workstreams: List[Dict[str, Any]]) -> Dict[str, Any]:
+    items = [_workstream_governance_compliance(item) for item in workstreams]
+    critical = sum(1 for item in items if item["state"] == "critical")
+    exception = sum(1 for item in items if item["state"] == "exception")
+    if critical:
+        state = "critical"
+    elif exception:
+        state = "exception"
+    else:
+        state = "compliant"
+    return {
+        "state": state,
+        "total": len(items),
+        "compliant": sum(1 for item in items if item["state"] == "compliant"),
+        "exception": exception,
+        "critical": critical,
+        "issue_count": sum(int(item["issue_count"]) for item in items),
+        "workstreams": items,
+    }
+
+
 def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
     rooms = list_rooms()
     with _bridges_lock:
@@ -2474,6 +2554,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         for item in workstreams
         if isinstance(item.get("governance", {}).get("policy_state", {}).get("overrides"), dict)
     )
+    governance_compliance = _fleet_governance_compliance_snapshot(workstreams)
     return {
         "rooms": [{"id": r.room_id, "messages": r.message_count, "age": time.time() - r.created_at,
                    "subscribers": transport_by_room.get(
@@ -2509,6 +2590,10 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
             "governance_review_overrides": governance_review_overrides,
             "governance_policy_overrides": governance_policy_override_total,
             "governance_exceptions": governance_review_overrides + governance_policy_override_total,
+            "governance_compliance_state": governance_compliance["state"],
+            "governance_compliant": governance_compliance["compliant"],
+            "governance_exception": governance_compliance["exception"],
+            "governance_critical": governance_compliance["critical"],
             "orphaned_rooms": len(reconciliation["orphaned_rooms"]),
             "orphaned_workstreams": len(reconciliation["orphaned_workstreams"]),
             "stale_workstreams": len(reconciliation["stale_workstreams"]),
@@ -2520,6 +2605,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
         "runtime": runtime,
         "security": _server_security_payload(),
         "governance": _status_governance_snapshot(),
+        "governance_compliance": governance_compliance,
     }
 
 

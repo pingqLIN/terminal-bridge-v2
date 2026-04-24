@@ -32,6 +32,12 @@ description: 2026-04-24 project-development-loop overnight maintenance state and
 - 新增 repo-local overnight status writer，讓 unattended loop 可定期留下 git/status/process snapshot。
 - `.tb2-overnight/` 列入 local artifact ignore，避免監控輸出污染 commit。
 
+### Batch 3: Read-only fleet governance compliance summary
+
+- `status.governance_compliance` 現在提供 fleet-level compliance state、issue count 與 per-workstream issue list。
+- `status.fleet` 現在提供 compact governance compliance counters，方便 operator 先掃描整體狀態。
+- 此批次只新增 read-only projection，不改 runtime auto-apply、不改 policy mutation 行為。
+
 ## 驗證
 
 - `python3 -m pytest tests/test_governance.py tests/test_process_backend.py`
@@ -40,6 +46,10 @@ description: 2026-04-24 project-development-loop overnight maintenance state and
   - 結果：無輸出
 - `python3 -m pytest`
   - 結果：`413 passed`
+- `python3 -m pytest tests/test_server.py::TestStatusHandler::test_status tests/test_server.py::TestWorkstreamHandlers::test_status_reports_governance_exception_summary`
+  - 結果：`2 passed`
+- `python3 -m pytest tests/test_server.py`
+  - 結果：`141 passed`
 
 ## 監控指令
 

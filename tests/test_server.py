@@ -655,6 +655,12 @@ class TestStatusHandler:
         assert result["fleet"]["governance_review_overrides"] == 0
         assert result["fleet"]["governance_policy_overrides"] == 0
         assert result["fleet"]["governance_exceptions"] == 0
+        assert result["fleet"]["governance_compliance_state"] == "compliant"
+        assert result["fleet"]["governance_compliant"] == 1
+        assert result["fleet"]["governance_exception"] == 0
+        assert result["fleet"]["governance_critical"] == 0
+        assert result["governance_compliance"]["state"] == "compliant"
+        assert result["governance_compliance"]["workstreams"][0]["issue_count"] == 0
         assert result["fleet"]["orphaned_rooms"] == 0
         assert result["fleet"]["orphaned_workstreams"] == 0
         assert result["fleet"]["stale_workstreams"] == 0
@@ -942,6 +948,12 @@ class TestWorkstreamHandlers:
         assert result["fleet"]["governance_review_overrides"] == 1
         assert result["fleet"]["governance_policy_overrides"] == 2
         assert result["fleet"]["governance_exceptions"] == 3
+        assert result["fleet"]["governance_compliance_state"] == "exception"
+        assert result["fleet"]["governance_exception"] == 1
+        assert result["governance_compliance"]["issue_count"] == 4
+        compliance = result["governance_compliance"]["workstreams"][0]
+        assert compliance["state"] == "exception"
+        assert {item["kind"] for item in compliance["issues"]} == {"review_mode_override", "policy_exception", "health_warn"}
         workstream = next(item for item in result["workstreams"] if item["workstream_id"] == "ws-summary-main")
         trace = workstream["governance"]["decision_trace"]
         assert any(item["kind"] == "review_mode" and item["state"] == "override" for item in trace)
