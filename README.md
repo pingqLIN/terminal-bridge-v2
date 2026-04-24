@@ -236,16 +236,17 @@ Non-loopback MCP binding now requires explicit acknowledgment:
 python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 ```
 
-## Chrome Sidepanel Compatibility
+## Compatibility Adapter: Chrome Sidepanel
 
-TB2 now also exposes a localhost compatibility layer for the existing `chrome-sidepanel-ai-terminal` client.
+TB2 keeps a narrow localhost adapter for the existing `chrome-sidepanel-ai-terminal` client.
+This is a compatibility path, not a product direction or a replacement for the full MCP API.
 
 - `GET /health`
 - `POST /v1/tb2/rooms`
 - `GET /v1/tb2/poll?roomId=<id>&afterId=<n>`
 - `POST /v1/tb2/message`
 
-Current behavior:
+Adapter behavior:
 
 - room creation initializes a real TB2 session and room id
 - prompt dispatch uses one-shot `codex exec` runs and wraps recent room transcript into each request

@@ -37,3 +37,4 @@ build/
 # Local artifacts
 .del/
 .codex
+.tb2-overnight/

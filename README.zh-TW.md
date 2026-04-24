@@ -237,16 +237,17 @@ python -m tb2 server --host 127.0.0.1 --port 3189
 python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
 ```
 
-## Chrome Sidepanel 相容性
+## 相容 Adapter：Chrome Sidepanel
 
-TB2 目前也提供給現有 `chrome-sidepanel-ai-terminal` client 使用的 localhost 相容介面。
+TB2 保留一條給既有 `chrome-sidepanel-ai-terminal` client 使用的窄化 localhost adapter。
+這是相容路徑，不是產品主線，也不替代完整 MCP API。
 
 - `GET /health`
 - `POST /v1/tb2/rooms`
 - `GET /v1/tb2/poll?roomId=<id>&afterId=<n>`
 - `POST /v1/tb2/message`
 
-目前行為：
+Adapter 行為：
 
 - 建立 room 時會啟動一個實際 TB2 的 room 與 session
 - prompt 會透過一次性 `codex exec` 發送，並把最近的 room 對話紀錄包進 request
