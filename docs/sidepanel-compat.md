@@ -91,6 +91,38 @@ Additional diagnostics currently include:
 - `backendReady=true` means the default TB2 backend can bootstrap a sidepanel room session
 - if backend bootstrap fails, `ready=false` and `note` includes the last bootstrap error so the client can stop retrying `/v1/tb2/rooms` blindly
 
+## Codex wrapper startup failure mode
+
+The Windows Codex wrapper on this machine depends on an already-running TB2 listener at http://127.0.0.1:3189/mcp.
+That is separate from the sidepanel compatibility path below, but both paths share the same TB2 runtime process.
+
+The important health distinction is:
+
+- tb2.service can be running
+- backendReady=true can still pass
+- codexAvailable=false can still make ready=false
+
+In tb2/server.py, codexAvailable is computed from:
+
+- TB2_SIDEPANEL_CODEX, if it is set
+- otherwise shutil.which("codex")
+
+That means the runtime can fail even when an interactive shell sees codex, because systemd services do not inherit the same PATH as the user shell.
+
+Observed failure pattern on this machine:
+
+- interactive WSL shell resolves codex at /home/miles/.local/bin/codex
+- /health returned backendReady=true and codexAvailable=false
+- ready=false followed from that mismatch
+
+Recommended recovery sequence:
+
+1. set TB2_SIDEPANEL_CODEX=/home/miles/.local/bin/codex in /etc/systemd/system/tb2.service, or extend the service PATH to include the same directory
+2. restart the service: systemctl restart tb2.service
+3. verify curl http://127.0.0.1:3189/health returns codexAvailable=true and ready=true
+
+If the Windows Codex wrapper still prints MCP tb2 start failed: timeout waiting for 127.0.0.1:3189, that is a separate listener problem. In that case inspect the listener first, then the service env, then the codex binary path.
+
 ## Concurrency rule
 
 Each room allows only one in-flight prompt.
