@@ -7,7 +7,6 @@ with improved efficiency: per-room locks, bounded storage, session TTL.
 from __future__ import annotations
 
 import base64
-import hashlib
 import ipaddress
 import json
 import os
@@ -19,11 +18,9 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import shutil
-from tempfile import gettempdir
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -36,6 +33,17 @@ from .intervention import Action, InterventionLayer
 from .osutils import default_backend_name
 from .profile import get_profile, list_profiles, strip_ansi
 from .security import build_security_posture, validate_server_binding
+from .sidepanel import (
+    SidepanelRuntime,
+    health_payload as _sidepanel_health_contract,
+    message_payload as _sidepanel_message_payload,
+    read_tail_if_exists as _read_tail_if_exists,
+    read_text_if_exists as _read_text_if_exists,
+    render_live_log as _sidepanel_render_live_log,
+    render_prompt as _sidepanel_render_prompt,
+    run_paths as _sidepanel_run_paths,
+    runtime_from_env,
+)
 from .support import doctor_report
 from .gui import build_gui_html
 from .room import Room, RoomMessage, RoomSubscription, cleanup_stale, create_room, delete_room, get_room, list_rooms, validate_room_id
@@ -2871,15 +2879,6 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
 SERVER_INFO = {"name": "terminal-bridge-v2", "version": "0.2.0"}
 LATEST_PROTOCOL_VERSION = "2025-11-25"
 @dataclass
-class SidepanelRuntime:
-    codex_available: bool
-    codex_path: str
-    host_platform: str
-    provider: str
-    workdir: str
-
-
-@dataclass
 class SidepanelRoomState:
     backend: TerminalBackend
     pane_a: str
@@ -2901,30 +2900,8 @@ _sidepanel_probe_cache: Dict[str, Any] = {"checked_at": 0.0, "detail": "", "ok":
 _SIDEPANEL_PROBE_TTL_SECONDS = 5.0
 
 
-def _host_platform_name() -> str:
-    if os.name == "nt":
-        return "windows"
-    if os.path.exists("/proc/version"):
-        try:
-            text = Path("/proc/version").read_text(encoding="utf-8").lower()
-        except OSError:
-            text = ""
-        if "microsoft" in text:
-            return "wsl"
-    return "posix"
-
-
 def _sidepanel_runtime() -> SidepanelRuntime:
-    codex_path = str(os.environ.get("TB2_SIDEPANEL_CODEX", "")).strip() or str(shutil.which("codex") or "")
-    workdir = str(os.environ.get("TB2_SIDEPANEL_WORKDIR", "")).strip() or str(Path.home())
-    provider = "local-tb2-codex-bridge"
-    return SidepanelRuntime(
-        codex_available=bool(codex_path),
-        codex_path=codex_path or "codex",
-        host_platform=_host_platform_name(),
-        provider=provider,
-        workdir=workdir,
-    )
+    return runtime_from_env(os.environ, which=shutil.which, home=Path.home())
 
 
 def _sidepanel_backend_ready(*, force: bool = False) -> Tuple[bool, str]:
@@ -2958,102 +2935,14 @@ def _sidepanel_backend_ready(*, force: bool = False) -> Tuple[bool, str]:
 def _sidepanel_health_payload() -> Dict[str, Any]:
     runtime = _sidepanel_runtime()
     backend_ready, backend_detail = _sidepanel_backend_ready()
-    note = (
-        "Sidepanel compatibility uses TB2 rooms plus one-shot Codex exec subprocess runs. "
-        "Recent room transcript is wrapped into each prompt, and poll returns streaming log previews "
-        "followed by the final assistant message."
-    )
-    if backend_detail:
-        note = note + f" Backend bootstrap check failed: {backend_detail}"
     with _sidepanel_lock:
         room_count = len(_sidepanel_rooms)
-    return {
-        "ok": True,
-        "ready": runtime.codex_available and backend_ready,
-        "provider": runtime.provider,
-        "bridgeMode": "tb2-codex",
-        "codexAvailable": runtime.codex_available,
-        "tb2RuntimeInstalled": True,
-        "backendReady": backend_ready,
-        "roomCount": room_count,
-        "note": note,
-        "hostPlatform": runtime.host_platform,
-        "runtimeCodexPath": runtime.codex_path,
-        "runtimeWorkdir": runtime.workdir,
-    }
-
-
-def _sidepanel_iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
-
-
-def _sidepanel_role(msg: RoomMessage) -> str:
-    role = str(msg.meta.get("sidepanelRole", "")).strip()
-    if role in {"user", "assistant", "system"}:
-        return role
-    if msg.author == "assistant" or msg.source_role == "assistant":
-        return "assistant"
-    if msg.kind in {"system", "intervention"} or msg.author == "bridge":
-        return "system"
-    return "user"
-
-
-def _sidepanel_message_payload(msg: RoomMessage) -> Dict[str, Any]:
-    return {
-        "id": msg.id,
-        "role": _sidepanel_role(msg),
-        "text": msg.text,
-        "created_at": _sidepanel_iso(msg.ts),
-        "meta": dict(msg.meta),
-    }
-
-
-def _sidepanel_render_prompt(room: Room, prompt: str) -> str:
-    after_id = max(0, room.latest_id - 12)
-    transcript: List[str] = []
-    for item in room.poll(after_id=after_id, limit=12):
-        if item.meta.get("streamKey") and item.meta.get("final") is False:
-            continue
-        transcript.append(f"{_sidepanel_role(item).upper()}:\n{item.text}")
-    transcript.append(f"USER:\n{prompt}")
-    return "\n\n".join(
-        [
-            "You are continuing a browser side panel terminal conversation.",
-            "Use the room transcript below as context and answer the latest user message.",
-            "\n\n".join(transcript),
-        ]
+    return _sidepanel_health_contract(
+        runtime,
+        backend_ready=backend_ready,
+        backend_detail=backend_detail,
+        room_count=room_count,
     )
-
-
-def _sidepanel_render_live_log(text: str) -> str:
-    return "Streaming bridge log:\n" + text
-
-
-def _sidepanel_run_paths(room_id: str) -> Tuple[str, str, str]:
-    run_id = hashlib.sha1(f"{room_id}:{time.time()}".encode("utf-8")).hexdigest()[:12]
-    temp = Path(gettempdir())
-    return (
-        run_id,
-        str(temp / f"tb2-sidepanel-{room_id}-{run_id}.log"),
-        str(temp / f"tb2-sidepanel-{room_id}-{run_id}.out"),
-    )
-
-
-def _read_text_if_exists(path: str) -> str:
-    if not path:
-        return ""
-    target = Path(path)
-    if not target.exists():
-        return ""
-    try:
-        return target.read_text(encoding="utf-8", errors="ignore").strip()
-    except OSError:
-        return ""
-
-
-def _read_tail_if_exists(path: str, *, limit: int = 4000) -> str:
-    text = _read_text_if_exists(path)
-    return text[-limit:].strip() if text else ""
 
 
 def _sidepanel_finalize_run(room_id: str, run_id: str, proc: subprocess.Popen[str], log_file: Any) -> None:

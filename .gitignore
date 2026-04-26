@@ -38,3 +38,4 @@ build/
 .del/
 .codex
 .tb2-overnight/
+.tb2-project-loop/

@@ -92,6 +92,39 @@ TB2 將 sidepanel 相容路徑與長生命週期 Host/Guest bridge 解耦。
 - `backendReady=true` 代表預設 TB2 backend 可以成功建立 sidepanel room session
 - 後端啟動失敗時，`ready=false`，且 `note` 會攜帶最後一次 bootstrap error，避免 client 無條件重試 `/v1/tb2/rooms`
 
+## Codex wrapper 啟動失敗模式
+
+這台機器上的 Windows Codex wrapper 依賴一個已啟動的 TB2 listener：
+`http://127.0.0.1:3189/mcp`。
+這和下方 sidepanel 相容路徑不同，但兩者共用同一個 TB2 runtime process。
+
+需要先區分這幾個健康狀態：
+
+- `tb2.service` 可以是 running
+- `backendReady=true` 也可能成立
+- `codexAvailable=false` 仍然會讓 `ready=false`
+
+在 `tb2/server.py` 中，`codexAvailable` 的計算方式是：
+
+- 若有設定 `TB2_SIDEPANEL_CODEX`，優先使用它
+- 否則退回 `shutil.which("codex")`
+
+這代表即使互動式 WSL shell 看得到 `codex`，systemd service 仍可能因為沒有繼承同一份 `PATH` 而失敗。
+
+這台機器上已觀察到的失敗樣態：
+
+- 互動式 WSL shell 解析到 `/home/miles/.local/bin/codex`
+- `/health` 回傳 `backendReady=true` 但 `codexAvailable=false`
+- 於是 `ready=false`
+
+建議恢復順序：
+
+1. 在 `/etc/systemd/system/tb2.service` 設定 `TB2_SIDEPANEL_CODEX=/home/miles/.local/bin/codex`，或把 service 的 `PATH` 擴充到同一個目錄
+2. 重新啟動 service：`systemctl restart tb2.service`
+3. 驗證 `curl http://127.0.0.1:3189/health` 是否回傳 `codexAvailable=true` 與 `ready=true`
+
+若 Windows Codex wrapper 仍顯示 `MCP tb2 start failed: timeout waiting for 127.0.0.1:3189`，那是另一個 listener 問題。此時應先檢查 listener，再檢查 service 環境，最後檢查 `codex` binary 路徑。
+
 ## 並發規則
 
 每個 room 一次只允許一個進行中的請求。
