@@ -12,6 +12,7 @@ description: 2026-04-26 terminal-bridge-v2 8-hour project-development-loop state
 - branch：`main`
 - 啟動 checkpoint commit：`5b63a10`
 - 本輪時間邊界：`2026-04-27 05:43 CST (+08:00)`
+- 延伸續跑：`2026-04-27` 於原 deadline 後從 clean HEAD 再做一個 bounded maintenance batch
 - durable state path：`.tb2-project-loop/2026-04-26-8hr/state.json`
 - history path：`.tb2-project-loop/2026-04-26-8hr/history.jsonl`
 - snapshot path：`.tb2-project-loop/2026-04-26-8hr/status.jsonl`
@@ -28,10 +29,21 @@ description: 2026-04-26 terminal-bridge-v2 8-hour project-development-loop state
 - 補上 `docs/sidepanel-compat.zh-TW.md` 的 Codex wrapper 啟動失敗模式說明，避免英中版本 drift。
 - 新增 `tools/project_loop_state.py`，讓明確時限的 project-development-loop 可以在 repo 內留下 deadline、active batch、checkpoint 與 next action。
 
+### Batch 2: Status aggregation boundary extraction
+
+- 將 recovery snapshot、governance compliance 與 stale/orphaned workstream shaping 從 `tb2/server.py` 抽出到新模組 `tb2/status.py`。
+- 保留 room-level orphan detection 在 `server.py`，只先搬移純 aggregation 邏輯，避免一次拆太大。
+- 新增 `tests/test_status.py`，直接驗證 recovery summary、governance compliance、stale workstream 篩選與 orphaned workstream shaping。
+- `handle_status()`、`workstream_list` 與 fleet reconciliation 仍維持原 payload contract，但 `server.py` 少掉一批資料整理責任。
+
 ## 驗證
 
 - `python3 -m pytest tests/test_server.py tests/test_sidepanel.py`
   - 結果：`146 passed`
+- `python3 -m pytest tests/test_status.py tests/test_server.py -k "status or governance or reconcile or audit_recent or workstream_list"`
+  - 結果：`29 passed`
+- `python3 -m pytest tests/test_server.py tests/test_sidepanel.py tests/test_status.py`
+  - 結果：`151 passed`
 - `git diff --check`
   - 結果：無輸出
 - `python3 tools/project_loop_state.py --help`
@@ -65,9 +77,9 @@ nohup python3 tools/overnight_loop_status.py \
 
 ## 下一步
 
-1. 用 `tools/project_loop_state.py checkpoint` 記錄這個 Batch 1 已完成。
-2. 依 `docs/development-book-round1-2026-04-22.zh-TW.md` 的 `Batch D` 原則，挑下一個小型 sidepanel / status aggregation extraction，不做大範圍 `server.py` 重構。
-3. 若沒有適合的 extraction，就轉回 `Batch B` 的 decision-oriented audit / provenance 補強，而不是新增新的 client-specific surface。
+1. 用 `tools/project_loop_state.py checkpoint` 記錄 Batch 2 完成，並把 `next_action` 指向下一個 bounded extraction 或 provenance follow-up。
+2. 依 `docs/development-book-round1-2026-04-22.zh-TW.md` 的 `Batch D` 原則，優先挑下一個小型 session-lifecycle / status adapter extraction，不做大範圍 `server.py` 重構。
+3. 若 `Batch D` 沒有足夠小且清楚的下一刀，就轉回 `Batch B` 的 decision-oriented audit / provenance 補強，而不是新增新的 client-specific surface。
 
 ## Guardrails
 
