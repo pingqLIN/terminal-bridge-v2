@@ -14,23 +14,26 @@ GUI_HTML_TEMPLATE = r"""
     <title>Terminal Bridge</title>
     <style>
       :root {
-        --bg: #f6f1e7;
-        --panel: rgba(255, 250, 241, 0.92);
-        --panel-strong: #fffdf8;
-        --line: #d9ccb8;
-        --ink: #17212f;
-        --muted: #5d6570;
-        --accent: #2f4b5c;
-        --accent-strong: #223744;
-        --accent-soft: #e4eaee;
-        --info: #3f5668;
-        --success: #4b5f53;
-        --accent-alt: #746456;
-        --danger: #6c4d48;
-        --shadow: 0 14px 30px rgba(34, 29, 24, 0.08);
-        --shadow-soft: 0 6px 14px rgba(34, 29, 24, 0.05);
-        --shadow-press: 0 2px 6px rgba(34, 29, 24, 0.06);
-        --radius: 12px;
+        --bg: #eef1f3;
+        --panel: #fbfcfd;
+        --panel-strong: #ffffff;
+        --line: #c8d0d8;
+        --line-strong: #8d9aa8;
+        --ink: #111820;
+        --muted: #596574;
+        --accent: #155f72;
+        --accent-strong: #0e4351;
+        --accent-soft: #d9edf2;
+        --info: #315b85;
+        --success: #2e6a4f;
+        --accent-alt: #7a5b21;
+        --danger: #8a3a36;
+        --warning: #9a6418;
+        --surface-code: #101820;
+        --shadow: 0 12px 28px rgba(17, 24, 32, 0.08);
+        --shadow-soft: 0 5px 14px rgba(17, 24, 32, 0.06);
+        --shadow-press: 0 2px 5px rgba(17, 24, 32, 0.08);
+        --radius: 8px;
         --control-height: 38px;
         --control-padding-x: 11px;
         --shell-width: 1380px;
@@ -46,14 +49,11 @@ GUI_HTML_TEMPLATE = r"""
       body {
         margin: 0;
         color: var(--ink);
-        font-family: "IBM Plex Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", "Segoe UI", sans-serif;
+        font-family: "IBM Plex Sans", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Heiti TC", "Segoe UI", Arial, sans-serif;
         font-size: 15px;
         line-height: 1.5;
         font-feature-settings: "kern" 1, "liga" 1;
-        background:
-          radial-gradient(circle at top left, rgba(23, 33, 47, 0.08), transparent 28%),
-          radial-gradient(circle at top right, rgba(116, 100, 86, 0.10), transparent 30%),
-          linear-gradient(180deg, #f1eadf 0%, #e4d7c5 100%);
+        background: var(--bg);
       }
 
       body[data-layout="wide"] {
@@ -73,39 +73,39 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       body[data-scene="radar"] {
-        --bg: #f6ecdd;
-        --panel: rgba(255, 247, 236, 0.94);
-        --panel-strong: #fffaf0;
-        --line: #d7b98f;
-        --accent: #92552f;
-        --accent-strong: #6d3e21;
-        --accent-soft: #f1dcc4;
-        --accent-alt: #8f6e49;
-        --danger: #8c4434;
+        --bg: #f1f2ef;
+        --panel: #fcfcfa;
+        --panel-strong: #ffffff;
+        --line: #cfd3ca;
+        --accent: #77531a;
+        --accent-strong: #573b11;
+        --accent-soft: #eee5d2;
+        --accent-alt: #4e6b4e;
+        --danger: #8a3a36;
       }
 
       body[data-scene="quiet"] {
-        --bg: #eef2ef;
-        --panel: rgba(247, 251, 248, 0.95);
-        --panel-strong: #fbfdfb;
-        --line: #bfd0c7;
-        --accent: #47625a;
-        --accent-strong: #324740;
-        --accent-soft: #dbe8e1;
-        --accent-alt: #6c7e75;
-        --danger: #7d5c55;
+        --bg: #eef3f0;
+        --panel: #fbfdfb;
+        --panel-strong: #ffffff;
+        --line: #c5d2cb;
+        --accent: #32624c;
+        --accent-strong: #234735;
+        --accent-soft: #dcebe3;
+        --accent-alt: #556b62;
+        --danger: #82423e;
       }
 
       body[data-scene="mission"] {
-        --bg: #e9ebf1;
-        --panel: rgba(244, 247, 255, 0.94);
-        --panel-strong: #f9fbff;
-        --line: #bec8df;
-        --accent: #38507b;
-        --accent-strong: #263a5b;
-        --accent-soft: #d8e2f6;
-        --accent-alt: #66779e;
-        --danger: #7e4f58;
+        --bg: #eef1f5;
+        --panel: #fbfcff;
+        --panel-strong: #ffffff;
+        --line: #c5cfdd;
+        --accent: #315b85;
+        --accent-strong: #23425f;
+        --accent-soft: #dce8f4;
+        --accent-alt: #626f84;
+        --danger: #8a3a36;
       }
 
       body::before {
@@ -113,10 +113,10 @@ GUI_HTML_TEMPLATE = r"""
         position: fixed;
         inset: 0;
         pointer-events: none;
-        background-image: linear-gradient(rgba(217, 204, 184, 0.18) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(217, 204, 184, 0.18) 1px, transparent 1px);
-        background-size: 24px 24px;
-        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.25), transparent 85%);
+        background-image: linear-gradient(rgba(141, 154, 168, 0.16) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(141, 154, 168, 0.16) 1px, transparent 1px);
+        background-size: 20px 20px;
+        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent 82%);
       }
 
       main {
@@ -146,13 +146,12 @@ GUI_HTML_TEMPLATE = r"""
       .hero,
       .card {
         position: relative;
-        overflow: hidden;
+        overflow: clip;
         border: 1px solid var(--line);
         border-radius: var(--radius);
         background: var(--panel);
         box-shadow: var(--shadow);
-        backdrop-filter: blur(12px);
-        outline: 1px solid rgba(255, 255, 255, 0.45);
+        outline: 1px solid rgba(255, 255, 255, 0.72);
         outline-offset: -1px;
       }
 
@@ -160,7 +159,7 @@ GUI_HTML_TEMPLATE = r"""
         padding: 18px 20px;
         display: grid;
         gap: 14px;
-        box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+        box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.7);
       }
 
       body[data-home="workspace"] .hero {
@@ -170,20 +169,13 @@ GUI_HTML_TEMPLATE = r"""
 
       .card {
         --card-accent: var(--accent);
-        --card-soft: rgba(255, 255, 255, 0.72);
-        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.38);
+        --card-soft: #ffffff;
+        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.72);
       }
 
       .hero::after,
       .card::after {
-        content: "";
-        position: absolute;
-        inset: auto -30% -65% auto;
-        width: 220px;
-        height: 220px;
-        border-radius: 999px;
-        background: radial-gradient(circle, rgba(23, 33, 47, 0.08), transparent 72%);
-        pointer-events: none;
+        display: none;
       }
 
       .card::before {
@@ -212,13 +204,12 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       h1 {
-        font-family: "Iowan Old Style", "Palatino Linotype", "Noto Serif TC", serif;
-        font-size: clamp(2.05rem, 3.5vw, 2.9rem);
-        line-height: 0.96;
-        letter-spacing: -0.035em;
-        font-weight: 600;
-        max-width: 10ch;
-        text-wrap: balance;
+        font-family: "IBM Plex Sans", "Noto Sans TC", "PingFang TC", "Segoe UI", sans-serif;
+        font-size: 2.1rem;
+        line-height: 1;
+        letter-spacing: 0;
+        font-weight: 750;
+        max-width: 16ch;
       }
 
       h2 {
@@ -321,9 +312,9 @@ GUI_HTML_TEMPLATE = r"""
         align-items: center;
         gap: 6px;
         padding: 5px 10px;
-        border-radius: 10px;
+        border-radius: 7px;
         border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.7);
+        background: #ffffff;
         color: var(--muted);
         font-size: 0.74rem;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
@@ -348,9 +339,9 @@ GUI_HTML_TEMPLATE = r"""
         text-align: left;
         min-height: 92px;
         padding: 13px 14px;
-        border-radius: 12px;
+        border-radius: 8px;
         border: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 242, 234, 0.9));
+        background: #ffffff;
         color: var(--ink);
         cursor: pointer;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
@@ -362,7 +353,7 @@ GUI_HTML_TEMPLATE = r"""
         position: absolute;
         inset: 0 0 auto 0;
         height: 3px;
-        background: rgba(47, 75, 92, 0.22);
+        background: rgba(21, 95, 114, 0.28);
       }
 
       .preset:hover {
@@ -372,8 +363,8 @@ GUI_HTML_TEMPLATE = r"""
 
       .preset.active {
         border-color: var(--accent);
-        background: rgba(47, 75, 92, 0.08);
-        box-shadow: 0 0 0 1px rgba(47, 75, 92, 0.1), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+        background: var(--accent-soft);
+        box-shadow: 0 0 0 1px rgba(21, 95, 114, 0.12), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.72);
       }
 
       .preset b {
@@ -429,9 +420,9 @@ GUI_HTML_TEMPLATE = r"""
         justify-items: start;
         appearance: none;
         border: 1px solid var(--line);
-        background: rgba(255, 255, 255, 0.72);
+        background: #ffffff;
         color: var(--muted);
-        border-radius: 12px;
+        border-radius: 8px;
         min-height: 52px;
         min-width: 0;
         padding: 10px 14px 11px;
@@ -445,9 +436,9 @@ GUI_HTML_TEMPLATE = r"""
 
       .workspace-tab.active {
         border-color: var(--accent);
-        background: linear-gradient(180deg, rgba(47, 75, 92, 0.12), rgba(47, 75, 92, 0.06));
+        background: var(--accent-soft);
         color: var(--ink);
-        box-shadow: 0 0 0 1px rgba(47, 75, 92, 0.08), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.52);
+        box-shadow: 0 0 0 1px rgba(21, 95, 114, 0.1), var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.72);
       }
 
       .workspace-tab-label {
@@ -481,9 +472,9 @@ GUI_HTML_TEMPLATE = r"""
         gap: 4px;
         min-height: 78px;
         padding: 12px 13px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.78);
-        background: rgba(255, 255, 255, 0.76);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.52);
       }
 
@@ -509,8 +500,8 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .workspace-chip.is-attention {
-        border-color: rgba(108, 77, 72, 0.36);
-        background: linear-gradient(180deg, rgba(255, 249, 246, 0.96), rgba(247, 240, 236, 0.94));
+        border-color: rgba(138, 58, 54, 0.46);
+        background: #fff7f5;
       }
 
       .workspace-chip.is-active {
@@ -558,7 +549,7 @@ GUI_HTML_TEMPLATE = r"""
         gap: 7px;
         margin-bottom: 14px;
         padding-bottom: 12px;
-        border-bottom: 1px solid rgba(217, 204, 184, 0.75);
+        border-bottom: 1px solid var(--line);
       }
 
       .card-head p {
@@ -592,12 +583,12 @@ GUI_HTML_TEMPLATE = r"""
       .stage-note {
         margin: 0 0 12px;
         padding: 10px 12px;
-        border: 1px dashed rgba(217, 204, 184, 0.9);
-        border-radius: 11px;
+        border: 1px dashed var(--line-strong);
+        border-radius: 8px;
         color: var(--muted);
         font-size: 0.8rem;
         line-height: 1.48;
-        background: rgba(255, 255, 255, 0.56);
+        background: #f7fafb;
       }
 
       .disclosure {
@@ -668,7 +659,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .stat {
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--panel-strong);
         min-height: 74px;
         padding: 11px 12px;
@@ -691,23 +682,23 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .card--live .stat:nth-child(1) {
-        border-color: rgba(47, 75, 92, 0.18);
-        background: rgba(234, 238, 241, 0.92);
+        border-color: rgba(21, 95, 114, 0.22);
+        background: #edf7fa;
       }
 
       .card--live .stat:nth-child(2) {
-        border-color: rgba(63, 86, 104, 0.16);
-        background: rgba(238, 241, 243, 0.92);
+        border-color: rgba(49, 91, 133, 0.18);
+        background: #f0f5fa;
       }
 
       .card--live .stat:nth-child(3) {
-        border-color: rgba(116, 100, 86, 0.16);
-        background: rgba(243, 239, 236, 0.94);
+        border-color: rgba(122, 91, 33, 0.18);
+        background: #faf6ea;
       }
 
       .card--live .stat:nth-child(4) {
-        border-color: rgba(75, 95, 83, 0.16);
-        background: rgba(239, 242, 240, 0.94);
+        border-color: rgba(46, 106, 79, 0.18);
+        background: #eff8f3;
       }
 
       .row {
@@ -746,8 +737,8 @@ GUI_HTML_TEMPLATE = r"""
       input,
       select,
       textarea {
-        border: 1px solid color-mix(in oklab, var(--line) 76%, white);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 243, 236, 0.98));
+        border: 1px solid var(--line);
+        background: #ffffff;
         color: var(--ink);
         font-size: 0.9rem;
         box-shadow: inset 0 1px 1px rgba(34, 29, 24, 0.02), inset 0 0 0 1px rgba(255, 255, 255, 0.22);
@@ -772,18 +763,18 @@ GUI_HTML_TEMPLATE = r"""
 
       select[size] {
         min-height: 208px;
-        background: linear-gradient(180deg, rgba(252, 248, 241, 0.98), rgba(247, 241, 233, 0.98));
+        background: #ffffff;
       }
 
       textarea:not([readonly]) {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 240, 232, 0.98));
+        background: #ffffff;
       }
 
       textarea[readonly],
       pre {
-        border: 1px solid #233243;
-        border-color: #233243;
-        background: #17212f;
+        border: 1px solid #263646;
+        border-color: #263646;
+        background: var(--surface-code);
         color: #d8e4f0;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
       }
@@ -810,18 +801,18 @@ GUI_HTML_TEMPLATE = r"""
         gap: 8px;
         min-height: 100%;
         padding: 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.78);
-        background: rgba(255, 255, 255, 0.76);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
       }
 
       .panel-field--input {
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(248, 243, 236, 0.9));
+        background: #ffffff;
       }
 
       .panel-field--display {
-        background: linear-gradient(180deg, rgba(245, 240, 233, 0.92), rgba(240, 234, 226, 0.88));
+        background: #f6f8fa;
       }
 
       .panel-field--display label {
@@ -953,11 +944,11 @@ GUI_HTML_TEMPLATE = r"""
 
       .note {
         padding: 10px 12px;
-        border-radius: 10px;
-        background: rgba(244, 240, 236, 0.96);
-        border: 1px solid #d8ccb9;
+        border-radius: 8px;
+        background: #f7fafb;
+        border: 1px solid var(--line);
         border-left: 4px solid var(--accent-alt);
-        color: #5d5146;
+        color: var(--muted);
         font-size: 0.8rem;
         line-height: 1.5;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
@@ -965,7 +956,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .note.note--quiet {
         border-left-width: 2px;
-        background: rgba(250, 248, 244, 0.96);
+        background: #ffffff;
       }
 
       .card--relation {
@@ -997,9 +988,9 @@ GUI_HTML_TEMPLATE = r"""
         justify-content: space-between;
         gap: 8px 12px;
         padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px dashed rgba(217, 204, 184, 0.9);
-        background: rgba(255, 255, 255, 0.7);
+        border-radius: 8px;
+        border: 1px dashed var(--line-strong);
+        background: #ffffff;
         color: var(--muted);
         font-size: 0.76rem;
         line-height: 1.4;
@@ -1054,26 +1045,19 @@ GUI_HTML_TEMPLATE = r"""
         min-width: 0;
         min-height: clamp(330px, 34vw, 424px);
         aspect-ratio: 920 / 424;
-        border-radius: 18px;
-        border: 1px solid color-mix(in oklab, var(--line) 74%, white);
+        border-radius: 8px;
+        border: 1px solid var(--line);
         background:
-          radial-gradient(circle at top left, rgba(47, 75, 92, 0.12), transparent 26%),
-          radial-gradient(circle at bottom right, rgba(116, 100, 86, 0.12), transparent 22%),
-          linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(247, 241, 233, 0.98));
+          linear-gradient(rgba(141, 154, 168, 0.16) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(141, 154, 168, 0.16) 1px, transparent 1px),
+          #f8fafb;
+        background-size: 24px 24px;
         overflow: hidden;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62), var(--shadow-soft);
       }
 
       .relation-diagram::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-        background-image:
-          linear-gradient(rgba(217, 204, 184, 0.14) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(217, 204, 184, 0.14) 1px, transparent 1px);
-        background-size: 28px 28px;
-        mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 100%);
+        display: none;
       }
 
       .relation-lanes {
@@ -1086,9 +1070,9 @@ GUI_HTML_TEMPLATE = r"""
         position: absolute;
         top: 10px;
         bottom: 10px;
-        border-radius: 18px;
-        border: 1px solid rgba(217, 204, 184, 0.46);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.14));
+        border-radius: 8px;
+        border: 1px solid rgba(141, 154, 168, 0.32);
+        background: rgba(255, 255, 255, 0.42);
       }
 
       .relation-lane span {
@@ -1220,9 +1204,9 @@ GUI_HTML_TEMPLATE = r"""
         width: 152px;
         min-height: 110px;
         padding: 10px 12px;
-        border: 1px solid color-mix(in oklab, var(--line) 76%, white);
-        border-radius: 18px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 243, 235, 0.985));
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
         box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.68);
         transform: translate(-50%, -50%);
         display: grid;
@@ -1284,8 +1268,8 @@ GUI_HTML_TEMPLATE = r"""
         position: absolute;
         inset: 0 auto 0 0;
         width: 4px;
-        border-radius: 18px 0 0 18px;
-        background: rgba(47, 75, 92, 0.22);
+        border-radius: 8px 0 0 8px;
+        background: rgba(21, 95, 114, 0.28);
       }
 
       .relation-node.is-active {
@@ -1352,7 +1336,7 @@ GUI_HTML_TEMPLATE = r"""
         align-items: center;
         min-height: 24px;
         padding: 4px 7px;
-        border-radius: 10px;
+        border-radius: 6px;
         background: rgba(240, 236, 228, 0.92);
         color: var(--accent-strong);
         font-size: 0.63rem;
@@ -1418,9 +1402,9 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 10px;
         padding: 14px;
-        border-radius: 14px;
-        border: 1px solid rgba(217, 204, 184, 0.8);
-        background: rgba(255, 255, 255, 0.76);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
       }
 
@@ -1453,9 +1437,9 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 10px;
         padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.7);
-        background: rgba(250, 246, 240, 0.84);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #f7fafb;
       }
 
       .relation-checks label {
@@ -1488,9 +1472,9 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 9px;
         padding: 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.78);
-        background: rgba(255, 255, 255, 0.88);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
       }
 
       .runtime-card-head {
@@ -1505,8 +1489,8 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .runtime-card.is-attention {
-        border-color: rgba(108, 77, 72, 0.36);
-        background: linear-gradient(180deg, rgba(255, 249, 246, 0.96), rgba(247, 239, 234, 0.94));
+        border-color: rgba(138, 58, 54, 0.46);
+        background: #fff7f5;
       }
 
       .runtime-card strong {
@@ -1561,9 +1545,9 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 10px;
         padding: 14px;
-        border-radius: 14px;
-        border: 1px solid rgba(217, 204, 184, 0.8);
-        background: rgba(255, 255, 255, 0.8);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.48);
       }
 
@@ -1593,8 +1577,8 @@ GUI_HTML_TEMPLATE = r"""
         align-items: center;
         min-height: 28px;
         padding: 5px 8px;
-        border-radius: 10px;
-        background: rgba(240, 236, 228, 0.92);
+        border-radius: 6px;
+        background: #eef3f6;
         color: var(--accent-strong);
         font-size: 0.68rem;
         font-family: "IBM Plex Mono", "Consolas", monospace;
@@ -1618,9 +1602,9 @@ GUI_HTML_TEMPLATE = r"""
         gap: 4px;
         min-height: 66px;
         padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.72);
-        background: rgba(255, 255, 255, 0.88);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
       }
 
       .relation-spotlight-fact strong {
@@ -1648,9 +1632,9 @@ GUI_HTML_TEMPLATE = r"""
         gap: 4px;
         min-height: 72px;
         padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.78);
-        background: rgba(255, 255, 255, 0.84);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
         color: var(--muted);
         font-size: 0.74rem;
       }
@@ -1678,9 +1662,9 @@ GUI_HTML_TEMPLATE = r"""
         display: grid;
         gap: 4px;
         padding: 10px 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.72);
-        background: rgba(255, 255, 255, 0.84);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
       }
 
       .relation-link-item strong {
@@ -1716,9 +1700,9 @@ GUI_HTML_TEMPLATE = r"""
         gap: 8px;
         margin-bottom: 10px;
         padding: 14px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.82);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 243, 235, 0.78));
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
       }
 
       .queue-guide strong {
@@ -1747,9 +1731,9 @@ GUI_HTML_TEMPLATE = r"""
         gap: 4px;
         min-height: 72px;
         padding: 11px 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.78);
-        background: rgba(255, 255, 255, 0.8);
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
       }
 
       .summary-tile strong {
@@ -1773,8 +1757,8 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .summary-tile.is-attention {
-        border-color: rgba(108, 77, 72, 0.34);
-        background: linear-gradient(180deg, rgba(255, 249, 246, 0.96), rgba(247, 239, 234, 0.94));
+        border-color: rgba(138, 58, 54, 0.46);
+        background: #fff7f5;
       }
 
       .summary-tile.is-active {
@@ -1794,9 +1778,9 @@ GUI_HTML_TEMPLATE = r"""
         gap: 8px;
         margin-bottom: 10px;
         padding: 14px;
-        border-radius: 12px;
-        border: 1px solid rgba(217, 204, 184, 0.82);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(248, 243, 235, 0.78));
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: #ffffff;
       }
 
       .inspect-guide strong {
@@ -1860,16 +1844,16 @@ GUI_HTML_TEMPLATE = r"""
       #workstream-list .preset {
         min-height: 0;
         padding: 11px 12px 11px 14px;
-        border-radius: 12px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 241, 233, 0.92));
+        border-radius: 8px;
+        background: #ffffff;
       }
 
       #workstream-list .preset::before {
         inset: 0 auto 0 0;
         width: 4px;
         height: auto;
-        border-radius: 12px 0 0 12px;
-        background: rgba(47, 75, 92, 0.28);
+        border-radius: 8px 0 0 8px;
+        background: rgba(21, 95, 114, 0.28);
       }
 
       #workstream-list .preset.active::before {
@@ -1924,14 +1908,14 @@ GUI_HTML_TEMPLATE = r"""
 
       details.disclosure summary {
         padding: 10px 14px;
-        background: rgba(255, 255, 255, 0.4);
-        border: 1px solid rgba(217, 204, 184, 0.4);
+        background: #ffffff;
+        border: 1px solid var(--line);
         border-radius: 8px;
         transition: background 0.2s ease;
       }
 
       details.disclosure summary:hover {
-        background: rgba(255, 255, 255, 0.7);
+        background: #f7fafb;
       }
 
       @media (max-width: 1120px) {
@@ -2014,6 +1998,31 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       @media (max-width: 640px) {
+        h1 {
+          font-size: 1.95rem;
+        }
+
+        .hero-controls {
+          width: 100%;
+          grid-template-columns: 1fr;
+          justify-items: stretch;
+        }
+
+        .control-switch,
+        .control-actions {
+          justify-items: stretch;
+          justify-content: flex-start;
+        }
+
+        body[data-home="workspace"] #preset-grid,
+        .preset-grid {
+          grid-template-columns: 1fr;
+        }
+
+        body[data-home="workspace"] #preset-grid .preset {
+          min-height: 64px;
+        }
+
         .workspace-strip {
           grid-template-columns: 1fr;
         }
@@ -2028,8 +2037,8 @@ GUI_HTML_TEMPLATE = r"""
             <p class="eyebrow" data-i18n="hero.eyebrow">Host, Guest, and Human operator workflow</p>
             <h1 data-i18n="hero.title">Terminal Bridge</h1>
             <p data-i18n="hero.body">
-              Pick a preset, start collaboration, watch the live room, and open advanced controls
-              only when you actually need raw IDs, capture, or transport tuning.
+              Local control console for pairing panes, watching room traffic, reviewing handoffs,
+              and recovering live terminal workstreams.
             </p>
             <div class="meta">
               <span class="badge"><strong data-i18n="badges.mcp">MCP</strong> __MCP_ENDPOINT__</span>
@@ -2540,7 +2549,7 @@ GUI_HTML_TEMPLATE = r"""
           hero: {
             eyebrow: 'Host, Guest, and Human operator workflow',
             title: 'Terminal Bridge',
-            body: 'Start task, choose preset, adjust parameters.'
+            body: 'Local control console for pairing panes, watching room traffic, reviewing handoffs, and recovering live terminal workstreams.'
           },
           badges: {
             mcp: 'MCP',
@@ -2618,7 +2627,7 @@ GUI_HTML_TEMPLATE = r"""
             quick: {
               label: 'Quick Pairing',
               summary: 'Fast Host + Guest launch with the minimum number of choices.',
-              copy: 'Init session and start bridge.'
+              copy: 'Create panes, start the bridge, then move attention to the live room.'
             },
             approval: {
               label: 'Approval Gate',
@@ -2627,13 +2636,13 @@ GUI_HTML_TEMPLATE = r"""
             },
             mcp: {
               label: 'MCP Operator',
-              summary: 'External MCP control with Vector linkage.',
-              copy: 'Monitor room and bridge. Vector data can link with the Skill 0 main project vector database.'
+              summary: 'External MCP client drives tools while this console watches runtime truth.',
+              copy: 'Keep the browser focused on room, bridge, audit, and subscriber state while another client calls tools.'
             },
             diagnostics: {
               label: 'Diagnostics',
-              summary: 'Capture and interrupt tools.',
-              copy: 'Open tools when needed.'
+              summary: 'Capture, interrupt, audit, and raw status for recovery work.',
+              copy: 'Use capture and interrupt only when normal collaboration needs runtime investigation.'
             },
             radar: {
               label: 'Handoff Radar',
@@ -2751,7 +2760,7 @@ GUI_HTML_TEMPLATE = r"""
             reviewEditedYes: 'edited text present',
             reviewEditedNo: 'send original text',
             reviewEmpty: 'No pending items.',
-            reviewMetaIdle: 'Expand',
+            reviewMetaIdle: 'queue empty',
             reviewMetaPending: '{count} pending',
             pendingDetailEmpty: 'Select a pending item to inspect the full review context.',
             pendingDetailAction: 'Action',
@@ -2761,8 +2770,8 @@ GUI_HTML_TEMPLATE = r"""
             pendingDetailEdited: 'Edited',
             pendingDetailEditedFallback: '(not edited)',
             diagnosticsTitle: 'Diagnostics',
-            diagnosticsCopy: 'Capture and interrupt tools.',
-            diagnosticsMeta: 'Tools',
+            diagnosticsCopy: 'Capture, interrupt, review-state, audit, and fleet repair controls for incident work.',
+            diagnosticsMeta: 'recovery tools',
             diagnosticsMetaAudited: 'Audit on',
             captureSummary: 'Captured terminal state',
             launchNote: 'Stage the launch plan here. Init Session prepares panes; Start Collaboration begins the active bridge.',
@@ -2796,7 +2805,7 @@ GUI_HTML_TEMPLATE = r"""
             inspectDependencyClear: 'No dependency blocker',
             inspectGuardActive: 'guarded',
             inspectGuardIdle: 'not guarding',
-            statusMetaIdle: 'Expand',
+            statusMetaIdle: 'status folded',
             statusMetaReady: 'Active',
             statusMetaGuarded: 'Guarded',
             statusBadgeReady: 'Delivery active',
@@ -2942,7 +2951,7 @@ GUI_HTML_TEMPLATE = r"""
           hero: {
             eyebrow: 'Host、Guest 與 Human Operator 協作流程',
             title: 'Terminal Bridge',
-            body: '啟動任務 選擇preset 調整參數'
+            body: '本機控制台，用來配對 panes、監看 room traffic、審核 handoff，並恢復 live terminal workstreams。'
           },
           badges: {
             mcp: 'MCP',
@@ -3020,7 +3029,7 @@ GUI_HTML_TEMPLATE = r"""
             quick: {
               label: '快速配對',
               summary: '用最少選項啟動一組 Host + Guest。',
-              copy: '初始化 Session，啟動 Bridge。'
+              copy: '先建立 panes，再啟動 bridge，接著把注意力移到 live room。'
             },
             approval: {
               label: '審核閘門',
@@ -3029,13 +3038,13 @@ GUI_HTML_TEMPLATE = r"""
             },
             mcp: {
               label: 'MCP 操作台',
-              summary: '外部 MCP 控制，可連動 Vector 資訊。',
-              copy: '監看 room 與 bridge。Vector 資訊可和 Skill 0 主專案的向量資料庫連動利用。'
+              summary: '外部 MCP client 呼叫 tools，這個 console 負責監看 runtime truth。',
+              copy: '當另一個 client 呼叫 tools 時，這裡專注顯示 room、bridge、audit 與 subscriber 狀態。'
             },
             diagnostics: {
               label: '診斷模式',
-              summary: '擷取與中斷工具。',
-              copy: '需要時開啟工具。'
+              summary: '提供 capture、interrupt、audit 與 raw status 給 recovery 使用。',
+              copy: '只有一般協作需要 runtime 調查時，才進入 capture 與 interrupt 工具。'
             },
             radar: {
               label: '交接雷達',
@@ -3153,7 +3162,7 @@ GUI_HTML_TEMPLATE = r"""
             reviewEditedYes: '已有改寫文字',
             reviewEditedNo: '送出原始內容',
             reviewEmpty: '目前沒有待審項目。',
-            reviewMetaIdle: '展開',
+            reviewMetaIdle: '佇列為空',
             reviewMetaPending: '{count} 筆待審',
             pendingDetailEmpty: '先選一筆待審項目，再查看完整審核脈絡。',
             pendingDetailAction: 'Action',
@@ -3163,8 +3172,8 @@ GUI_HTML_TEMPLATE = r"""
             pendingDetailEdited: '改寫內容',
             pendingDetailEditedFallback: '（尚未改寫）',
             diagnosticsTitle: '診斷模式',
-            diagnosticsCopy: '擷取與中斷工具。',
-            diagnosticsMeta: '工具',
+            diagnosticsCopy: '提供 capture、interrupt、review-state、audit 與 fleet repair 控制，供 incident work 使用。',
+            diagnosticsMeta: '恢復工具',
             diagnosticsMetaAudited: 'Audit 已啟用',
             captureSummary: '擷取的 terminal 狀態',
             launchNote: '先在這裡排好啟動計畫。Init Session 用來建立 panes；開始協作才會真的啟動 active bridge。',
@@ -3198,7 +3207,7 @@ GUI_HTML_TEMPLATE = r"""
             inspectDependencyClear: '目前沒有 dependency blocker',
             inspectGuardActive: '警戒中',
             inspectGuardIdle: '未警戒',
-            statusMetaIdle: '展開',
+            statusMetaIdle: '狀態已收合',
             statusMetaReady: '運作中',
             statusMetaGuarded: '受保護',
             statusBadgeReady: '轉發中',
