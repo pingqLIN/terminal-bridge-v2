@@ -39,3 +39,4 @@ build/
 .codex
 .tb2-overnight/
 .tb2-project-loop/
+.tb2-gui-smoke/

@@ -2909,13 +2909,26 @@ class TestGuiRouting:
     def test_gui_html_surfaces_mouse_driven_topology_operations(self):
         html = server_mod.build_gui_html("/mcp")
         assert 'id="topology-actions"' in html
-        assert html.count("data-topology-action=") == 6
+        assert html.count('class="topology-action"') == 6
         assert 'data-topology-action="prepare"' in html
         assert 'data-topology-action="start"' in html
         assert 'data-topology-action="review"' in html
         assert 'data-topology-action="room"' in html
         assert 'data-topology-action="inspect"' in html
         assert 'data-topology-action="recover"' in html
+        assert 'id="masthead-toggle"' in html
+        assert "function applyMastheadMode(expanded, options)" in html
+        assert "window.localStorage.setItem('tb2-masthead'" in html
+        assert "document.body.dataset.workspaceTab = next;" in html
+        assert "body[data-home=\"workspace\"][data-masthead=\"compact\"] #preset-grid" in html
+        assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .fleet-sidebar' in html
+        assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-strip' in html
+        assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .topology-actions' in html
+        assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-link-badge' in html
+        assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node' in html
+        assert "state.home = !forceWorkspace;" in html
+        assert "function renderTopologyActions()" in html
+        assert "function setTopologyActionState(name, stateName, detail)" in html
         assert "async function handleTopologyAction(name)" in html
         assert "await initSession();" in html
         assert "await startBridge();" in html

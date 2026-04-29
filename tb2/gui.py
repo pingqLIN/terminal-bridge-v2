@@ -214,6 +214,38 @@ GUI_HTML_TEMPLATE = r"""
         gap: 10px;
       }
 
+      body[data-home="workspace"][data-masthead="compact"] .hero {
+        padding: 10px 12px;
+        gap: 8px;
+      }
+
+      body[data-home="workspace"][data-masthead="compact"] .hero-copy p:not(.eyebrow),
+      body[data-home="workspace"][data-masthead="compact"] #preset-grid {
+        display: none;
+      }
+
+      body[data-home="workspace"][data-masthead="compact"] h1 {
+        font-size: 1.48rem;
+      }
+
+      body[data-home="workspace"][data-masthead="compact"] .hero-controls {
+        max-width: 760px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+        justify-content: flex-end;
+      }
+
+      body[data-home="workspace"][data-masthead="compact"] .control-switch {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      body[data-home="workspace"][data-masthead="compact"] .control-label {
+        font-size: 0.65rem;
+      }
+
       .card {
         --card-accent: var(--accent);
         --card-soft: #ffffff;
@@ -1058,7 +1090,7 @@ GUI_HTML_TEMPLATE = r"""
 
       .topology-actions {
         display: grid;
-        grid-template-columns: repeat(6, minmax(112px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
         gap: 8px;
       }
 
@@ -1079,6 +1111,25 @@ GUI_HTML_TEMPLATE = r"""
         transform: translateY(-1px);
         border-color: rgba(47, 75, 92, 0.34);
         box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+      }
+
+      .topology-action.is-running {
+        border-color: rgba(47, 75, 92, 0.36);
+        background: var(--accent-soft);
+      }
+
+      .topology-action.is-ready {
+        border-color: rgba(47, 75, 92, 0.28);
+      }
+
+      .topology-action.is-attention {
+        border-color: rgba(138, 58, 54, 0.46);
+        background: #fff7f5;
+      }
+
+      .topology-action.is-waiting {
+        border-style: dashed;
+        opacity: 0.78;
       }
 
       .topology-action strong {
@@ -1135,8 +1186,9 @@ GUI_HTML_TEMPLATE = r"""
         position: relative;
         width: 100%;
         min-width: 0;
-        min-height: clamp(330px, 34vw, 424px);
-        aspect-ratio: 920 / 424;
+        min-height: 0;
+        height: clamp(330px, 34vw, 424px);
+        aspect-ratio: auto;
         border-radius: 8px;
         border: 1px solid var(--line);
         background:
@@ -2211,6 +2263,124 @@ GUI_HTML_TEMPLATE = r"""
         display: none;
       }
 
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .fleet-sidebar,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-strip,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] #relation-details .disclosure-copy,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-stage-note {
+        display: none;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .layout {
+        gap: 8px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workstream-panel,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-panels,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-panel,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .layout-secondary,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-stage,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-stage-head {
+        gap: 8px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-nav {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-tab {
+        min-height: 48px;
+        padding: 8px 6px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-tab-label {
+        font-size: 0.72rem;
+        text-align: center;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .workspace-tab-meta {
+        display: none;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .card {
+        padding: 12px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] details.disclosure summary {
+        padding: 8px 10px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .topology-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .topology-action {
+        min-height: 56px;
+        padding: 8px 9px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .topology-action strong {
+        font-size: 0.68rem;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .topology-action span {
+        font-size: 0.64rem;
+        line-height: 1.22;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-link-badge {
+        display: none;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node {
+        width: 96px;
+        min-height: 74px;
+        padding: 8px 7px;
+        gap: 3px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node-head {
+        gap: 4px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .status-led {
+        width: 9px;
+        height: 9px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node-tag {
+        padding: 2px 5px;
+        font-size: 0.56rem;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node strong {
+        font-size: 0.68rem;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node span,
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node code {
+        font-size: 0.58rem;
+        line-height: 1.18;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node > span {
+        display: none;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node-actions {
+        grid-template-columns: 1fr;
+        gap: 3px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node-action {
+        padding: 3px 4px;
+      }
+
+      body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node-action em {
+        display: none;
+      }
+
       details.disclosure summary {
         padding: 10px 14px;
         background: #ffffff;
@@ -2365,7 +2535,8 @@ GUI_HTML_TEMPLATE = r"""
         }
 
         .relation-diagram {
-          min-height: 360px;
+          aspect-ratio: auto;
+          height: 360px;
         }
 
         .relation-node {
@@ -2511,6 +2682,12 @@ GUI_HTML_TEMPLATE = r"""
                 <button class="ghost control-button" data-design-mode="v1" type="button" data-i18n="design.v1">V1 Tune</button>
                 <button class="ghost control-button" data-design-mode="v2" type="button" data-i18n="design.v2">V2 Deck</button>
                 <button class="ghost control-button" data-design-mode="v3" type="button" data-i18n="design.v3">V3 Map</button>
+              </div>
+            </div>
+            <div class="control-switch">
+              <span class="control-label" data-i18n="masthead.label">Briefing</span>
+              <div class="control-actions">
+                <button class="ghost control-button" id="masthead-toggle" type="button" aria-expanded="false" data-i18n="masthead.expand">Expand</button>
               </div>
             </div>
           </div>
@@ -3048,6 +3225,11 @@ GUI_HTML_TEMPLATE = r"""
             v2: 'V2 Deck',
             v3: 'V3 Map'
           },
+          masthead: {
+            label: 'Briefing',
+            expand: 'Expand',
+            collapse: 'Compact'
+          },
           workspace: {
             workflow: 'Workflow',
             topology: 'Topology',
@@ -3471,6 +3653,11 @@ GUI_HTML_TEMPLATE = r"""
             v1: 'V1 微調',
             v2: 'V2 重排',
             v3: 'V3 全新'
+          },
+          masthead: {
+            label: '簡報',
+            expand: '展開',
+            collapse: '精簡'
           },
           workspace: {
             workflow: '工作流',
@@ -3962,6 +4149,7 @@ GUI_HTML_TEMPLATE = r"""
         locale: 'en',
         layout: 'balanced',
         design: 'v1',
+        mastheadExpanded: false,
         workspaceTab: 'workflow',
         preset: 'quick',
         home: true,
@@ -4025,6 +4213,14 @@ GUI_HTML_TEMPLATE = r"""
           // Ignore storage failures and fall back to the default design system.
         }
         return 'v1';
+      }
+
+      function preferredMastheadExpanded() {
+        try {
+          return window.localStorage.getItem('tb2-masthead') === 'expanded';
+        } catch (_) {
+          return false;
+        }
       }
 
       function preferredWorkspaceTab() {
@@ -4330,6 +4526,7 @@ GUI_HTML_TEMPLATE = r"""
       function setWorkspaceTab(name, options) {
         const next = name === 'topology' || name === 'review' || name === 'inspect' ? name : 'workflow';
         state.workspaceTab = next;
+        document.body.dataset.workspaceTab = next;
         document.querySelectorAll('[data-workspace-panel]').forEach(panel => {
           panel.classList.toggle('is-active', panel.dataset.workspacePanel === next);
         });
@@ -4368,6 +4565,7 @@ GUI_HTML_TEMPLATE = r"""
         setLanguageButtons();
         setLayoutButtons();
         setDesignButtons();
+        applyMastheadMode(state.mastheadExpanded, { persist: false });
         setWorkspaceButtons();
         renderWorkspaceTabs();
         renderWorkspaceStrip();
@@ -4393,6 +4591,7 @@ GUI_HTML_TEMPLATE = r"""
         state.layout = mode === 'stacked' || mode === 'balanced' || mode === 'wide' ? mode : 'balanced';
         document.body.dataset.layout = state.layout;
         document.body.dataset.home = state.home ? 'preset-only' : 'workspace';
+        applyMastheadMode(state.mastheadExpanded, { persist: false });
         try {
           window.localStorage.setItem('tb2-layout', state.layout);
         } catch (_) {
@@ -4423,10 +4622,29 @@ GUI_HTML_TEMPLATE = r"""
         document.body.dataset.narrow = width <= 900 ? 'true' : 'false';
       }
 
+      function applyMastheadMode(expanded, options) {
+        state.mastheadExpanded = Boolean(expanded);
+        document.body.dataset.masthead = state.home || state.mastheadExpanded ? 'expanded' : 'compact';
+        const button = $('masthead-toggle');
+        if (button) {
+          button.textContent = state.mastheadExpanded ? t('masthead.collapse') : t('masthead.expand');
+          button.setAttribute('aria-expanded', state.mastheadExpanded ? 'true' : 'false');
+          button.classList.toggle('active', state.mastheadExpanded);
+        }
+        if (!options || options.persist !== false) {
+          try {
+            window.localStorage.setItem('tb2-masthead', state.mastheadExpanded ? 'expanded' : 'compact');
+          } catch (_) {
+            // Ignore storage failures.
+          }
+        }
+      }
+
       function revealWorkspace() {
         if (!state.home) return;
         state.home = false;
         document.body.dataset.home = 'workspace';
+        applyMastheadMode(state.mastheadExpanded, { persist: false });
       }
 
       function pulseTarget(target) {
@@ -4521,6 +4739,32 @@ GUI_HTML_TEMPLATE = r"""
         $(id).classList.toggle('hidden', hidden);
       }
 
+      function setTopologyActionState(name, stateName, detail) {
+        const button = document.querySelector('[data-topology-action="' + name + '"]');
+        if (!button) return;
+        button.classList.remove('is-running', 'is-ready', 'is-attention', 'is-waiting');
+        button.classList.add('is-' + stateName);
+        button.dataset.state = stateName;
+        button.setAttribute('title', detail);
+        button.setAttribute('aria-label', button.querySelector('strong').textContent + ' · ' + detail);
+      }
+
+      function renderTopologyActions() {
+        const detail = inferBridgeDetail(state.statusSnapshot);
+        const hasPanes = Boolean($('pane-a').value.trim() && $('pane-b').value.trim());
+        const bridgeActive = bridgeIsActive(detail) || Boolean($('bridge-id').value.trim());
+        const roomActive = Boolean((detail && detail.room_id) || $('room-id').value.trim());
+        const pendingCount = state.pendingItems.length;
+        const reviewEnabled = detail ? Boolean(detail.intervention) : $('intervention').checked;
+        const guardBlocked = Boolean(state.guard && state.guard.blocked);
+        setTopologyActionState('prepare', hasPanes ? 'ready' : 'waiting', hasPanes ? t('strip.panesReady') : t('strip.panesWaiting'));
+        setTopologyActionState('start', bridgeActive ? 'running' : (hasPanes ? 'ready' : 'waiting'), bridgeActive ? t('strip.bridgeLive') : t('strip.bridgeIdle'));
+        setTopologyActionState('review', pendingCount > 0 ? 'attention' : (reviewEnabled ? 'ready' : 'waiting'), pendingCount > 0 ? format('cards.reviewMetaPending', { count: pendingCount }) : (reviewEnabled ? t('workspaceMeta.reviewArmed') : t('workspaceMeta.reviewOff')));
+        setTopologyActionState('room', roomActive ? 'running' : 'waiting', roomActive ? format('strip.roomAttached', { room: $('room-id').value.trim() || (detail && detail.room_id) || '' }) : t('strip.roomPending'));
+        setTopologyActionState('inspect', guardBlocked ? 'attention' : 'ready', guardBlocked ? t('cards.statusMetaGuarded') : t('cards.statusMetaReady'));
+        setTopologyActionState('recover', guardBlocked ? 'attention' : 'ready', guardBlocked ? t('cards.inspectGuardActive') : t('cards.inspectDependencyClear'));
+      }
+
       function syncMetrics() {
         $('metric-host').textContent = $('pane-a').value.trim() || t('metrics.notReady');
         $('metric-guest').textContent = $('pane-b').value.trim() || t('metrics.notReady');
@@ -4582,6 +4826,7 @@ GUI_HTML_TEMPLATE = r"""
         renderReviewSummary();
         renderInspectSummary(state.statusSnapshot || {});
         renderRelationView();
+        renderTopologyActions();
       }
 
       function applyPreset(name, options) {
@@ -6322,6 +6567,7 @@ GUI_HTML_TEMPLATE = r"""
             }));
           });
         });
+        $('masthead-toggle').onclick = () => applyMastheadMode(!state.mastheadExpanded);
         window.addEventListener('resize', syncNarrowViewport);
         $('init-session').onclick = () => run(initSession);
         $('start-bridge').onclick = () => run(startBridge);
@@ -6454,8 +6700,10 @@ GUI_HTML_TEMPLATE = r"""
         state.design = query.design === 'v1' || query.design === 'v2' || query.design === 'v3'
           ? query.design
           : preferredDesign();
+        state.mastheadExpanded = preferredMastheadExpanded();
         state.workspaceTab = forcedTab || preferredWorkspaceTab();
         state.preset = forcedPreset || state.preset;
+        state.home = !forceWorkspace;
         bind();
         syncNarrowViewport();
         translatePage();
@@ -6464,6 +6712,7 @@ GUI_HTML_TEMPLATE = r"""
         applyDesign(state.design);
         applyPreset(state.preset, { keepTab: true, keepHome: !forceWorkspace });
         document.body.dataset.home = forceWorkspace ? 'workspace' : 'preset-only';
+        applyMastheadMode(state.mastheadExpanded, { persist: false });
         log(format('logs.ready', { endpoint: MCP_ENDPOINT }));
         await run(async () => {
           const profiles = await tool('list_profiles', {});
