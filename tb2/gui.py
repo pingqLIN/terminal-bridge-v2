@@ -72,6 +72,35 @@ GUI_HTML_TEMPLATE = r"""
         --shell-width: 920px;
       }
 
+      body[data-design="v2"] {
+        --shell-width: 1600px;
+        --shell-gutter: 20px;
+        --layout-left: minmax(300px, 340px);
+      }
+
+      body[data-design="v3"] {
+        --bg: #0d1218;
+        --panel: #121a22;
+        --panel-strong: #17222c;
+        --line: #283846;
+        --line-strong: #526879;
+        --ink: #eef6f8;
+        --muted: #a2b4c0;
+        --accent: #55c7bd;
+        --accent-strong: #8ee7df;
+        --accent-soft: #183f43;
+        --info: #7aa7ff;
+        --success: #62c98d;
+        --accent-alt: #e2b55f;
+        --danger: #ef766f;
+        --surface-code: #071015;
+        --shadow: 0 18px 34px rgba(0, 0, 0, 0.28);
+        --shadow-soft: 0 8px 18px rgba(0, 0, 0, 0.22);
+        --shadow-press: 0 2px 5px rgba(0, 0, 0, 0.32);
+        --shell-width: 1640px;
+        --shell-gutter: 18px;
+      }
+
       body[data-scene="radar"] {
         --bg: #f1f2ef;
         --panel: #fcfcfa;
@@ -108,6 +137,18 @@ GUI_HTML_TEMPLATE = r"""
         --danger: #8a3a36;
       }
 
+      body[data-design="v3"][data-scene] {
+        --bg: #0d1218;
+        --panel: #121a22;
+        --panel-strong: #17222c;
+        --line: #283846;
+        --accent: #55c7bd;
+        --accent-strong: #8ee7df;
+        --accent-soft: #183f43;
+        --accent-alt: #e2b55f;
+        --danger: #ef766f;
+      }
+
       body::before {
         content: "";
         position: fixed;
@@ -125,6 +166,12 @@ GUI_HTML_TEMPLATE = r"""
         margin: 18px auto 40px;
         display: grid;
         gap: 16px;
+      }
+
+      body[data-home="workspace"] main {
+        max-height: calc(250svh - 72px);
+        overflow-y: auto;
+        scrollbar-gutter: stable;
       }
 
       body[data-home="preset-only"] main {
@@ -895,6 +942,12 @@ GUI_HTML_TEMPLATE = r"""
         border-color: var(--ink);
       }
 
+      body[data-design="v3"] .control-button.active {
+        background: var(--accent);
+        color: #071015;
+        border-color: var(--accent);
+      }
+
       .checks {
         color: var(--muted);
         font-size: 0.8rem;
@@ -1001,6 +1054,45 @@ GUI_HTML_TEMPLATE = r"""
         font-size: 0.75rem;
         letter-spacing: 0.04em;
         text-transform: uppercase;
+      }
+
+      .topology-actions {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(112px, 1fr));
+        gap: 8px;
+      }
+
+      .topology-action {
+        display: grid;
+        gap: 4px;
+        min-height: 70px;
+        padding: 10px 12px;
+        border: 1px solid rgba(47, 75, 92, 0.2);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--ink);
+        text-align: left;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
+      }
+
+      .topology-action:hover {
+        transform: translateY(-1px);
+        border-color: rgba(47, 75, 92, 0.34);
+        box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.68);
+      }
+
+      .topology-action strong {
+        color: var(--ink);
+        font-size: 0.74rem;
+        font-weight: 750;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .topology-action span {
+        color: var(--muted);
+        font-size: 0.69rem;
+        line-height: 1.32;
       }
 
       .relation-badges {
@@ -1125,7 +1217,15 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .relation-link.is-active {
+        stroke-dasharray: 12 14;
+        animation: relation-flow 1.35s linear infinite;
         filter: drop-shadow(0 0 8px rgba(47, 75, 92, 0.1));
+      }
+
+      @keyframes relation-flow {
+        to {
+          stroke-dashoffset: -52;
+        }
       }
 
       .relation-link.is-standby {
@@ -1906,6 +2006,211 @@ GUI_HTML_TEMPLATE = r"""
         transform: translateX(-50%) translateY(0);
       }
 
+      body[data-design="v2"] main > .layout {
+        grid-template-columns: 1fr;
+      }
+
+      body[data-design="v2"] .fleet-sidebar {
+        position: static;
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+        gap: 12px 18px;
+        align-items: start;
+      }
+
+      body[data-design="v2"] #workstream-list {
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important;
+        margin-top: 0 !important;
+      }
+
+      body[data-design="v2"] .workstream-panel {
+        display: grid;
+        grid-template-columns: 260px minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+      }
+
+      body[data-design="v2"] .workspace-nav {
+        position: sticky;
+        top: 14px;
+        grid-column: 1;
+        grid-row: 1 / span 2;
+        grid-template-columns: 1fr;
+      }
+
+      body[data-design="v2"] .workspace-tab {
+        min-height: 68px;
+      }
+
+      body[data-design="v2"] .workspace-strip {
+        grid-column: 2;
+        grid-row: 1;
+        grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      }
+
+      body[data-design="v2"] .workspace-panels {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      body[data-design="v2"] .workspace-panel[data-workspace-panel="workflow"] > .layout {
+        grid-template-columns: minmax(420px, 0.94fr) minmax(520px, 1.06fr);
+      }
+
+      body[data-design="v2"] .hero {
+        padding: 12px 16px;
+      }
+
+      body[data-design="v2"] .hero-header {
+        grid-template-columns: minmax(0, 1fr) minmax(280px, auto);
+      }
+
+      body[data-design="v2"] #preset-grid {
+        grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      }
+
+      body[data-design="v2"] #preset-grid .preset {
+        min-height: 76px;
+        padding: 10px 11px;
+      }
+
+      body[data-design="v3"] input,
+      body[data-design="v3"] select,
+      body[data-design="v3"] textarea,
+      body[data-design="v3"] button {
+        color-scheme: dark;
+      }
+
+      body[data-design="v3"] main {
+        gap: 14px;
+      }
+
+      body[data-design="v3"] .hero,
+      body[data-design="v3"] .card,
+      body[data-design="v3"] .workspace-tab,
+      body[data-design="v3"] .workspace-chip,
+      body[data-design="v3"] .summary-tile,
+      body[data-design="v3"] .topology-action,
+      body[data-design="v3"] .relation-panel,
+      body[data-design="v3"] .relation-node,
+      body[data-design="v3"] .relation-fact,
+      body[data-design="v3"] .relation-link-item,
+      body[data-design="v3"] .panel-field,
+      body[data-design="v3"] .queue-guide,
+      body[data-design="v3"] .inspect-guide {
+        background: var(--panel);
+        border-color: var(--line);
+        outline-color: rgba(142, 231, 223, 0.08);
+      }
+
+      body[data-design="v3"] .card::before {
+        width: 3px;
+        background: var(--accent);
+      }
+
+      body[data-design="v3"] .hero {
+        border-top: 3px solid var(--accent);
+      }
+
+      body[data-design="v3"] .preset,
+      body[data-design="v3"] .topology-action,
+      body[data-design="v3"] .badge,
+      body[data-design="v3"] .stat,
+      body[data-design="v3"] .runtime-card,
+      body[data-design="v3"] .relation-spotlight,
+      body[data-design="v3"] .relation-spotlight-fact {
+        background: var(--panel-strong);
+        border-color: var(--line);
+      }
+
+      body[data-design="v3"] .topology-action:hover {
+        background: #17222c;
+      }
+
+      body[data-design="v3"] .preset {
+        background: #121a22 !important;
+        background-color: #121a22 !important;
+        background-image: none !important;
+        color: var(--ink) !important;
+      }
+
+      body[data-design="v3"] .preset.active,
+      body[data-design="v3"] .workspace-tab.active {
+        background: var(--accent-soft) !important;
+        background-color: var(--accent-soft) !important;
+        background-image: none !important;
+        color: var(--ink);
+        border-color: rgba(85, 199, 189, 0.72);
+      }
+
+      body[data-design="v3"] input,
+      body[data-design="v3"] select,
+      body[data-design="v3"] textarea {
+        background: #0c141b;
+        border-color: var(--line);
+        color: var(--ink);
+      }
+
+      body[data-design="v3"] textarea[readonly],
+      body[data-design="v3"] pre {
+        background: #050b10;
+        border-color: #294455;
+        color: #d9f7f3;
+      }
+
+      body[data-design="v3"] button.ghost {
+        background: #0c141b;
+        color: var(--ink);
+        border-color: var(--line);
+      }
+
+      body[data-design="v3"] .note,
+      body[data-design="v3"] .stage-note,
+      body[data-design="v3"] .relation-stage-note {
+        background: #101923;
+        border-color: var(--line-strong);
+        color: var(--muted);
+      }
+
+      body[data-design="v3"] .relation-diagram {
+        background:
+          linear-gradient(rgba(82, 104, 121, 0.26) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(82, 104, 121, 0.26) 1px, transparent 1px),
+          #091119;
+      }
+
+      body[data-design="v3"] .workspace-panel[data-workspace-panel="workflow"] > .layout {
+        grid-template-columns: minmax(380px, 0.78fr) minmax(540px, 1.22fr);
+      }
+
+      body[data-design="v3"] .workspace-strip {
+        grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+      }
+
+      body[data-narrow="true"][data-design="v3"] main {
+        width: min(430px, calc(100vw - 18px));
+      }
+
+      body[data-narrow="true"][data-design="v3"] .hero-header,
+      body[data-narrow="true"][data-design="v3"] .workstream-panel,
+      body[data-narrow="true"][data-design="v3"] .workspace-panel[data-workspace-panel="workflow"] > .layout {
+        grid-template-columns: 1fr;
+      }
+
+      body[data-narrow="true"][data-design="v3"] .hero-controls {
+        width: 100%;
+        justify-items: start;
+      }
+
+      body[data-narrow="true"][data-design="v3"] #preset-grid,
+      body[data-narrow="true"][data-design="v3"] .workspace-strip {
+        grid-template-columns: 1fr;
+      }
+
+      body[data-narrow="true"][data-design="v3"] #preset-grid {
+        display: none;
+      }
+
       details.disclosure summary {
         padding: 10px 14px;
         background: #ffffff;
@@ -1918,9 +2223,47 @@ GUI_HTML_TEMPLATE = r"""
         background: #f7fafb;
       }
 
+      @media (prefers-reduced-motion: reduce) {
+        .relation-link.is-active {
+          animation: none;
+          stroke-dasharray: none;
+        }
+      }
+
+      body[data-design="v3"] details.disclosure summary {
+        background: #0c141b;
+        border-color: var(--line);
+      }
+
+      body[data-design="v3"] details.disclosure summary:hover {
+        background: #101923;
+      }
+
       @media (max-width: 1120px) {
         .layout {
           grid-template-columns: 1fr;
+        }
+
+        body[data-design="v2"] .workstream-panel,
+        body[data-design="v3"] .workstream-panel,
+        body[data-design="v2"] .workspace-panel[data-workspace-panel="workflow"] > .layout,
+        body[data-design="v3"] .workspace-panel[data-workspace-panel="workflow"] > .layout {
+          grid-template-columns: 1fr;
+        }
+
+        body[data-design="v2"] .workspace-nav {
+          position: static;
+          grid-column: auto;
+          grid-row: auto;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        body[data-design="v2"] .workspace-strip,
+        body[data-design="v2"] .workspace-panels,
+        body[data-design="v3"] .workspace-strip,
+        body[data-design="v3"] .workspace-panels {
+          grid-column: auto;
+          grid-row: auto;
         }
 
         .fleet-sidebar {
@@ -1938,10 +2281,44 @@ GUI_HTML_TEMPLATE = r"""
         .relation-shell {
           grid-template-columns: 1fr;
         }
+
+        .topology-actions {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 1000px) {
+        body[data-design="v3"] main {
+          width: min(430px, calc(100vw - 18px));
+        }
+
+        body[data-design="v3"] .hero-header,
+        body[data-design="v3"] .workstream-panel,
+        body[data-design="v3"] .workspace-panel[data-workspace-panel="workflow"] > .layout {
+          grid-template-columns: 1fr;
+        }
+
+        body[data-design="v3"] .hero-controls {
+          width: 100%;
+          justify-items: start;
+        }
+
+        body[data-design="v3"] #preset-grid,
+        body[data-design="v3"] .workspace-strip {
+          grid-template-columns: 1fr;
+        }
       }
 
       @media (max-width: 820px) {
         .workspace-nav {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        body[data-design="v2"] .fleet-sidebar {
+          grid-template-columns: 1fr;
+        }
+
+        body[data-design="v2"] .workspace-nav {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
@@ -1982,7 +2359,8 @@ GUI_HTML_TEMPLATE = r"""
         .relation-controls,
         .relation-facts,
         .runtime-compare,
-        .summary-strip {
+        .summary-strip,
+        .topology-actions {
           grid-template-columns: 1fr;
         }
 
@@ -2027,6 +2405,71 @@ GUI_HTML_TEMPLATE = r"""
           grid-template-columns: 1fr;
         }
       }
+
+      @media (max-device-width: 900px) {
+        main {
+          width: min(100vw - 18px, 100%);
+          margin: 10px auto 28px;
+        }
+
+        .hero-header,
+        body[data-design="v2"] .hero-header {
+          grid-template-columns: 1fr;
+        }
+
+        .hero-controls {
+          width: 100%;
+          justify-items: start;
+        }
+
+        .preset-grid,
+        body[data-design="v2"] #preset-grid,
+        body[data-design="v3"] #preset-grid,
+        .workspace-strip,
+        body[data-design="v2"] .workspace-strip,
+        body[data-design="v3"] .workspace-strip {
+          grid-template-columns: 1fr;
+        }
+
+        body[data-design="v2"] .fleet-sidebar,
+        body[data-design="v2"] .workstream-panel,
+        body[data-design="v3"] .workstream-panel,
+        body[data-design="v2"] .workspace-panel[data-workspace-panel="workflow"] > .layout,
+        body[data-design="v3"] .workspace-panel[data-workspace-panel="workflow"] > .layout {
+          grid-template-columns: 1fr;
+        }
+
+        body[data-design="v2"] .workspace-nav {
+          position: static;
+          grid-column: auto;
+          grid-row: auto;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        body[data-design="v2"] .workspace-strip,
+        body[data-design="v2"] .workspace-panels,
+        body[data-design="v3"] .workspace-strip,
+        body[data-design="v3"] .workspace-panels {
+          grid-column: auto;
+          grid-row: auto;
+        }
+
+        body[data-design="v3"] .preset {
+          background: #121a22;
+          background-color: #121a22;
+          background-image: none;
+          color: var(--ink);
+          border-color: var(--line);
+        }
+
+        body[data-design="v3"] .preset.active {
+          background: #143f43;
+          background-color: #143f43;
+          background-image: none;
+          color: var(--ink);
+          border-color: rgba(85, 199, 189, 0.72);
+        }
+      }
     </style>
   </head>
   <body>
@@ -2060,6 +2503,14 @@ GUI_HTML_TEMPLATE = r"""
                 <button class="ghost control-button" data-layout-mode="balanced" type="button" data-i18n="layout.balanced">Balanced</button>
                 <button class="ghost control-button" data-layout-mode="wide" type="button" data-i18n="layout.wide">Wide</button>
                 <button class="ghost control-button" data-layout-mode="stacked" type="button" data-i18n="layout.stacked">Stacked</button>
+              </div>
+            </div>
+            <div class="control-switch">
+              <span class="control-label" data-i18n="design.label">Design</span>
+              <div class="control-actions">
+                <button class="ghost control-button" data-design-mode="v1" type="button" data-i18n="design.v1">V1 Tune</button>
+                <button class="ghost control-button" data-design-mode="v2" type="button" data-i18n="design.v2">V2 Deck</button>
+                <button class="ghost control-button" data-design-mode="v3" type="button" data-i18n="design.v3">V3 Map</button>
               </div>
             </div>
           </div>
@@ -2285,6 +2736,32 @@ GUI_HTML_TEMPLATE = r"""
                     <div class="relation-stage-note">
                       <strong data-i18n="cards.relationHintTitle">Topology Actions</strong>
                       <span data-i18n="cards.relationHint">Click any node to jump to the matching control area. The left card is the launch plan; the right card reflects the live runtime contract.</span>
+                    </div>
+                    <div class="topology-actions" id="topology-actions" aria-label="Topology operations">
+                      <button class="topology-action" data-topology-action="prepare" type="button">
+                        <strong data-i18n="topologyActions.prepare">Prepare</strong>
+                        <span data-i18n="topologyActions.prepareCopy">Create Host + Guest panes.</span>
+                      </button>
+                      <button class="topology-action" data-topology-action="start" type="button">
+                        <strong data-i18n="topologyActions.start">Start Bridge</strong>
+                        <span data-i18n="topologyActions.startCopy">Deploy the active collaboration route.</span>
+                      </button>
+                      <button class="topology-action" data-topology-action="review" type="button">
+                        <strong data-i18n="topologyActions.review">Review Gate</strong>
+                        <span data-i18n="topologyActions.reviewCopy">Hold handoffs for approval.</span>
+                      </button>
+                      <button class="topology-action" data-topology-action="room" type="button">
+                        <strong data-i18n="topologyActions.room">Live Room</strong>
+                        <span data-i18n="topologyActions.roomCopy">Operate the running room.</span>
+                      </button>
+                      <button class="topology-action" data-topology-action="inspect" type="button">
+                        <strong data-i18n="topologyActions.inspect">Inspect</strong>
+                        <span data-i18n="topologyActions.inspectCopy">Refresh runtime truth.</span>
+                      </button>
+                      <button class="topology-action" data-topology-action="recover" type="button">
+                        <strong data-i18n="topologyActions.recover">Recover</strong>
+                        <span data-i18n="topologyActions.recoverCopy">Reconcile stale fleet state.</span>
+                      </button>
                     </div>
                   </div>
                   <div class="relation-scroller">
@@ -2565,6 +3042,12 @@ GUI_HTML_TEMPLATE = r"""
             wide: 'Wide',
             stacked: 'Stacked'
           },
+          design: {
+            label: 'Design',
+            v1: 'V1 Tune',
+            v2: 'V2 Deck',
+            v3: 'V3 Map'
+          },
           workspace: {
             workflow: 'Workflow',
             topology: 'Topology',
@@ -2724,6 +3207,20 @@ GUI_HTML_TEMPLATE = r"""
             sendHost: 'Send to Host',
             sendGuest: 'Send to Guest',
             sendRoom: 'Post to Room'
+          },
+          topologyActions: {
+            prepare: 'Prepare',
+            prepareCopy: 'Create Host + Guest panes.',
+            start: 'Start Bridge',
+            startCopy: 'Deploy the active collaboration route.',
+            review: 'Review Gate',
+            reviewCopy: 'Hold handoffs for approval.',
+            room: 'Live Room',
+            roomCopy: 'Operate the running room.',
+            inspect: 'Inspect',
+            inspectCopy: 'Refresh runtime truth.',
+            recover: 'Recover',
+            recoverCopy: 'Reconcile stale fleet state.'
           },
           cards: {
             relationTitle: 'Relation View',
@@ -2915,7 +3412,9 @@ GUI_HTML_TEMPLATE = r"""
             fleetReconciled: 'Fleet reconciled: {workstreams} workstream(s), {rooms} room(s)',
             ready: 'GUI ready, endpoint {endpoint}',
             languageChanged: 'Language switched to {language}',
-            layoutChanged: 'Layout switched to {layout}'
+            layoutChanged: 'Layout switched to {layout}',
+            designChanged: 'Design switched to {design}',
+            reviewGateEnabled: 'Review gate enabled for the next bridge start'
           },
           errors: {
             toolCallFailed: 'tool call failed',
@@ -2966,6 +3465,12 @@ GUI_HTML_TEMPLATE = r"""
             balanced: '標準',
             wide: '加寬',
             stacked: '堆疊'
+          },
+          design: {
+            label: '設計版本',
+            v1: 'V1 微調',
+            v2: 'V2 重排',
+            v3: 'V3 全新'
           },
           workspace: {
             workflow: '工作流',
@@ -3126,6 +3631,20 @@ GUI_HTML_TEMPLATE = r"""
             sendHost: '送到 Host',
             sendGuest: '送到 Guest',
             sendRoom: '發到 Room'
+          },
+          topologyActions: {
+            prepare: '準備',
+            prepareCopy: '建立 Host + Guest panes。',
+            start: '啟動 Bridge',
+            startCopy: '部署目前協作路由。',
+            review: '審核閘門',
+            reviewCopy: '先保留 handoff 等待核准。',
+            room: 'Live Room',
+            roomCopy: '操作正在運行的 room。',
+            inspect: '檢查',
+            inspectCopy: '更新 runtime truth。',
+            recover: '恢復',
+            recoverCopy: '整理過期 fleet 狀態。'
           },
           cards: {
             relationTitle: '關聯視圖',
@@ -3317,7 +3836,9 @@ GUI_HTML_TEMPLATE = r"""
             fleetReconciled: 'Fleet 已整理：{workstreams} 條 workstream，{rooms} 個 room',
             ready: 'GUI 已就緒，endpoint {endpoint}',
             languageChanged: '語言已切換為 {language}',
-            layoutChanged: '版面已切換為 {layout}'
+            layoutChanged: '版面已切換為 {layout}',
+            designChanged: '設計版本已切換為 {design}',
+            reviewGateEnabled: '下一次 bridge 啟動已套用審核閘門'
           },
           errors: {
             toolCallFailed: '工具呼叫失敗',
@@ -3440,6 +3961,7 @@ GUI_HTML_TEMPLATE = r"""
         reqId: 1,
         locale: 'en',
         layout: 'balanced',
+        design: 'v1',
         workspaceTab: 'workflow',
         preset: 'quick',
         home: true,
@@ -3495,6 +4017,16 @@ GUI_HTML_TEMPLATE = r"""
         return 'wide';
       }
 
+      function preferredDesign() {
+        try {
+          const saved = window.localStorage.getItem('tb2-design');
+          if (saved === 'v1' || saved === 'v2' || saved === 'v3') return saved;
+        } catch (_) {
+          // Ignore storage failures and fall back to the default design system.
+        }
+        return 'v1';
+      }
+
       function preferredWorkspaceTab() {
         try {
           const saved = window.localStorage.getItem('tb2-workspace-tab');
@@ -3511,12 +4043,13 @@ GUI_HTML_TEMPLATE = r"""
           return {
             locale: params.get('lang') || '',
             layout: params.get('layout') || '',
+            design: params.get('design') || '',
             tab: params.get('tab') || '',
             preset: params.get('preset') || '',
             home: params.get('home') || '',
           };
         } catch (_) {
-          return { locale: '', layout: '', tab: '', preset: '', home: '' };
+          return { locale: '', layout: '', design: '', tab: '', preset: '', home: '' };
         }
       }
 
@@ -3647,6 +4180,12 @@ GUI_HTML_TEMPLATE = r"""
       function setLayoutButtons() {
         document.querySelectorAll('[data-layout-mode]').forEach(button => {
           button.classList.toggle('active', button.dataset.layoutMode === state.layout);
+        });
+      }
+
+      function setDesignButtons() {
+        document.querySelectorAll('[data-design-mode]').forEach(button => {
+          button.classList.toggle('active', button.dataset.designMode === state.design);
         });
       }
 
@@ -3828,6 +4367,7 @@ GUI_HTML_TEMPLATE = r"""
         renderPresetCards();
         setLanguageButtons();
         setLayoutButtons();
+        setDesignButtons();
         setWorkspaceButtons();
         renderWorkspaceTabs();
         renderWorkspaceStrip();
@@ -3859,6 +4399,28 @@ GUI_HTML_TEMPLATE = r"""
           // Ignore storage failures.
         }
         setLayoutButtons();
+      }
+
+      function applyDesign(mode) {
+        state.design = mode === 'v2' || mode === 'v3' ? mode : 'v1';
+        document.body.dataset.design = state.design;
+        try {
+          window.localStorage.setItem('tb2-design', state.design);
+        } catch (_) {
+          // Ignore storage failures.
+        }
+        setDesignButtons();
+        if (state.design === 'v3' && state.workspaceTab === 'workflow') {
+          setWorkspaceTab('topology', { persist: false });
+        }
+      }
+
+      function syncNarrowViewport() {
+        const width = Math.min(
+          Number(window.innerWidth || 9999),
+          Number((window.screen && window.screen.width) || 9999)
+        );
+        document.body.dataset.narrow = width <= 900 ? 'true' : 'false';
       }
 
       function revealWorkspace() {
@@ -4012,7 +4574,7 @@ GUI_HTML_TEMPLATE = r"""
 
         $('pending-details').open = state.preset === 'approval' || pendingCount > 0;
         $('status-details').open = focus === 'status';
-        if (state.preset === 'mission' || state.preset === 'mcp') $('relation-details').open = true;
+        if (state.preset === 'mission' || state.preset === 'mcp' || state.design === 'v3') $('relation-details').open = true;
         if (state.preset === 'diagnostics') $('diagnostics-details').open = true;
         if (focus === 'diagnostics') $('diagnostics-details').open = true;
         renderWorkspaceTabs();
@@ -5651,6 +6213,46 @@ GUI_HTML_TEMPLATE = r"""
         return res;
       }
 
+      function enableReviewGate() {
+        $('intervention').checked = true;
+        if ($('relation-intervention')) $('relation-intervention').checked = true;
+        syncMetrics();
+        log(t('logs.reviewGateEnabled'));
+      }
+
+      async function handleTopologyAction(name) {
+        revealWorkspace();
+        if (name === 'prepare') {
+          await initSession();
+          focusControlArea('launch-card', 'workflow', {});
+          return;
+        }
+        if (name === 'start') {
+          if (!$('pane-a').value.trim() || !$('pane-b').value.trim()) await initSession();
+          await startBridge();
+          focusControlArea('live-card', 'workflow', {});
+          return;
+        }
+        if (name === 'review') {
+          enableReviewGate();
+          focusControlArea('pending-card', 'review', { openId: 'pending-details' });
+          return;
+        }
+        if (name === 'room') {
+          focusControlArea('live-card', 'workflow', {});
+          return;
+        }
+        if (name === 'inspect') {
+          await refreshStatus();
+          focusControlArea('status-card', 'inspect', { openId: 'status-details' });
+          return;
+        }
+        if (name === 'recover') {
+          await reconcileFleet();
+          focusControlArea('diagnostics-card', 'inspect', { openId: 'diagnostics-details' });
+        }
+      }
+
       async function approveSelected() {
         const id = $('pending-select').value;
         if (!id) throw new Error(t('errors.selectPendingFirst'));
@@ -5690,6 +6292,9 @@ GUI_HTML_TEMPLATE = r"""
         document.querySelectorAll('[data-workspace-tab]').forEach(button => {
           button.addEventListener('click', () => setWorkspaceTab(button.dataset.workspaceTab));
         });
+        document.querySelectorAll('[data-topology-action]').forEach(button => {
+          button.addEventListener('click', () => run(() => handleTopologyAction(button.dataset.topologyAction || '')));
+        });
         document.querySelectorAll('[data-lang]').forEach(button => {
           button.addEventListener('click', () => {
             if (button.dataset.lang === state.locale) return;
@@ -5708,6 +6313,16 @@ GUI_HTML_TEMPLATE = r"""
             }));
           });
         });
+        document.querySelectorAll('[data-design-mode]').forEach(button => {
+          button.addEventListener('click', () => {
+            if (button.dataset.designMode === state.design) return;
+            applyDesign(button.dataset.designMode);
+            log(format('logs.designChanged', {
+              design: t('design.' + state.design)
+            }));
+          });
+        });
+        window.addEventListener('resize', syncNarrowViewport);
         $('init-session').onclick = () => run(initSession);
         $('start-bridge').onclick = () => run(startBridge);
         $('stop-bridge').onclick = () => run(stopBridge);
@@ -5836,12 +6451,17 @@ GUI_HTML_TEMPLATE = r"""
         state.layout = query.layout === 'balanced' || query.layout === 'wide' || query.layout === 'stacked'
           ? query.layout
           : preferredLayout();
+        state.design = query.design === 'v1' || query.design === 'v2' || query.design === 'v3'
+          ? query.design
+          : preferredDesign();
         state.workspaceTab = forcedTab || preferredWorkspaceTab();
         state.preset = forcedPreset || state.preset;
         bind();
+        syncNarrowViewport();
         translatePage();
         setWorkspaceTab(state.workspaceTab, { persist: false });
         applyLayout(state.layout);
+        applyDesign(state.design);
         applyPreset(state.preset, { keepTab: true, keepHome: !forceWorkspace });
         document.body.dataset.home = forceWorkspace ? 'workspace' : 'preset-only';
         log(format('logs.ready', { endpoint: MCP_ENDPOINT }));

@@ -2906,6 +2906,27 @@ class TestGuiRouting:
         assert "selectedWorkstreamId:" in html
         assert "if (workstreamId) args.workstream_id = workstreamId;" in html
 
+    def test_gui_html_surfaces_mouse_driven_topology_operations(self):
+        html = server_mod.build_gui_html("/mcp")
+        assert 'id="topology-actions"' in html
+        assert html.count("data-topology-action=") == 6
+        assert 'data-topology-action="prepare"' in html
+        assert 'data-topology-action="start"' in html
+        assert 'data-topology-action="review"' in html
+        assert 'data-topology-action="room"' in html
+        assert 'data-topology-action="inspect"' in html
+        assert 'data-topology-action="recover"' in html
+        assert "async function handleTopologyAction(name)" in html
+        assert "await initSession();" in html
+        assert "await startBridge();" in html
+        assert "enableReviewGate();" in html
+        assert "await refreshStatus();" in html
+        assert "await reconcileFleet();" in html
+        assert "button.dataset.topologyAction" in html
+        assert "max-height: calc(250svh - 72px);" in html
+        assert "animation: relation-flow" in html
+        assert "@media (prefers-reduced-motion: reduce)" in html
+
     def test_gui_html_surfaces_status_summary_badges(self):
         html = server_mod.build_gui_html("/mcp")
         assert 'id="status-badges"' in html
