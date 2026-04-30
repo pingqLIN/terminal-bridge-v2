@@ -480,6 +480,54 @@ class TestSidepanelCompat:
         assert second["error"] == "room already has a pending prompt"
 
     @patch.object(server_mod, "_make_backend")
+    def test_sidepanel_reserves_pending_state_before_spawn(self, mock_factory, monkeypatch, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.init_session.return_value = ("sp-reserve:a", "sp-reserve:b")
+        mock_factory.return_value = mock_backend
+        monkeypatch.setattr(server_mod.shutil, "which", lambda name: "/usr/bin/codex" if name == "codex" else None)
+        monkeypatch.setenv("TB2_SIDEPANEL_WORKDIR", str(tmp_path))
+        real_thread = threading.Thread
+        monkeypatch.setattr(server_mod.threading, "Thread", DummyThread)
+
+        entered = threading.Event()
+        release = threading.Event()
+        spawned: list[DummyProc] = []
+
+        def _popen(*_args, **_kwargs):
+            entered.set()
+            assert release.wait(timeout=2)
+            proc = DummyProc()
+            spawned.append(proc)
+            return proc
+
+        monkeypatch.setattr(server_mod.subprocess, "Popen", _popen)
+
+        room_id = server_mod._sidepanel_create_room()["roomId"]
+        result: dict[str, object] = {}
+
+        def _submit_first() -> None:
+            result["first"] = server_mod._sidepanel_message_response({
+                "roomId": room_id,
+                "prompt": "first prompt",
+            })
+
+        worker = real_thread(target=_submit_first)
+        worker.start()
+        assert entered.wait(timeout=2)
+
+        second_code, second = server_mod._sidepanel_message_response({
+            "roomId": room_id,
+            "prompt": "second prompt",
+        })
+        release.set()
+        worker.join(timeout=2)
+
+        assert second_code == 409
+        assert second["error"] == "room already has a pending prompt"
+        assert result["first"][0] == 202
+        assert len(spawned) == 1
+
+    @patch.object(server_mod, "_make_backend")
     def test_sidepanel_http_routes_work_on_loopback(self, mock_factory, monkeypatch):
         mock_backend = MagicMock()
         mock_backend.init_session.return_value = ("sp-http:a", "sp-http:b")

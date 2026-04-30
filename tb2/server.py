@@ -2952,6 +2952,19 @@ def _sidepanel_room_state(room_id: str) -> Optional[SidepanelRoomState]:
         return _sidepanel_rooms.get(room_id)
 
 
+def _sidepanel_clear_reserved_run(room_id: str, run_id: str) -> None:
+    with _sidepanel_lock:
+        state = _sidepanel_rooms.get(room_id)
+        if state is None or state.run_id != run_id:
+            return
+        state.pending = False
+        state.process = None
+        state.run_id = ""
+        state.log_path = ""
+        state.output_path = ""
+        state.preview_text = ""
+
+
 def _sidepanel_create_room() -> Dict[str, Any]:
     room = create_room()
     existing = _sidepanel_room_state(room.room_id)
@@ -3051,12 +3064,6 @@ def _sidepanel_message_response(payload: Dict[str, Any]) -> Tuple[int, Dict[str,
     state = _sidepanel_room_state(normalized_room_id)
     if room is None or state is None:
         return 404, {"ok": False, "error": "room not found", "roomId": normalized_room_id}
-    if state.pending:
-        return 409, {
-            "ok": False,
-            "error": "room already has a pending prompt",
-            "roomId": normalized_room_id,
-        }
     runtime = _sidepanel_runtime()
     if not runtime.codex_available:
         return 503, {
@@ -3065,6 +3072,24 @@ def _sidepanel_message_response(payload: Dict[str, Any]) -> Tuple[int, Dict[str,
             "roomId": normalized_room_id,
         }
     run_id, log_path, output_path = _sidepanel_run_paths(normalized_room_id)
+    with _sidepanel_lock:
+        current = _sidepanel_rooms.get(normalized_room_id)
+        if current is None:
+            return 404, {"ok": False, "error": "room not found", "roomId": normalized_room_id}
+        if current.pending:
+            return 409, {
+                "ok": False,
+                "error": "room already has a pending prompt",
+                "roomId": normalized_room_id,
+            }
+        current.pending = True
+        current.mode = mode
+        current.process = None
+        current.run_id = run_id
+        current.log_path = log_path
+        current.output_path = output_path
+        current.preview_text = ""
+        state = current
     command = [
         runtime.codex_path,
         "exec",
@@ -3081,6 +3106,7 @@ def _sidepanel_message_response(payload: Dict[str, Any]) -> Tuple[int, Dict[str,
     try:
         log_file = open(log_path, "w", encoding="utf-8")
     except OSError as exc:
+        _sidepanel_clear_reserved_run(normalized_room_id, run_id)
         return 503, {
             "ok": False,
             "error": f"failed to prepare codex log file: {exc}",
@@ -3102,14 +3128,31 @@ def _sidepanel_message_response(payload: Dict[str, Any]) -> Tuple[int, Dict[str,
             log_file.close()
         except OSError:
             pass
+        _sidepanel_clear_reserved_run(normalized_room_id, run_id)
         return 503, {
             "ok": False,
             "error": f"failed to start codex exec: {exc}",
             "roomId": normalized_room_id,
         }
-    if proc.stdin is not None:
-        proc.stdin.write(prompt_text)
-        proc.stdin.close()
+    try:
+        if proc.stdin is not None:
+            proc.stdin.write(prompt_text)
+            proc.stdin.close()
+    except OSError as exc:
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+        try:
+            log_file.close()
+        except OSError:
+            pass
+        _sidepanel_clear_reserved_run(normalized_room_id, run_id)
+        return 503, {
+            "ok": False,
+            "error": f"failed to send prompt to codex exec: {exc}",
+            "roomId": normalized_room_id,
+        }
     user = _post_room_message(
         room,
         author="user",
@@ -3127,16 +3170,21 @@ def _sidepanel_message_response(payload: Dict[str, Any]) -> Tuple[int, Dict[str,
     )
     with _sidepanel_lock:
         current = _sidepanel_rooms.get(normalized_room_id)
-        if current is None:
-            current = state
-            _sidepanel_rooms[normalized_room_id] = current
-        current.pending = True
-        current.mode = mode
+        if current is None or current.run_id != run_id:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
+            try:
+                log_file.close()
+            except OSError:
+                pass
+            return 409, {
+                "ok": False,
+                "error": "sidepanel prompt reservation was superseded",
+                "roomId": normalized_room_id,
+            }
         current.process = proc
-        current.run_id = run_id
-        current.log_path = log_path
-        current.output_path = output_path
-        current.preview_text = ""
     thread = threading.Thread(
         target=_sidepanel_finalize_run,
         args=(normalized_room_id, run_id, proc, log_file),
