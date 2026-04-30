@@ -14,6 +14,8 @@ def _args(tmp_path: Path, **overrides):
         "base_url": "http://127.0.0.1:3189",
         "log": str(tmp_path / "health.jsonl"),
         "cron_log": str(tmp_path / "health-cron.log"),
+        "alert": str(tmp_path / "health.alert.json"),
+        "alert_threshold": 3,
         "interval_minutes": 5,
         "max_bytes": 10 * 1024 * 1024,
         "max_files": 5,
@@ -30,6 +32,8 @@ def test_build_entry_contains_rotation_and_marker(tmp_path):
     assert "tools/tb2_scheduled_health_check.py" in entry
     assert "--max-bytes 10485760" in entry
     assert "--max-files 5" in entry
+    assert "--alert " in entry
+    assert "--alert-threshold 3" in entry
     assert cron.MARKER in entry
 
 

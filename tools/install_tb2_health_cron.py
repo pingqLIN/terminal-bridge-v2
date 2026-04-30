@@ -71,6 +71,8 @@ def build_entry(args: argparse.Namespace) -> str:
         f" --log {args.log}"
         f" --max-bytes {int(args.max_bytes)}"
         f" --max-files {int(args.max_files)}"
+        f" --alert {args.alert}"
+        f" --alert-threshold {int(args.alert_threshold)}"
         f" >> {args.cron_log} 2>&1 {MARKER}"
     )
     return f"*/{interval} * * * * {command}"
@@ -112,6 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument("--base-url", default="http://127.0.0.1:3189")
     install_parser.add_argument("--log", default=str(Path.home() / ".local/state/tb2/health-check.jsonl"))
     install_parser.add_argument("--cron-log", default=str(Path.home() / ".local/state/tb2/health-check-cron.log"))
+    install_parser.add_argument("--alert", default=str(Path.home() / ".local/state/tb2/health-check.alert.json"))
+    install_parser.add_argument("--alert-threshold", type=int, default=3)
     install_parser.add_argument("--interval-minutes", type=int, default=5)
     install_parser.add_argument("--max-bytes", type=int, default=10 * 1024 * 1024)
     install_parser.add_argument("--max-files", type=int, default=5)

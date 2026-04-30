@@ -102,6 +102,15 @@ JSONL log 預設會以 `10MB x 5` archives 進行 rotate。可用以下參數調
 python3 tools/tb2_scheduled_health_check.py --max-bytes 10485760 --max-files 5
 ```
 
+檢查失敗時會在連續失敗後更新 alert marker。預設門檻是 3 次：
+
+```bash
+python3 tools/tb2_health_alert.py status
+cat ~/.local/state/tb2/health-check.alert.json
+```
+
+恢復後 marker 會保留 machine-readable 的 `ok=true` 與 `active=false`，讓 dashboard 或 agent 能區分已恢復 incident 與沒有 alert state。
+
 若機器可安裝 root systemd unit，可使用 `deploy/systemd/` 下的範本。若 user-level systemd linger 已啟用，也可使用 `deploy/systemd/user/` 下的範本。
 
 此工作站目前 `linger` 未啟用，因此實際排程採 user crontab：
@@ -113,6 +122,7 @@ python3 tools/install_tb2_health_cron.py uninstall
 crontab -l
 tail -n 20 ~/.local/state/tb2/health-check.jsonl
 tail -n 20 ~/.local/state/tb2/health-check-cron.log
+python3 tools/tb2_health_alert.py status
 ```
 
 ### GUI 檢查

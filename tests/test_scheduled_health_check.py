@@ -135,3 +135,36 @@ def test_check_doctor_keeps_command_summary_without_stdout(monkeypatch, tmp_path
 
     assert report["ok"] is True
     assert "stdout" not in report["command"]
+
+
+def test_update_alert_becomes_active_after_threshold(tmp_path):
+    path = tmp_path / "health-check.alert.json"
+    report = {
+        "ok": False,
+        "timestamp": "2026-04-30T00:00:00+00:00",
+        "issues": ["/health request failed"],
+        "target": {"base_url": "http://127.0.0.1:3189"},
+    }
+
+    first = health.update_alert(path, report, threshold=2)
+    second = health.update_alert(path, report | {"timestamp": "2026-04-30T00:05:00+00:00"}, threshold=2)
+
+    assert first["active"] is False
+    assert second["active"] is True
+    assert second["failure_count"] == 2
+    assert second["first_failed_at"] == "2026-04-30T00:00:00+00:00"
+
+
+def test_update_alert_marks_recovery(tmp_path):
+    path = tmp_path / "health-check.alert.json"
+    health.update_alert(
+        path,
+        {"ok": False, "timestamp": "2026-04-30T00:00:00+00:00", "issues": ["bad"], "target": {}},
+        threshold=1,
+    )
+
+    marker = health.update_alert(path, {"ok": True, "timestamp": "2026-04-30T00:05:00+00:00"}, threshold=1)
+
+    assert marker["ok"] is True
+    assert marker["active"] is False
+    assert marker["previous_failure_count"] == 1

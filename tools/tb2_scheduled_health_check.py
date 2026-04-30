@@ -166,6 +166,61 @@ def rotate_log(path: Path, *, max_bytes: int, max_files: int) -> None:
     path.replace(path.with_name(f"{path.name}.1"))
 
 
+def load_alert(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def update_alert(path: Path, report: dict[str, Any], *, threshold: int) -> dict[str, Any]:
+    threshold = max(1, int(threshold))
+    previous = load_alert(path)
+    timestamp = str(report.get("timestamp", datetime.now(timezone.utc).isoformat()))
+
+    if report.get("ok") is True:
+        if not previous:
+            return {}
+        marker = {
+            "schema_version": 1,
+            "ok": True,
+            "active": False,
+            "recovered_at": timestamp,
+            "failure_count": 0,
+            "previous_failure_count": int(previous.get("failure_count", 0)),
+            "previous_issues": previous.get("issues", []),
+            "last_report_timestamp": timestamp,
+            "recommended_action": "No action required; TB2 scheduled health check has recovered.",
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(marker, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return marker
+
+    prior_active = previous.get("ok") is False
+    count = int(previous.get("failure_count", 0)) + 1 if prior_active else 1
+    marker = {
+        "schema_version": 1,
+        "ok": False,
+        "active": count >= threshold,
+        "first_failed_at": str(previous.get("first_failed_at", timestamp)) if prior_active else timestamp,
+        "last_failed_at": timestamp,
+        "failure_count": count,
+        "threshold": threshold,
+        "issues": list(report.get("issues", [])),
+        "last_report_timestamp": timestamp,
+        "target": report.get("target", {}),
+        "recommended_action": (
+            "Inspect tb2.service, /health, /healthz, and doctor output. Avoid automatic restart unless an operator accepts live state loss."
+        ),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(marker, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return marker
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://127.0.0.1:3189")
@@ -176,10 +231,14 @@ def main() -> int:
     parser.add_argument("--log", default="")
     parser.add_argument("--max-bytes", type=int, default=10 * 1024 * 1024)
     parser.add_argument("--max-files", type=int, default=5)
+    parser.add_argument("--alert", default="")
+    parser.add_argument("--alert-threshold", type=int, default=3)
     parser.add_argument("--skip-systemd", action="store_true")
     args = parser.parse_args()
 
     report = build_report(args)
+    if args.alert:
+        update_alert(Path(args.alert), report, threshold=int(args.alert_threshold))
     if args.log:
         report["_max_bytes"] = int(args.max_bytes)
         report["_max_files"] = int(args.max_files)

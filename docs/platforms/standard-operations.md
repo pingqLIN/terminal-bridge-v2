@@ -102,6 +102,15 @@ The JSONL log rotates by default at `10MB x 5` archives. Tune that with:
 python3 tools/tb2_scheduled_health_check.py --max-bytes 10485760 --max-files 5
 ```
 
+Failed checks update an alert marker after consecutive failures. The default threshold is 3:
+
+```bash
+python3 tools/tb2_health_alert.py status
+cat ~/.local/state/tb2/health-check.alert.json
+```
+
+The marker stays machine-readable after recovery with `ok=true` and `active=false`, so dashboards and agents can distinguish recovered incidents from missing alert state.
+
 On machines where root systemd installation is available, use the templates under `deploy/systemd/`. If user-level systemd linger is enabled, the templates under `deploy/systemd/user/` are also available.
 
 On this workstation, user linger is disabled, so the active schedule is a user crontab entry:
@@ -113,6 +122,7 @@ python3 tools/install_tb2_health_cron.py uninstall
 crontab -l
 tail -n 20 ~/.local/state/tb2/health-check.jsonl
 tail -n 20 ~/.local/state/tb2/health-check-cron.log
+python3 tools/tb2_health_alert.py status
 ```
 
 ### GUI checks
