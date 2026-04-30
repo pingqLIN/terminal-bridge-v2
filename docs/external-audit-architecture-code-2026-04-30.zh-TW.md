@@ -18,17 +18,17 @@ description: 2026-04-30 external-audit-orchestrator 多 reviewer 對 TB2 架構�
 
 ## Scope
 
-- repo：`/home/miles/dev2/projects/terminal-bridge-v2`
+- repo：TB2 checkout root
 - branch：`main`
 - reviewed HEAD：`83af7ee Add health check log rotation and cron installer`
 - scope：current HEAD plus working tree state at review time
 
 ## Reference Inputs
 
-- `local-project`: `/home/miles/dev2/projects/terminal-bridge-v2` - audited architecture, runtime code, tests, docs, and scheduling tools
-- `local-skill`: `/mnt/q/UniText/runtime/skills/external-audit-orchestrator/SKILL.md` - used audit mode, report shape, and attribution requirements
-- `local-skill`: `/mnt/q/UniText/runtime/skills/project-development-loop/SKILL.md` - used 10-hour execution planning and durable loop requirements
-- `local-memory`: `/home/miles/.codex/memories/MEMORY.md` - used prior TB2 governance/workstream and project-loop context
+- `local-project`: TB2 checkout root - audited architecture, runtime code, tests, docs, and scheduling tools
+- `local-skill`: `external-audit-orchestrator` - used audit mode, report shape, and attribution requirements
+- `local-skill`: `project-development-loop` - used 10-hour execution planning and durable loop requirements
+- `local-memory`: local TB2 memory entries - used prior governance/workstream and project-loop context
 
 ## Findings
 
