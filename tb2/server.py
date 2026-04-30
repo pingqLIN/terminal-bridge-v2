@@ -440,14 +440,7 @@ _HEALTH_ESCALATION_ORDER = {"observe": 0, "review": 1, "intervene": 2}
 def _cleanup_daemon() -> None:
     while True:
         time.sleep(300)  # every 5 min
-        cleanup_stale(ttl_seconds=3600)
-        # Also stop bridges whose rooms are gone
-        with _bridges_lock:
-            stale = [bid for bid, b in _bridges.items() if get_room(b.room.room_id) is None]
-            for bid in stale:
-                _bridges[bid].stop.set()
-                bridge = _bridges.pop(bid)
-                _drop_workstream(bridge.workstream_id)
+        _cleanup_stale_rooms_and_runtime(ttl_seconds=3600)
 
 
 _cleanup_thread = threading.Thread(target=_cleanup_daemon, daemon=True)
@@ -696,6 +689,61 @@ def _room_has_runtime_references(room_id: str) -> bool:
             return True
     with _bridges_lock:
         return any(bridge.room.room_id == room_id for bridge in _bridges.values())
+
+
+def _runtime_referenced_room_ids() -> set[str]:
+    with _workstreams_lock:
+        workstream_room_ids = {
+            record.room_id
+            for record in _workstreams.values()
+            if record.room_id
+        }
+    with _bridges_lock:
+        bridge_room_ids = {
+            bridge.room.room_id
+            for bridge in _bridges.values()
+            if bridge.room.room_id
+        }
+    return workstream_room_ids | bridge_room_ids
+
+
+def _cleanup_stale_rooms_and_runtime(ttl_seconds: float = 3600) -> Dict[str, Any]:
+    protected_room_ids = _runtime_referenced_room_ids()
+    removed_rooms = cleanup_stale(ttl_seconds=ttl_seconds, exclude_room_ids=protected_room_ids)
+    stopped_bridges: List[str] = []
+    dropped_workstreams: List[str] = []
+
+    with _bridges_lock:
+        stale_bridges = [
+            (bridge_id, bridge)
+            for bridge_id, bridge in list(_bridges.items())
+            if get_room(bridge.room.room_id) is None
+        ]
+        for bridge_id, bridge in stale_bridges:
+            bridge.stop.set()
+            _bridges.pop(bridge_id, None)
+            stopped_bridges.append(bridge_id)
+
+    for _bridge_id, bridge in stale_bridges:
+        _drop_workstream(bridge.workstream_id)
+        dropped_workstreams.append(bridge.workstream_id)
+        _audit(
+            "runtime.cleanup_dropped_workstream",
+            bridge_id=bridge.bridge_id,
+            workstream_id=bridge.workstream_id,
+            room_id=bridge.room.room_id,
+            reason="missing_room",
+        )
+
+    if dropped_workstreams:
+        _persist_workstream_snapshot()
+
+    return {
+        "removed_rooms": removed_rooms,
+        "stopped_bridges": stopped_bridges,
+        "dropped_workstreams": dropped_workstreams,
+        "protected_room_ids": sorted(protected_room_ids),
+    }
 
 
 def _decorate_workstream_status_payload(

@@ -8,6 +8,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import time
 from unittest.mock import MagicMock, patch
 import urllib.request
 
@@ -15,7 +16,7 @@ import pytest
 
 import tb2.server as server_mod
 from tb2.audit import AuditTrail
-from tb2.room import create_room, get_room, list_rooms
+from tb2.room import create_room, delete_room, get_room, list_rooms
 
 
 def _extract_gui_function(html: str, name: str) -> str:
@@ -1539,6 +1540,69 @@ class TestWorkstreamHandlers:
         assert get_room("orphan-room") is None
         assert server_mod._get_workstream("orphan-workstream") is None
         assert audit["count"] == 2
+
+    @patch.object(server_mod, "_make_backend")
+    def test_cleanup_keeps_idle_runtime_referenced_room(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "cleanup:active:a",
+            "pane_b": "cleanup:active:b",
+            "room_id": "cleanup-active-room",
+            "bridge_id": "cleanup-active-bridge",
+            "workstream_id": "cleanup-active-workstream",
+        })
+        room = get_room("cleanup-active-room")
+        assert room is not None
+        room.last_active = time.time() - 7200
+
+        result = server_mod._cleanup_stale_rooms_and_runtime(ttl_seconds=3600)
+
+        assert result["removed_rooms"] == 0
+        assert result["stopped_bridges"] == []
+        assert result["dropped_workstreams"] == []
+        assert get_room("cleanup-active-room") is room
+        assert server_mod._get_bridge("cleanup-active-bridge") is not None
+        assert server_mod._get_workstream("cleanup-active-workstream") is not None
+
+    @patch.object(server_mod, "_make_backend")
+    def test_cleanup_missing_room_drops_runtime_with_audit_and_snapshot(self, mock_factory, tmp_path, monkeypatch):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        persisted: list[list[dict[str, object]]] = []
+        monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
+        monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
+        monkeypatch.setattr(
+            server_mod,
+            "persist_runtime_snapshot",
+            lambda *, workstreams, continuity=None: persisted.append(list(workstreams)) or True,
+        )
+
+        server_mod.handle_bridge_start({
+            "pane_a": "cleanup:missing:a",
+            "pane_b": "cleanup:missing:b",
+            "room_id": "cleanup-missing-room",
+            "bridge_id": "cleanup-missing-bridge",
+            "workstream_id": "cleanup-missing-workstream",
+        })
+        assert delete_room("cleanup-missing-room") is True
+
+        result = server_mod._cleanup_stale_rooms_and_runtime(ttl_seconds=3600)
+        audit = server_mod.handle_audit_recent({
+            "event": "runtime.cleanup_dropped_workstream",
+            "limit": 5,
+        })
+
+        assert result["stopped_bridges"] == ["cleanup-missing-bridge"]
+        assert result["dropped_workstreams"] == ["cleanup-missing-workstream"]
+        assert server_mod._get_bridge("cleanup-missing-bridge") is None
+        assert server_mod._get_workstream("cleanup-missing-workstream") is None
+        assert persisted[-1] == []
+        assert audit["count"] == 1
+        assert audit["events"][0]["workstream_id"] == "cleanup-missing-workstream"
 
     @patch.object(server_mod, "_make_backend")
     def test_restore_workstreams_from_service_state(self, mock_factory, tmp_path, monkeypatch):

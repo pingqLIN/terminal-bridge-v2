@@ -11,7 +11,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field
 import re
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Set
 
 from .audit import record_event
 
@@ -233,11 +233,16 @@ def list_rooms() -> List[Room]:
         return list(_rooms.values())
 
 
-def cleanup_stale(ttl_seconds: float = 3600) -> int:
+def cleanup_stale(ttl_seconds: float = 3600, *, exclude_room_ids: Optional[Set[str]] = None) -> int:
     """Remove rooms idle for longer than *ttl_seconds*. Returns count removed."""
     now = time.time()
+    excluded = exclude_room_ids or set()
     with _rooms_lock:
-        stale = [rid for rid, r in _rooms.items() if now - r.last_active > ttl_seconds]
+        stale = [
+            rid
+            for rid, r in _rooms.items()
+            if rid not in excluded and now - r.last_active > ttl_seconds
+        ]
         for rid in stale:
             room = _rooms.pop(rid)
             record_event(
