@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from pathlib import Path
 
 import pytest
@@ -205,6 +206,73 @@ def test_restart_service_discards_runtime_state_payload(tmp_path, monkeypatch):
     assert "rooms" not in saved
     assert "bridges" not in saved
     assert "pending_interventions" not in saved
+
+
+def test_restart_service_carries_previous_workstream_snapshots(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "pid": 2468,
+                "host": "127.0.0.1",
+                "port": 3189,
+                "started_at": 123.0,
+                "runtime": {
+                    "launch_mode": "service",
+                    "continuity": {
+                        "mode": "restart_restored",
+                        "runtime_restored": True,
+                    },
+                },
+                "workstreams": [
+                    {
+                        "workstream_id": "main-flow",
+                        "bridge_id": "bridge-a",
+                        "room_id": "room-a",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class _Proc:
+        pid = 3579
+
+        @staticmethod
+        def poll():
+            return None
+
+    alive = {"old": True}
+
+    def _alive(pid: int) -> bool:
+        if pid == 2468:
+            return alive["old"]
+        return pid == 3579
+
+    def _term(pid: int, timeout: float):
+        alive["old"] = False
+
+    monkeypatch.setattr(service, "_pid_alive", _alive)
+    monkeypatch.setattr(service, "_terminate_pid", _term)
+    monkeypatch.setattr(service, "_spawn_detached", lambda cmd, log_file, env=None: _Proc())
+
+    st = service.restart_service(host="127.0.0.1", port=3190)
+
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert st.running is True
+    assert saved["pid"] == 3579
+    assert saved["runtime"]["continuity"]["mode"] == "restart_state_lost"
+    assert saved["runtime"]["continuity"]["previous_pid"] == 2468
+    assert saved["workstreams"] == [
+        {
+            "workstream_id": "main-flow",
+            "bridge_id": "bridge-a",
+            "room_id": "room-a",
+        }
+    ]
 
 
 def test_restart_service_reuses_previous_binding_when_args_omitted(monkeypatch):
@@ -614,6 +682,53 @@ def test_persist_runtime_snapshot_updates_service_state(tmp_path, monkeypatch):
     assert saved["runtime"]["continuity"]["recovery_protocol"] == "ordered_restore_v1"
     assert saved["runtime"]["continuity"]["restored_workstream_count"] == 1
     assert saved["workstreams"][0]["workstream_id"] == "main-flow"
+
+
+def test_persist_runtime_snapshot_concurrent_writes_remain_valid(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pid": os.getpid(),
+                "runtime": {
+                    "launch_mode": "service",
+                    "continuity": {
+                        "mode": "restart_state_lost",
+                        "runtime_restored": False,
+                    },
+                },
+                "workstreams": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(6)
+
+    def _persist(index: int) -> None:
+        try:
+            barrier.wait(timeout=2)
+            service.persist_runtime_snapshot(
+                workstreams=[{"workstream_id": f"flow-{index}", "sequence": index}],
+                continuity={"mode": "restart_state_lost", "runtime_restored": False, "sequence": index},
+            )
+        except BaseException as exc:  # pragma: no cover - failure path is surfaced below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_persist, args=(index,)) for index in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=3)
+
+    assert errors == []
+    saved = json.loads(state.read_text(encoding="utf-8"))
+    assert saved["runtime"]["launch_mode"] == "service"
+    assert saved["workstreams"][0]["workstream_id"].startswith("flow-")
+    assert not list(tmp_path.glob("server.state.json.*.tmp"))
 
 
 def test_start_service_rejects_non_loopback_without_allow_remote(tmp_path, monkeypatch):

@@ -20,6 +20,7 @@ import platform
 import signal
 import subprocess
 import sys
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -50,6 +51,7 @@ _AUDIT_ENV_KEYS = (
     "TB2_AUDIT_TEXT_MODE",
     "TB2_ALLOW_REMOTE",
 )
+_STATE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -317,23 +319,24 @@ def persist_runtime_snapshot(
     paths: Optional[ServicePaths] = None,
 ) -> bool:
     p = paths or ServicePaths.discover()
-    state = _load_state(p.state_file)
-    runtime = state.get("runtime")
-    if not isinstance(runtime, dict):
-        return False
-    if str(runtime.get("launch_mode", "")) != _SERVICE_LAUNCH_MODE:
-        return False
-    if _as_pid(state.get("pid")) != os.getpid():
-        return False
-    defaults = _runtime_defaults(_SERVICE_LAUNCH_MODE)
-    runtime["state_persistence"] = defaults["state_persistence"]
-    runtime["restart_behavior"] = defaults["restart_behavior"]
-    runtime["recovery_source"] = defaults["recovery_source"]
-    if continuity is not None:
-        runtime["continuity"] = continuity
-    state["runtime"] = runtime
-    state["workstreams"] = workstreams
-    _save_state(p.state_file, state)
+    with _STATE_LOCK:
+        state = _load_state(p.state_file)
+        runtime = state.get("runtime")
+        if not isinstance(runtime, dict):
+            return False
+        if str(runtime.get("launch_mode", "")) != _SERVICE_LAUNCH_MODE:
+            return False
+        if _as_pid(state.get("pid")) != os.getpid():
+            return False
+        defaults = _runtime_defaults(_SERVICE_LAUNCH_MODE)
+        runtime["state_persistence"] = defaults["state_persistence"]
+        runtime["restart_behavior"] = defaults["restart_behavior"]
+        runtime["recovery_source"] = defaults["recovery_source"]
+        if continuity is not None:
+            runtime["continuity"] = continuity
+        state["runtime"] = runtime
+        state["workstreams"] = workstreams
+        _save_state(p.state_file, state)
     return True
 
 
@@ -524,6 +527,8 @@ def _build_state(
     previous_pid = _as_pid(previous_state.get("pid")) if previous_runtime_active else None
     previous_started_at = _as_float(previous_state.get("started_at")) if previous_runtime_active else None
     continuity_mode = _CONTINUITY_RESTART_LOST if previous_runtime_active else _CONTINUITY_FRESH
+    previous_workstreams = previous_state.get("workstreams") if previous_runtime_active else []
+    workstreams = previous_workstreams if isinstance(previous_workstreams, list) else []
     return {
         "schema_version": _STATE_SCHEMA_VERSION,
         "pid": pid,
@@ -548,7 +553,7 @@ def _build_state(
                 "previous_started_at": previous_started_at,
             },
         },
-        "workstreams": [],
+        "workstreams": workstreams,
     }
 
 
@@ -590,12 +595,13 @@ def _launch_env(overrides: Dict[str, str]) -> Dict[str, str]:
 
 
 def _save_state(path: Path, data: Dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8")
-    temp.replace(path)
-    if os.name != "nt":
-        os.chmod(path, 0o600)
+    with _STATE_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}.tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=True, indent=2), encoding="utf-8")
+        temp.replace(path)
+        if os.name != "nt":
+            os.chmod(path, 0o600)
 
 
 def _clear_state(path: Path) -> None:
