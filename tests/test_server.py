@@ -1496,6 +1496,39 @@ class TestWorkstreamHandlers:
         assert server_mod._get_workstream("ws-tree-sub-1") is None
         assert server_mod._get_workstream("ws-tree-sub-2") is None
 
+    @patch.object(server_mod, "_make_backend")
+    def test_bridge_stop_requires_cascade_for_dependent_workstreams(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        server_mod.handle_bridge_start({
+            "pane_a": "legacy:main:a",
+            "pane_b": "legacy:main:b",
+            "room_id": "legacy-main-room",
+            "bridge_id": "legacy-main-bridge",
+            "workstream_id": "legacy-main",
+        })
+        server_mod.handle_bridge_start({
+            "pane_a": "legacy:sub:a",
+            "pane_b": "legacy:sub:b",
+            "room_id": "legacy-sub-room",
+            "bridge_id": "legacy-sub-bridge",
+            "workstream_id": "legacy-sub",
+            "tier": "sub",
+            "parent_workstream_id": "legacy-main",
+        })
+
+        blocked = server_mod.handle_bridge_stop({"bridge_id": "legacy-main-bridge"})
+        cascaded = server_mod.handle_bridge_stop({"bridge_id": "legacy-main-bridge", "cascade": True})
+
+        assert blocked["error"] == "cannot stop bridge with 1 dependent sub workstream(s); set cascade=true"
+        assert blocked["dependency_children"] == ["legacy-sub"]
+        assert cascaded["cascade"] is True
+        assert {item["workstream_id"] for item in cascaded["removed"]} == {"legacy-main", "legacy-sub"}
+        assert server_mod._get_workstream("legacy-main") is None
+        assert server_mod._get_workstream("legacy-sub") is None
+
     def test_fleet_reconcile_reports_and_applies_orphan_cleanup(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TB2_AUDIT_DIR", str(tmp_path))
         monkeypatch.setattr(server_mod, "_audit_trail", AuditTrail(tmp_path))
@@ -2535,6 +2568,29 @@ class TestInterventionHandlers:
         result = server_mod.handle_intervention_list({})
         assert result["bridge_id"] == "br-single"
         assert result["count"] == 0
+
+    @patch.object(server_mod, "_make_backend")
+    def test_mutating_intervention_requires_explicit_target(self, mock_factory):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+
+        create_room("single-mutate-int")
+        server_mod.handle_bridge_start({
+            "pane_a": "single-mutate:a",
+            "pane_b": "single-mutate:b",
+            "room_id": "single-mutate-int",
+            "bridge_id": "br-single-mutate",
+            "intervention": True,
+        })
+
+        approved = server_mod.handle_intervention_approve({})
+        rejected = server_mod.handle_intervention_reject({})
+        interrupted = server_mod.handle_terminal_interrupt({"target": "a"})
+
+        assert approved["error"] == "bridge_id, workstream_id, or room_id required for mutation"
+        assert rejected["error"] == "bridge_id, workstream_id, or room_id required for mutation"
+        assert interrupted["error"] == "bridge_id, workstream_id, or room_id required for mutation"
 
     @patch.object(server_mod, "_make_backend")
     def test_intervention_list_resolves_bridge_from_room(self, mock_factory):

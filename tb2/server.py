@@ -1072,7 +1072,11 @@ def _bridge_detail(bridge: Bridge) -> Dict[str, Any]:
     }
 
 
-def _resolve_bridge(args: Dict[str, Any]) -> Tuple[Optional[str], Optional[Bridge], Optional[Dict[str, Any]]]:
+def _resolve_bridge(
+    args: Dict[str, Any],
+    *,
+    allow_implicit_single: bool = True,
+) -> Tuple[Optional[str], Optional[Bridge], Optional[Dict[str, Any]]]:
     requested_workstream_id = str(args.get("workstream_id", "") or "").strip()
     if requested_workstream_id:
         try:
@@ -1123,12 +1127,15 @@ def _resolve_bridge(args: Dict[str, Any]) -> Tuple[Optional[str], Optional[Bridg
             "bridge_candidates": [_bridge_detail(bridge) for _, bridge in matches],
         }
 
-    if len(items) == 1:
+    if len(items) == 1 and allow_implicit_single:
         bridge_id, bridge = items[0]
         return bridge_id, bridge, None
 
     if not items:
         return None, None, {"error": "bridge_id required: no active bridges"}
+
+    if len(items) == 1:
+        return None, None, {"error": "bridge_id, workstream_id, or room_id required for mutation"}
 
     return None, None, {
         "error": "bridge_id required: multiple active bridges",
@@ -1681,6 +1688,23 @@ def handle_bridge_stop(args: Dict[str, Any]) -> Dict[str, Any]:
         bridge_id = _validate_bridge_id(args["bridge_id"])
     except ValueError as exc:
         return {"error": str(exc)}
+    cascade = bool(args.get("cascade", False))
+    cleanup_room = bool(args.get("cleanup_room", False))
+    bridge = _get_bridge(bridge_id)
+    if bridge is None:
+        return {"error": "bridge not found"}
+    descendants = _workstream_descendants(bridge.workstream_id)
+    if descendants:
+        if not cascade:
+            return {
+                "error": f"cannot stop bridge with {len(descendants)} dependent sub workstream(s); set cascade=true",
+                "dependency_children": [item.workstream_id for item in descendants],
+            }
+        return handle_workstream_stop({
+            "workstream_id": bridge.workstream_id,
+            "cascade": True,
+            "cleanup_room": cleanup_room,
+        })
     with _bridges_lock:
         bridge = _bridges.pop(bridge_id, None)
     if bridge:
@@ -1707,7 +1731,7 @@ def handle_intervention_list(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id, bridge, error = _resolve_bridge(args)
+    bridge_id, bridge, error = _resolve_bridge(args, allow_implicit_single=False)
     if error:
         return error
     if not bridge or not bridge_id:
@@ -1759,7 +1783,7 @@ def handle_intervention_approve(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_intervention_reject(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id, bridge, error = _resolve_bridge(args)
+    bridge_id, bridge, error = _resolve_bridge(args, allow_implicit_single=False)
     if error:
         return error
     if not bridge or not bridge_id:
@@ -1839,7 +1863,7 @@ def handle_workstream_get(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_workstream_pause_review(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id, bridge, error = _resolve_bridge(args)
+    bridge_id, bridge, error = _resolve_bridge(args, allow_implicit_single=False)
     if error:
         return error
     if not bridge or not bridge_id:
@@ -1865,7 +1889,7 @@ def handle_workstream_pause_review(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_workstream_resume_review(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id, bridge, error = _resolve_bridge(args)
+    bridge_id, bridge, error = _resolve_bridge(args, allow_implicit_single=False)
     if error:
         return error
     if not bridge or not bridge_id:
@@ -2017,7 +2041,7 @@ def handle_workstream_stop(args: Dict[str, Any]) -> Dict[str, Any]:
         if record is None:
             return {"error": f"workstream not found: {requested_workstream_id}"}
     else:
-        bridge_id, bridge, error = _resolve_bridge(args)
+        bridge_id, bridge, error = _resolve_bridge(args, allow_implicit_single=False)
         if error:
             return error
         if not bridge or not bridge_id:
@@ -2087,7 +2111,7 @@ def handle_fleet_reconcile(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_terminal_interrupt(args: Dict[str, Any]) -> Dict[str, Any]:
-    bridge_id, bridge, error = _resolve_bridge(args)
+    bridge_id, bridge, error = _resolve_bridge(args, allow_implicit_single=False)
     if error:
         return error
     if not bridge or not bridge_id:
@@ -2699,6 +2723,16 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "cascade": {"type": "boolean"},
             "cleanup_room": {"type": "boolean"},
         },
+        "additionalProperties": False,
+    },
+    "bridge_stop": {
+        "type": "object",
+        "properties": {
+            "bridge_id": {"type": "string"},
+            "cascade": {"type": "boolean"},
+            "cleanup_room": {"type": "boolean"},
+        },
+        "required": ["bridge_id"],
         "additionalProperties": False,
     },
     "fleet_reconcile": {
