@@ -7,6 +7,7 @@ with improved efficiency: per-room locks, bounded storage, session TTL.
 from __future__ import annotations
 
 import base64
+import hashlib
 import ipaddress
 import json
 import os
