@@ -67,7 +67,8 @@ Batch A also establishes a minimal runtime boundary:
 - `preferred_backend` remains advisory
 - per-workstream policy keys such as `rate_limit` and `pending_limit` remain mutable exception keys outside the authoritative subset
 - operator `pause_review` / `resume_review` now behave as explicit review-mode exceptions only when the baseline is `auto`; they do not override an authoritative `manual` baseline
-- `workstream_update_policy` now records policy mutation as a mutable exception layer over the policy baseline rather than as an unqualified config change
+- startup applies the governance policy baseline to new workstreams, so resolved policy keys are not misclassified as operator exceptions
+- `workstream_update_policy` now records later policy mutation as a mutable exception layer over that policy baseline rather than as an unqualified config change
 
 Batch B starts exposing machine-readable decision consumption:
 

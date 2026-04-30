@@ -66,7 +66,8 @@ description: TB2 治理分層最小契約，定義 precedence、effective config
 - `preferred_backend` 目前仍是 advisory
 - `rate_limit`、`pending_limit` 這類 per-workstream policy key 仍屬 mutable exception keys，不在第一批 authoritative subset 內
 - operator `pause_review` / `resume_review` 現在只會在 baseline 為 `auto` 時形成明確的 review-mode exception；不會覆蓋 authoritative `manual` baseline
-- `workstream_update_policy` 現在會把 policy mutation 記錄成 policy baseline 之上的 mutable exception，而不是沒有語義的設定更新
+- startup 會把 governance policy baseline 套用到新 workstream，因此 resolved policy keys 不會被誤分類成 operator exception
+- `workstream_update_policy` 現在會把後續 policy mutation 記錄成 policy baseline 之上的 mutable exception，而不是沒有語義的設定更新
 
 `Batch B` 目前開始把治理決策做成可消費的機器輸出：
 

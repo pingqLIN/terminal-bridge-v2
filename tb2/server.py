@@ -1632,6 +1632,13 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         poll_ms=poll_ms,
         applied_controls=applied_controls,
     )
+    policy_state = _governance_policy_state(governance_snapshot)
+    governance_baseline_policy = (
+        dict(policy_state.get("baseline", {}))
+        if isinstance(policy_state.get("baseline"), dict)
+        else default_workstream_policy(poll_ms=poll_ms)
+    )
+    initial_policy = reusable_record.policy if reusable_record else governance_baseline_policy
 
     bridge = Bridge(
         bridge_id=bridge_id,
@@ -1646,7 +1653,7 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         lines=lines,
         auto_forward=auto_forward_enabled,
         intervention=intervention_enabled,
-        policy=reusable_record.policy if reusable_record else None,
+        policy=initial_policy,
         governance=governance_snapshot,
         operator_review_paused=operator_review_paused,
         tier=tier,

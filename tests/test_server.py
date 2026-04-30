@@ -1153,6 +1153,53 @@ class TestWorkstreamHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "ws-policy-bridge"})
 
     @patch.object(server_mod, "_make_backend")
+    def test_bridge_start_applies_governance_policy_baseline_without_operator_exception(self, mock_factory, tmp_path):
+        mock_backend = MagicMock()
+        mock_backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = mock_backend
+        config = tmp_path / "governance-policy.json"
+        config.write_text(
+            json.dumps({
+                "instruction_profile": {
+                    "policy-baseline": {
+                        "rate_limit": 3,
+                        "silent_seconds": 75,
+                    }
+                }
+            }),
+            encoding="utf-8",
+        )
+
+        server_mod.handle_bridge_start({
+            "pane_a": "ws:baseline:a",
+            "pane_b": "ws:baseline:b",
+            "room_id": "ws-baseline-room",
+            "bridge_id": "ws-baseline-bridge",
+            "workstream_id": "ws-baseline-main",
+            "instruction_profile": "policy-baseline",
+            "governance_config_path": str(config),
+        })
+        workstream = server_mod.handle_workstream_get({"workstream_id": "ws-baseline-main"})["workstream"]
+        policy_state = workstream["governance"]["policy_state"]
+
+        assert workstream["policy"]["rate_limit"] == 3
+        assert workstream["policy"]["silent_seconds"] == 75.0
+        assert policy_state["baseline"]["rate_limit"] == 3
+        assert policy_state["baseline_source"]["rate_limit"] == "governance"
+        assert policy_state["effective"]["rate_limit"] == 3
+        assert policy_state["overrides"] == {}
+
+        updated = server_mod.handle_workstream_update_policy({
+            "workstream_id": "ws-baseline-main",
+            "rate_limit": 4,
+        })
+
+        assert updated["workstream"]["governance"]["policy_state"]["overrides"]["rate_limit"]["source"] == "operator_exception"
+        assert updated["workstream"]["governance"]["policy_state"]["overrides"]["rate_limit"]["reason"] == "workstream_update_policy"
+
+        server_mod.handle_bridge_stop({"bridge_id": "ws-baseline-bridge"})
+
+    @patch.object(server_mod, "_make_backend")
     def test_workstream_quota_guard_blocks_new_handoffs_and_rearms(self, mock_factory, tmp_path, monkeypatch):
         mock_backend = MagicMock()
         mock_backend.capture_both.return_value = ([], [])
@@ -2767,6 +2814,10 @@ class TestMCPProtocol:
         workstream_stop = tools["workstream_stop"]["inputSchema"]
         assert workstream_stop["properties"]["cleanup_room"]["type"] == "boolean"
         assert workstream_stop["properties"]["cascade"]["type"] == "boolean"
+        bridge_stop = tools["bridge_stop"]["inputSchema"]
+        assert bridge_stop["required"] == ["bridge_id"]
+        assert bridge_stop["properties"]["cleanup_room"]["type"] == "boolean"
+        assert bridge_stop["properties"]["cascade"]["type"] == "boolean"
         fleet_reconcile = tools["fleet_reconcile"]["inputSchema"]
         assert fleet_reconcile["properties"]["apply"]["type"] == "boolean"
         intervention_list = tools["intervention_list"]["inputSchema"]
