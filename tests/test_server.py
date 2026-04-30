@@ -2927,6 +2927,10 @@ class TestGuiRouting:
         assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-link-badge' in html
         assert 'body[data-narrow="true"][data-design="v3"][data-workspace-tab="topology"] .relation-node' in html
         assert "state.home = !forceWorkspace;" in html
+        assert "function workspaceMetaState(name)" in html
+        assert "button.dataset.state = stateName;" in html
+        assert ".workspace-tab[data-state=\"attention\"]" in html
+        assert ".workspace-tab[data-state=\"running\"]" in html
         assert "function renderTopologyActions()" in html
         assert "function setTopologyActionState(name, stateName, detail)" in html
         assert "async function handleTopologyAction(name)" in html

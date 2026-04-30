@@ -540,6 +540,27 @@ GUI_HTML_TEMPLATE = r"""
         color: var(--accent);
       }
 
+      .workspace-tab[data-state="running"] {
+        border-color: rgba(33, 124, 95, 0.42);
+      }
+
+      .workspace-tab[data-state="attention"] {
+        border-color: rgba(176, 94, 35, 0.58);
+        background: rgba(255, 247, 237, 0.84);
+      }
+
+      .workspace-tab[data-state="ready"] .workspace-tab-meta {
+        color: var(--accent);
+      }
+
+      .workspace-tab[data-state="running"] .workspace-tab-meta {
+        color: #217c5f;
+      }
+
+      .workspace-tab[data-state="attention"] .workspace-tab-meta {
+        color: #a24d1d;
+      }
+
       .workspace-strip {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
@@ -4436,13 +4457,45 @@ GUI_HTML_TEMPLATE = r"""
         return '';
       }
 
+      function workspaceMetaState(name) {
+        const detail = inferBridgeDetail(state.statusSnapshot);
+        const bridgeActive = bridgeIsActive(detail) || Boolean($('bridge-id').value.trim());
+        const roomActive = Boolean((detail && detail.room_id) || $('room-id').value.trim());
+        const pendingCount = state.pendingItems.length;
+        const reviewEnabled = detail ? Boolean(detail.intervention) : $('intervention').checked;
+        const auditActive = Boolean(state.audit && state.audit.enabled);
+        const guard = detail && detail.auto_forward_guard ? detail.auto_forward_guard : null;
+        const guardBlocked = Boolean(guard && guard.blocked);
+        if (name === 'workflow') {
+          const hasPanes = Boolean($('pane-a').value.trim() && $('pane-b').value.trim());
+          if (bridgeActive) return 'running';
+          return hasPanes ? 'ready' : 'muted';
+        }
+        if (name === 'topology') {
+          return bridgeActive || roomActive ? 'running' : 'muted';
+        }
+        if (name === 'review') {
+          if (pendingCount > 0 || guardBlocked) return 'attention';
+          return reviewEnabled ? 'ready' : 'muted';
+        }
+        if (name === 'inspect') {
+          if (guardBlocked) return 'attention';
+          return auditActive || bridgeActive || roomActive ? 'ready' : 'muted';
+        }
+        return 'muted';
+      }
+
       function renderWorkspaceTabs() {
         document.querySelectorAll('[data-workspace-tab]').forEach(button => {
           const name = button.dataset.workspaceTab || 'workflow';
           const label = button.querySelector('.workspace-tab-label');
           const meta = button.querySelector('.workspace-tab-meta');
+          const metaText = workspaceMetaText(name);
+          const stateName = workspaceMetaState(name);
           if (label) label.textContent = t('workspace.' + name);
-          if (meta) meta.textContent = workspaceMetaText(name);
+          if (meta) meta.textContent = metaText;
+          button.dataset.state = stateName;
+          button.setAttribute('aria-label', (label ? label.textContent : name) + ': ' + metaText);
         });
       }
 
