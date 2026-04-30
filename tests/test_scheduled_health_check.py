@@ -96,6 +96,28 @@ def test_append_log_writes_jsonl(tmp_path):
     assert json.loads(path.read_text(encoding="utf-8")) == {"ok": True, "issues": []}
 
 
+def test_append_log_rotates_when_file_exceeds_limit(tmp_path):
+    path = tmp_path / "health.jsonl"
+    path.write_text("old\n" * 10, encoding="utf-8")
+
+    health.append_log(path, {"ok": True, "_max_bytes": 10, "_max_files": 2})
+
+    assert json.loads(path.read_text(encoding="utf-8")) == {"ok": True}
+    assert (tmp_path / "health.jsonl.1").read_text(encoding="utf-8") == "old\n" * 10
+
+
+def test_rotate_log_drops_oldest_archive(tmp_path):
+    path = tmp_path / "health.jsonl"
+    path.write_text("active", encoding="utf-8")
+    (tmp_path / "health.jsonl.1").write_text("one", encoding="utf-8")
+    (tmp_path / "health.jsonl.2").write_text("two", encoding="utf-8")
+
+    health.rotate_log(path, max_bytes=1, max_files=2)
+
+    assert (tmp_path / "health.jsonl.1").read_text(encoding="utf-8") == "active"
+    assert (tmp_path / "health.jsonl.2").read_text(encoding="utf-8") == "one"
+
+
 def test_check_doctor_keeps_command_summary_without_stdout(monkeypatch, tmp_path):
     monkeypatch.setattr(
         health,

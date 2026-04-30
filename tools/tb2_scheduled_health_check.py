@@ -141,8 +141,29 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
 
 def append_log(path: Path, report: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    rotate_log(path, max_bytes=int(report.get("_max_bytes", 0)), max_files=int(report.get("_max_files", 0)))
+    report.pop("_max_bytes", None)
+    report.pop("_max_files", None)
     with path.open("a", encoding="utf-8") as stream:
         stream.write(json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def rotate_log(path: Path, *, max_bytes: int, max_files: int) -> None:
+    if max_bytes <= 0 or max_files <= 0 or not path.exists():
+        return
+    if path.stat().st_size < max_bytes:
+        return
+
+    for index in range(max_files, 0, -1):
+        current = path.with_name(f"{path.name}.{index}")
+        target = path.with_name(f"{path.name}.{index + 1}")
+        if not current.exists():
+            continue
+        if index == max_files:
+            current.unlink()
+            continue
+        current.replace(target)
+    path.replace(path.with_name(f"{path.name}.1"))
 
 
 def main() -> int:
@@ -153,11 +174,15 @@ def main() -> int:
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--timeout", type=float, default=5.0)
     parser.add_argument("--log", default="")
+    parser.add_argument("--max-bytes", type=int, default=10 * 1024 * 1024)
+    parser.add_argument("--max-files", type=int, default=5)
     parser.add_argument("--skip-systemd", action="store_true")
     args = parser.parse_args()
 
     report = build_report(args)
     if args.log:
+        report["_max_bytes"] = int(args.max_bytes)
+        report["_max_files"] = int(args.max_files)
         append_log(Path(args.log), report)
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     return 0 if report["ok"] else 2

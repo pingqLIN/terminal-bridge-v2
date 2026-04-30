@@ -96,11 +96,20 @@ It verifies:
 - `/healthz` reports `ok=true`
 - `doctor` readiness reports backend, client, and transport as ready
 
+The JSONL log rotates by default at `10MB x 5` archives. Tune that with:
+
+```bash
+python3 tools/tb2_scheduled_health_check.py --max-bytes 10485760 --max-files 5
+```
+
 On machines where root systemd installation is available, use the templates under `deploy/systemd/`. If user-level systemd linger is enabled, the templates under `deploy/systemd/user/` are also available.
 
 On this workstation, user linger is disabled, so the active schedule is a user crontab entry:
 
 ```bash
+python3 tools/install_tb2_health_cron.py status
+python3 tools/install_tb2_health_cron.py install
+python3 tools/install_tb2_health_cron.py uninstall
 crontab -l
 tail -n 20 ~/.local/state/tb2/health-check.jsonl
 tail -n 20 ~/.local/state/tb2/health-check-cron.log

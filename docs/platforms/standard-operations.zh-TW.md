@@ -96,11 +96,20 @@ python3 tools/tb2_scheduled_health_check.py --unit tb2.service --base-url http:/
 - `/healthz` 是否回報 `ok=true`
 - `doctor` readiness 是否回報 backend、client、transport 都 ready
 
+JSONL log 預設會以 `10MB x 5` archives 進行 rotate。可用以下參數調整：
+
+```bash
+python3 tools/tb2_scheduled_health_check.py --max-bytes 10485760 --max-files 5
+```
+
 若機器可安裝 root systemd unit，可使用 `deploy/systemd/` 下的範本。若 user-level systemd linger 已啟用，也可使用 `deploy/systemd/user/` 下的範本。
 
 此工作站目前 `linger` 未啟用，因此實際排程採 user crontab：
 
 ```bash
+python3 tools/install_tb2_health_cron.py status
+python3 tools/install_tb2_health_cron.py install
+python3 tools/install_tb2_health_cron.py uninstall
 crontab -l
 tail -n 20 ~/.local/state/tb2/health-check.jsonl
 tail -n 20 ~/.local/state/tb2/health-check-cron.log
