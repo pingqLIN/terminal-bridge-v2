@@ -139,6 +139,35 @@ def test_stop_service_terminates_running_pid(tmp_path, monkeypatch):
     assert not state.exists()
 
 
+def test_stop_service_does_not_terminate_reused_pid(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps({
+            "pid": 43210,
+            "host": "127.0.0.1",
+            "port": 3189,
+            "cmd": ["/usr/bin/python3", "-m", "tb2", "server"],
+        }),
+        encoding="utf-8",
+    )
+    called = {"value": False}
+
+    def _term(pid: int, timeout: float):
+        called["value"] = True
+
+    monkeypatch.setattr(service, "_pid_alive", lambda pid: pid == 43210)
+    monkeypatch.setattr(service, "_pid_cmdline", lambda pid: ["/usr/bin/python3", "-m", "unrelated"])
+    monkeypatch.setattr(service, "_terminate_pid", _term)
+
+    st = service.stop_service(timeout=8.0)
+
+    assert called["value"] is False
+    assert st.running is False
+    assert not state.exists()
+
+
 def test_restart_service_calls_stop_then_start(monkeypatch):
     calls = {"stop": False, "start": False}
 
