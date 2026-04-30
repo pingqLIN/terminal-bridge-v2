@@ -1433,7 +1433,8 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .relation-node.is-standby {
-        opacity: 0.8;
+        border-style: dashed;
+        background: #fbfaf6;
       }
 
       .relation-node.is-standby::before {
@@ -1441,8 +1442,14 @@ GUI_HTML_TEMPLATE = r"""
       }
 
       .relation-node.is-muted {
-        opacity: 0.46;
-        filter: saturate(0.78);
+        border-style: dashed;
+        background: #f5f3ee;
+        filter: saturate(0.82);
+      }
+
+      .relation-node.is-muted .relation-node-tag,
+      .relation-node.is-muted .relation-node-action {
+        opacity: 0.68;
       }
 
       .relation-node.is-attention {
@@ -2229,6 +2236,16 @@ GUI_HTML_TEMPLATE = r"""
           linear-gradient(rgba(82, 104, 121, 0.26) 1px, transparent 1px),
           linear-gradient(90deg, rgba(82, 104, 121, 0.26) 1px, transparent 1px),
           #091119;
+      }
+
+      body[data-design="v3"] .relation-node.is-standby {
+        background: #111c26;
+        border-style: dashed;
+      }
+
+      body[data-design="v3"] .relation-node.is-muted {
+        background: #101820;
+        border-style: dashed;
       }
 
       body[data-design="v3"] .workspace-panel[data-workspace-panel="workflow"] > .layout {

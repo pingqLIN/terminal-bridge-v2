@@ -116,7 +116,11 @@ def collect_metrics(page: Any) -> dict[str, Any]:
               height: Math.round(rect.height)
             };
           };
-          const nodes = Array.from(document.querySelectorAll('.relation-node')).map(box).filter(Boolean);
+          const relationNodes = Array.from(document.querySelectorAll('.relation-node'));
+          const nodes = relationNodes.map(box).filter(Boolean);
+          const transparentNodes = relationNodes
+            .map(node => Number(getComputedStyle(node).opacity))
+            .filter(opacity => opacity < 0.99);
           const overlaps = [];
           for (let i = 0; i < nodes.length; i += 1) {
             for (let j = i + 1; j < nodes.length; j += 1) {
@@ -151,12 +155,25 @@ def collect_metrics(page: Any) -> dict[str, Any]:
             relationDetailsBox: box(details),
             workspaceTabsBox: box(tabs),
             relationNodeBoxes: nodes,
+            relationTransparentNodeCount: transparentNodes.length,
             relationNodeOverlapCount: overlaps.length,
             workspaceStripDisplay: strip ? getComputedStyle(strip).display : '',
             fleetDisplay: fleet ? getComputedStyle(fleet).display : ''
           };
         }"""
     )
+
+
+def assert_relation_rendering(metrics: dict[str, Any]) -> list[str]:
+    failures: list[str] = []
+    if metrics.get("relationNodeOverlapCount", 0) > 0:
+        failures.append(f"relation diagram nodes overlap: {metrics['relationNodeOverlapCount']}")
+    if metrics.get("relationTransparentNodeCount", 0) > 0:
+        failures.append(
+            f"relation diagram nodes must stay opaque so link labels cannot bleed through: "
+            f"{metrics['relationTransparentNodeCount']}"
+        )
+    return failures
 
 
 def assert_metrics(metrics: dict[str, Any], *, reduced: bool) -> list[str]:
@@ -187,8 +204,7 @@ def assert_metrics(metrics: dict[str, Any], *, reduced: bool) -> list[str]:
         failures.append(
             f"relation diagram starts too low: top {diagram_box['top']} > {metrics['viewportHeight'] + 24}"
         )
-    if metrics.get("relationNodeOverlapCount", 0) > 0:
-        failures.append(f"relation diagram nodes overlap: {metrics['relationNodeOverlapCount']}")
+    failures.extend(assert_relation_rendering(metrics))
     if metrics["horizontalOverflow"]:
         failures.append(
             f"horizontal overflow: document {metrics['documentWidth']} > viewport {metrics['viewportWidth']}"
@@ -228,7 +244,11 @@ def check_view(sync_playwright: Any, base_url: str, out: Path, name: str, viewpo
         reduced_metrics = collect_metrics(reduced_page)
         reduced_page.screenshot(path=str(out / f"{name}-reduced-motion.png"), full_page=True)
         browser.close()
-    failures = assert_metrics(metrics, reduced=False) + assert_metrics(reduced_metrics, reduced=True)
+    failures = (
+        assert_metrics(metrics, reduced=False)
+        + assert_relation_rendering(action_metrics)
+        + assert_metrics(reduced_metrics, reduced=True)
+    )
     if not action_metrics["interventionChecked"]:
         failures.append("Review Gate click did not check #intervention")
     if console_errors:
