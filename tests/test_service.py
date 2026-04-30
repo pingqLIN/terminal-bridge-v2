@@ -68,6 +68,29 @@ def test_status_clears_stale_state(tmp_path, monkeypatch):
     assert not state.exists()
 
 
+def test_status_clears_reused_pid_when_cmdline_is_not_tb2(tmp_path, monkeypatch):
+    monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
+    state = tmp_path / "server.state.json"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps({
+            "pid": 23456,
+            "host": "127.0.0.1",
+            "port": 3189,
+            "cmd": ["/usr/bin/python3", "-m", "tb2", "server"],
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(service, "_pid_alive", lambda pid: pid == 23456)
+    monkeypatch.setattr(service, "_pid_cmdline", lambda pid: ["/usr/bin/python3", "-m", "unrelated"])
+
+    st = service.status_service()
+
+    assert st.running is False
+    assert st.pid is None
+    assert not state.exists()
+
+
 def test_start_service_writes_state(tmp_path, monkeypatch):
     monkeypatch.setenv("TB2_STATE_DIR", str(tmp_path))
 

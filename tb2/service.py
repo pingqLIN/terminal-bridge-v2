@@ -216,7 +216,7 @@ def status_service(*, paths: Optional[ServicePaths] = None) -> ServiceStatus:
     pid = _as_pid(state.get("pid"))
     host = str(state.get("host", "127.0.0.1"))
     port = _as_port(state.get("port"), default=3189)
-    running = bool(pid is not None and _pid_alive(pid))
+    running = bool(pid is not None and _state_pid_matches(pid, state))
     if not running and state:
         _clear_state(p.state_file)
     return ServiceStatus(
@@ -451,6 +451,34 @@ def _pid_alive(pid: int) -> bool:
             return True
         return False
     return True
+
+
+def _state_pid_matches(pid: int, state: Dict[str, object]) -> bool:
+    if not _pid_alive(pid):
+        return False
+    expected = state.get("cmd")
+    if not isinstance(expected, list) or not expected:
+        return True
+    observed = _pid_cmdline(pid)
+    if not observed:
+        return True
+    return _looks_like_service_cmd(observed)
+
+
+def _pid_cmdline(pid: int) -> List[str]:
+    if os.name == "nt":
+        return []
+    proc_path = Path("/proc") / str(pid) / "cmdline"
+    try:
+        raw = proc_path.read_bytes()
+    except OSError:
+        return []
+    return [item.decode("utf-8", errors="replace") for item in raw.split(b"\0") if item]
+
+
+def _looks_like_service_cmd(cmdline: List[str]) -> bool:
+    text = " ".join(str(item) for item in cmdline)
+    return "tb2" in text and "server" in text
 
 
 def _terminate_pid(pid: int, *, timeout: float) -> None:
