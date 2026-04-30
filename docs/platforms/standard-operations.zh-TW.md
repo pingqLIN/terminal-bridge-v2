@@ -79,6 +79,33 @@ curl -sS http://127.0.0.1:3189/healthz
 curl -sS http://127.0.0.1:3189/mcp
 ```
 
+### 定時健康檢查
+
+對長時間運作的本機 control plane，建議在 TB2 service 外層放一個只做觀測的 timer。這個檢查不要自動重啟 TB2，因為 active room、bridge 與 pending intervention state 目前仍不是完整 durable state。
+
+repo 內已提供可重用檢查：
+
+```bash
+python3 tools/tb2_scheduled_health_check.py --unit tb2.service --base-url http://127.0.0.1:3189 --log ~/.local/state/tb2/health-check.jsonl
+```
+
+它會驗證：
+
+- `tb2.service` 是否 active
+- `/health` 是否回報 `ok=true`、`ready=true`、`codexAvailable=true`、`backendReady=true`
+- `/healthz` 是否回報 `ok=true`
+- `doctor` readiness 是否回報 backend、client、transport 都 ready
+
+若機器可安裝 root systemd unit，可使用 `deploy/systemd/` 下的範本。若 user-level systemd linger 已啟用，也可使用 `deploy/systemd/user/` 下的範本。
+
+此工作站目前 `linger` 未啟用，因此實際排程採 user crontab：
+
+```bash
+crontab -l
+tail -n 20 ~/.local/state/tb2/health-check.jsonl
+tail -n 20 ~/.local/state/tb2/health-check-cron.log
+```
+
 ### GUI 檢查
 
 - `Quick Pairing` preset 應顯示 backend、profile、session 與 bridge 動作。

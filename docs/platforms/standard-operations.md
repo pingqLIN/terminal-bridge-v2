@@ -79,6 +79,33 @@ curl -sS http://127.0.0.1:3189/healthz
 curl -sS http://127.0.0.1:3189/mcp
 ```
 
+### Scheduled health check
+
+For a long-running local control plane, keep a timer outside the TB2 service that only observes health. Do not auto-restart TB2 from this check, because active room, bridge, and pending intervention state is intentionally not fully durable.
+
+The repo includes a reusable check:
+
+```bash
+python3 tools/tb2_scheduled_health_check.py --unit tb2.service --base-url http://127.0.0.1:3189 --log ~/.local/state/tb2/health-check.jsonl
+```
+
+It verifies:
+
+- `tb2.service` is active
+- `/health` reports `ok=true`, `ready=true`, `codexAvailable=true`, and `backendReady=true`
+- `/healthz` reports `ok=true`
+- `doctor` readiness reports backend, client, and transport as ready
+
+On machines where root systemd installation is available, use the templates under `deploy/systemd/`. If user-level systemd linger is enabled, the templates under `deploy/systemd/user/` are also available.
+
+On this workstation, user linger is disabled, so the active schedule is a user crontab entry:
+
+```bash
+crontab -l
+tail -n 20 ~/.local/state/tb2/health-check.jsonl
+tail -n 20 ~/.local/state/tb2/health-check-cron.log
+```
+
 ### GUI checks
 
 - `Quick Pairing` preset should show backend, profile, session, and bridge actions.

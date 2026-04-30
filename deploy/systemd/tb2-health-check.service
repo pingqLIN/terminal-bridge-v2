@@ -1,0 +1,11 @@
+[Unit]
+Description=TB2 scheduled health check
+Documentation=https://github.com/pingqLIN/terminal-bridge-v2
+Wants=tb2.service
+After=tb2.service network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/miles/dev2/projects/terminal-bridge-v2
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /home/miles/dev2/projects/terminal-bridge-v2/tools/tb2_scheduled_health_check.py --unit tb2.service --base-url http://127.0.0.1:3189 --log /var/log/tb2/health-check.jsonl
