@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -64,18 +65,47 @@ def build_entry(args: argparse.Namespace) -> str:
     if interval < 1 or interval > 59:
         raise ValueError("--interval-minutes must be between 1 and 59")
 
-    command = (
-        f"cd {repo} && {args.python} tools/tb2_scheduled_health_check.py"
-        f" --unit {args.unit}"
-        f" --base-url {args.base_url}"
-        f" --log {args.log}"
-        f" --max-bytes {int(args.max_bytes)}"
-        f" --max-files {int(args.max_files)}"
-        f" --alert {args.alert}"
-        f" --alert-threshold {int(args.alert_threshold)}"
-        f" >> {args.cron_log} 2>&1 {MARKER}"
-    )
+    check_args = [
+        str(args.python),
+        "tools/tb2_scheduled_health_check.py",
+        "--unit",
+        str(args.unit),
+        "--base-url",
+        str(args.base_url),
+        "--log",
+        str(args.log),
+        "--max-bytes",
+        str(int(args.max_bytes)),
+        "--max-files",
+        str(int(args.max_files)),
+        "--alert",
+        str(args.alert),
+        "--alert-threshold",
+        str(int(args.alert_threshold)),
+    ]
+    if bool(getattr(args, "skip_systemd", False)):
+        check_args.append("--skip-systemd")
+    command = " ".join([
+        "cd",
+        shlex.quote(str(repo)),
+        "&&",
+        shlex.join(check_args),
+        ">>",
+        shlex.quote(str(args.cron_log)),
+        "2>&1",
+        MARKER,
+    ])
     return f"*/{interval} * * * * {command}"
+
+
+def ensure_output_dirs(args: argparse.Namespace) -> None:
+    for raw in (args.log, args.cron_log, args.alert):
+        path = Path(raw).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            path.parent.chmod(0o700)
+        except OSError:
+            pass
 
 
 def install(args: argparse.Namespace) -> dict[str, Any]:
@@ -83,6 +113,7 @@ def install(args: argparse.Namespace) -> dict[str, Any]:
     base = without_entry(read_crontab())
     text = (base + "\n" + entry + "\n") if base else entry + "\n"
     if not args.dry_run:
+        ensure_output_dirs(args)
         write_crontab(text)
     return {"action": "install", "dry_run": bool(args.dry_run), "entry": entry}
 
@@ -119,6 +150,11 @@ def build_parser() -> argparse.ArgumentParser:
     install_parser.add_argument("--interval-minutes", type=int, default=5)
     install_parser.add_argument("--max-bytes", type=int, default=10 * 1024 * 1024)
     install_parser.add_argument("--max-files", type=int, default=5)
+    install_parser.add_argument(
+        "--skip-systemd",
+        action="store_true",
+        help="cron mode for TB2-managed service startup; skip systemctl unit checks",
+    )
     add_common(install_parser)
     install_parser.set_defaults(fn=install)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from tools import tb2_scheduled_health_check as health
@@ -96,6 +97,17 @@ def test_append_log_writes_jsonl(tmp_path):
     assert json.loads(path.read_text(encoding="utf-8")) == {"ok": True, "issues": []}
 
 
+def test_append_log_uses_private_permissions(tmp_path):
+    path = tmp_path / "private" / "health.jsonl"
+
+    health.append_log(path, {"ok": True})
+
+    if os.name == "posix":
+        assert path.parent.stat().st_mode & 0o777 == 0o700
+        assert path.stat().st_mode & 0o777 == 0o600
+        assert (tmp_path / "private" / "health.jsonl.lock").exists()
+
+
 def test_append_log_rotates_when_file_exceeds_limit(tmp_path):
     path = tmp_path / "health.jsonl"
     path.write_text("old\n" * 10, encoding="utf-8")
@@ -104,6 +116,29 @@ def test_append_log_rotates_when_file_exceeds_limit(tmp_path):
 
     assert json.loads(path.read_text(encoding="utf-8")) == {"ok": True}
     assert (tmp_path / "health.jsonl.1").read_text(encoding="utf-8") == "old\n" * 10
+
+
+def test_append_log_locks_rotation_and_append(monkeypatch, tmp_path):
+    path = tmp_path / "health.jsonl"
+    path.write_text("old\n" * 10, encoding="utf-8")
+    calls: list[str] = []
+    original_lock = health._exclusive_file_lock
+    original_rotate = health.rotate_log
+
+    def tracking_lock(target):
+        calls.append("lock")
+        return original_lock(target)
+
+    def tracking_rotate(target, *, max_bytes: int, max_files: int):
+        calls.append("rotate")
+        original_rotate(target, max_bytes=max_bytes, max_files=max_files)
+
+    monkeypatch.setattr(health, "_exclusive_file_lock", tracking_lock)
+    monkeypatch.setattr(health, "rotate_log", tracking_rotate)
+
+    health.append_log(path, {"ok": True, "_max_bytes": 10, "_max_files": 2})
+
+    assert calls == ["lock", "rotate"]
 
 
 def test_rotate_log_drops_oldest_archive(tmp_path):
@@ -168,3 +203,6 @@ def test_update_alert_marks_recovery(tmp_path):
     assert marker["ok"] is True
     assert marker["active"] is False
     assert marker["previous_failure_count"] == 1
+    if os.name == "posix":
+        assert path.parent.stat().st_mode & 0o777 == 0o700
+        assert path.stat().st_mode & 0o777 == 0o600

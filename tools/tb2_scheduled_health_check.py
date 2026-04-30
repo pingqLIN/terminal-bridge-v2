@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+import os
 import json
 import subprocess
 import sys
@@ -12,6 +14,9 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
+
+if os.name == "posix":
+    import fcntl
 
 
 def run(args: list[str], *, cwd: Path | None = None, timeout: float = 15.0) -> dict[str, Any]:
@@ -139,13 +144,40 @@ def build_report(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def append_log(path: Path, report: dict[str, Any]) -> None:
+def _ensure_private_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    rotate_log(path, max_bytes=int(report.get("_max_bytes", 0)), max_files=int(report.get("_max_files", 0)))
-    report.pop("_max_bytes", None)
-    report.pop("_max_files", None)
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n")
+    if os.name == "posix":
+        path.parent.chmod(0o700)
+
+
+@contextlib.contextmanager
+def _exclusive_file_lock(path: Path):
+    lock_path = path.with_name(f"{path.name}.lock")
+    _ensure_private_parent(lock_path)
+    with lock_path.open("a", encoding="utf-8") as lock_stream:
+        if os.name == "posix":
+            fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "posix":
+                fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+
+
+def _chmod_private_file(path: Path) -> None:
+    if os.name == "posix" and path.exists():
+        path.chmod(0o600)
+
+
+def append_log(path: Path, report: dict[str, Any]) -> None:
+    with _exclusive_file_lock(path):
+        _ensure_private_parent(path)
+        rotate_log(path, max_bytes=int(report.get("_max_bytes", 0)), max_files=int(report.get("_max_files", 0)))
+        report.pop("_max_bytes", None)
+        report.pop("_max_files", None)
+        with path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(report, ensure_ascii=False, sort_keys=True) + "\n")
+        _chmod_private_file(path)
 
 
 def rotate_log(path: Path, *, max_bytes: int, max_files: int) -> None:
@@ -195,8 +227,9 @@ def update_alert(path: Path, report: dict[str, Any], *, threshold: int) -> dict[
             "last_report_timestamp": timestamp,
             "recommended_action": "No action required; TB2 scheduled health check has recovered.",
         }
-        path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_private_parent(path)
         path.write_text(json.dumps(marker, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        _chmod_private_file(path)
         return marker
 
     prior_active = previous.get("ok") is False
@@ -216,8 +249,9 @@ def update_alert(path: Path, report: dict[str, Any], *, threshold: int) -> dict[
             "Inspect tb2.service, /health, /healthz, and doctor output. Avoid automatic restart unless an operator accepts live state loss."
         ),
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_private_parent(path)
     path.write_text(json.dumps(marker, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _chmod_private_file(path)
     return marker
 
 

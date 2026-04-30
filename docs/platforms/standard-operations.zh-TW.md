@@ -86,15 +86,17 @@ curl -sS http://127.0.0.1:3189/mcp
 repo 內已提供可重用檢查：
 
 ```bash
-python3 tools/tb2_scheduled_health_check.py --unit tb2.service --base-url http://127.0.0.1:3189 --log ~/.local/state/tb2/health-check.jsonl
+python3 tools/tb2_scheduled_health_check.py --skip-systemd --base-url http://127.0.0.1:3189 --log ~/.local/state/tb2/health-check.jsonl
 ```
 
 它會驗證：
 
-- `tb2.service` 是否 active
+- 只有未設定 `--skip-systemd` 時，才檢查指定的 `systemd` unit 是否 active
 - `/health` 是否回報 `ok=true`、`ready=true`、`codexAvailable=true`、`backendReady=true`
 - `/healthz` 是否回報 `ok=true`
 - `doctor` readiness 是否回報 backend、client、transport 都 ready
+
+若 cron 只是觀測由 `python -m tb2 service start` 啟動的 TB2-managed service，請使用 `--skip-systemd`。只有當機器上真的存在同名 system unit 時，才使用 `--unit tb2.service`。
 
 JSONL log 預設會以 `10MB x 5` archives 進行 rotate。可用以下參數調整：
 
@@ -111,13 +113,13 @@ cat ~/.local/state/tb2/health-check.alert.json
 
 恢復後 marker 會保留 machine-readable 的 `ok=true` 與 `active=false`，讓 dashboard 或 agent 能區分已恢復 incident 與沒有 alert state。
 
-若機器可安裝 root systemd unit，可使用 `deploy/systemd/` 下的範本。若 user-level systemd linger 已啟用，也可使用 `deploy/systemd/user/` 下的範本。
+若機器可安裝 root systemd unit，可先替換 install path、建立 log directory，再使用 `deploy/systemd/` 下的 example 範本。若 user-level systemd linger 已啟用，也可使用 `deploy/systemd/user/` 下的 example 範本；user 範本預設使用 `--skip-systemd`。
 
 此工作站目前 `linger` 未啟用，因此實際排程採 user crontab：
 
 ```bash
 python3 tools/install_tb2_health_cron.py status
-python3 tools/install_tb2_health_cron.py install
+python3 tools/install_tb2_health_cron.py install --skip-systemd
 python3 tools/install_tb2_health_cron.py uninstall
 crontab -l
 tail -n 20 ~/.local/state/tb2/health-check.jsonl

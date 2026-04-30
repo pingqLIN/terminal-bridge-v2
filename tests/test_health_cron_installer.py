@@ -37,6 +37,29 @@ def test_build_entry_contains_rotation_and_marker(tmp_path):
     assert cron.MARKER in entry
 
 
+def test_build_entry_quotes_shell_paths_and_can_skip_systemd(tmp_path):
+    entry = cron.build_entry(
+        _args(
+            tmp_path,
+            repo=str(tmp_path / "repo with spaces"),
+            python="/opt/tb2 python/bin/python3",
+            unit="tb2 unit;bad.service",
+            log=str(tmp_path / "health logs" / "health;check.jsonl"),
+            cron_log=str(tmp_path / "cron logs" / "cron & check.log"),
+            alert=str(tmp_path / "alerts" / "alert$(bad).json"),
+            skip_systemd=True,
+        )
+    )
+
+    assert "/repo with spaces'" in entry
+    assert "'/opt/tb2 python/bin/python3'" in entry
+    assert "'tb2 unit;bad.service'" in entry
+    assert "/health;check.jsonl'" in entry
+    assert "/cron & check.log'" in entry
+    assert "/alert$(bad).json'" in entry
+    assert "--skip-systemd" in entry
+
+
 def test_without_entry_preserves_unrelated_cron_lines():
     text = "\n".join([
         "17 3 */15 * * cleanup # keep",
@@ -60,6 +83,20 @@ def test_install_replaces_existing_entry(monkeypatch, tmp_path):
     assert result["action"] == "install"
     assert captured["text"].count(cron.MARKER) == 1
     assert "1 1 * * * keep" in captured["text"]
+
+
+def test_install_creates_output_directories(monkeypatch, tmp_path):
+    monkeypatch.setattr(cron, "read_crontab", lambda: "")
+    monkeypatch.setattr(cron, "write_crontab", lambda text: None)
+    log = tmp_path / "state dir" / "health.jsonl"
+    cron_log = tmp_path / "cron dir" / "health.log"
+    alert = tmp_path / "alert dir" / "health.alert.json"
+
+    cron.install(_args(tmp_path, dry_run=False, log=str(log), cron_log=str(cron_log), alert=str(alert)))
+
+    assert log.parent.is_dir()
+    assert cron_log.parent.is_dir()
+    assert alert.parent.is_dir()
 
 
 def test_status_reports_installed_entries(monkeypatch):

@@ -86,15 +86,17 @@ For a long-running local control plane, keep a timer outside the TB2 service tha
 The repo includes a reusable check:
 
 ```bash
-python3 tools/tb2_scheduled_health_check.py --unit tb2.service --base-url http://127.0.0.1:3189 --log ~/.local/state/tb2/health-check.jsonl
+python3 tools/tb2_scheduled_health_check.py --skip-systemd --base-url http://127.0.0.1:3189 --log ~/.local/state/tb2/health-check.jsonl
 ```
 
 It verifies:
 
-- `tb2.service` is active
+- the configured `systemd` unit is active, only when `--skip-systemd` is not set
 - `/health` reports `ok=true`, `ready=true`, `codexAvailable=true`, and `backendReady=true`
 - `/healthz` reports `ok=true`
 - `doctor` readiness reports backend, client, and transport as ready
+
+Use `--skip-systemd` for cron checks that observe a TB2-managed service started with `python -m tb2 service start`. Use `--unit tb2.service` only when a real system unit with that name exists.
 
 The JSONL log rotates by default at `10MB x 5` archives. Tune that with:
 
@@ -111,13 +113,13 @@ cat ~/.local/state/tb2/health-check.alert.json
 
 The marker stays machine-readable after recovery with `ok=true` and `active=false`, so dashboards and agents can distinguish recovered incidents from missing alert state.
 
-On machines where root systemd installation is available, use the templates under `deploy/systemd/`. If user-level systemd linger is enabled, the templates under `deploy/systemd/user/` are also available.
+On machines where root systemd installation is available, use the example templates under `deploy/systemd/` after replacing the install path and creating the log directory. If user-level systemd linger is enabled, the example templates under `deploy/systemd/user/` are also available and use `--skip-systemd` by default.
 
 On this workstation, user linger is disabled, so the active schedule is a user crontab entry:
 
 ```bash
 python3 tools/install_tb2_health_cron.py status
-python3 tools/install_tb2_health_cron.py install
+python3 tools/install_tb2_health_cron.py install --skip-systemd
 python3 tools/install_tb2_health_cron.py uninstall
 crontab -l
 tail -n 20 ~/.local/state/tb2/health-check.jsonl
@@ -151,12 +153,7 @@ python -m tb2 room reject --room-id <ROOM_ID> --id all
 ```
 
 Then stop the bridge:
-
-```bash
-python -m tb2 room watch --room-id <ROOM_ID>
-```
-
-Or stop it via MCP / GUI with `bridge_stop`.
+Use MCP / GUI `bridge_stop`, or prefer `workstream_stop` when the bridge is part of a main/sub workstream tree.
 
 ### Stop the detached service
 
