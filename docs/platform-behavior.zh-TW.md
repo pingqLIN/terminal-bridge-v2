@@ -90,7 +90,7 @@ TB2 現在依 capability 選預設。
 - `status.audit.redaction` 會公開目前生效中的文字 redaction contract，並附帶 `stores_raw_text`、`stores_masked_placeholders`、`stores_hash_fingerprint`、`stores_text_metadata` 這類 machine-readable flags，方便 client 判斷 audit 實際保留了哪些資訊
 - `TB2_AUDIT_TEXT_MODE=mask` 是預設值；在 service / config-driven flow 裡，若要真的啟用 `full`，還必須額外透過 `TB2_AUDIT_ALLOW_FULL_TEXT=1` 做明確確認，否則 TB2 會回報 `requested_mode=full`，但實際仍維持 `mask`
 - 請把 `requested_mode`、實際生效的 `mode`、`raw_text_opt_in_acknowledged`、`raw_text_opt_in_blocked` 視為 policy boundary contract，而不是一般說明性 metadata
-- `status` 現在也會附帶 `runtime` contract，明確標示 live control state 目前是 `memory_only`，且 `restart_behavior=state_lost`
+- `status` 現在也會附帶 `runtime` contract，區分 direct-run 的 `memory_only` state 與 service-managed 的 `best_effort_restore` snapshots
 - operator 可在本機用 `tb2 service audit`，或透過 MCP `audit_recent` 讀最近的持久化事件
 - GUI 的 Diagnostics 卡現在也會同步顯示這個狀態，並帶出目前 room / bridge scope 的最近持久化事件
 - GUI operator 還可以直接在主控台用 event 名稱與最近筆數限制縮小這個視窗
@@ -105,12 +105,12 @@ TB2 現在依 capability 選預設。
 
 ## Restart-State 契約
 
-- 背景 service state 現在採用 versioned snapshot contract，讓 TB2 能持久化 launch metadata，但不暗示會做 runtime restore
-- service 管理下的 snapshot 會保留 process-manager metadata，以及 audit enablement、destination、retention、text redaction mode 這類 audit policy 輸入
-- live room、bridge、pending intervention state 仍只存在於正在執行的 server 記憶體中
-- 執行 `tb2 service stop` 或 `tb2 service restart` 後，應直接假設 live collaboration state 會依設計遺失
-- `status.runtime` 現在會帶出 `launch_mode`、`snapshot_schema_version`、`audit_policy_persistence`，以及巢狀的 `continuity` 記錄，方便 client 區分 direct launch、service-managed fresh start，或 restart 後 state lost 的情境
-- 目前 `continuity.mode` 的正式值為 `process_local_only`、`fresh_start`、`restart_state_lost`
+- 背景 service state 現在採用 versioned snapshot contract，讓 TB2 能持久化 launch metadata 與部分 restart handoff inputs，但不暗示會完整 runtime restore
+- service 管理下的 snapshot 會保留 process-manager metadata，audit enablement、destination、retention、text redaction mode 這類 audit policy 輸入，以及前一個 active service state 內的 workstream snapshots
+- live terminal processes、room subscriptions、bridge processes 與 pending interventions 仍只存在於正在執行的 server 記憶體中
+- 執行 `tb2 service stop` 或 `tb2 service restart` 後，operator 應檢查 restored workstream snapshots，並手動重建遺失的 live collaboration state
+- `status.runtime` 現在會帶出 `launch_mode`、`snapshot_schema_version`、`audit_policy_persistence`、`restart_behavior`，以及巢狀的 `continuity` 記錄，方便 client 區分 direct launch、service-managed fresh start、restart 後 state lost，或 best-effort restored snapshots
+- 目前 `continuity.mode` 的正式值為 `process_local_only`、`fresh_start`、`restart_state_lost`、`restart_restored`
 - 若 audit 已啟用，歷史事件可以跨重啟保留，但它是 historical ledger，不是 runtime restore path
 
 ## Transport 備註

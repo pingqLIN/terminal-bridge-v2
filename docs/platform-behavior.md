@@ -90,7 +90,7 @@ Priority:
 - `status.audit.redaction` exposes the active text-redaction contract plus machine-readable flags such as `stores_raw_text`, `stores_masked_placeholders`, `stores_hash_fingerprint`, and `stores_text_metadata`
 - `TB2_AUDIT_TEXT_MODE=mask` is the default; in service/config-driven flows, `full` requires an extra explicit opt-in acknowledgement via `TB2_AUDIT_ALLOW_FULL_TEXT=1`, otherwise TB2 reports `requested_mode=full` but keeps the effective mode at `mask`
 - treat `requested_mode`, effective `mode`, `raw_text_opt_in_acknowledged`, and `raw_text_opt_in_blocked` as a policy boundary contract, not just descriptive metadata
-- `status` now also includes a `runtime` contract that explicitly marks live control state as `memory_only` with `restart_behavior=state_lost`
+- `status` now also includes a `runtime` contract that separates direct-run `memory_only` state from service-managed `best_effort_restore` snapshots
 - operators can read recent entries through `tb2 service audit` locally or the MCP `audit_recent` tool remotely
 - the GUI Diagnostics card now mirrors that state and shows recent persisted events for the current room / bridge scope
 - GUI operators can further narrow that view by event name and recent-entry limit without leaving the main console
@@ -105,12 +105,12 @@ Priority:
 
 ## Restart-State Contract
 
-- detached service state now uses a versioned snapshot contract so TB2 can persist launch metadata without implying runtime restore
-- service-managed snapshots persist process-manager metadata plus selected audit-policy inputs such as audit enablement, destination, retention, and text-redaction mode
-- live room, bridge, and pending intervention state remains memory-only inside the running server
-- after `tb2 service stop` or `tb2 service restart`, operators should assume live collaboration state is lost by design
-- `status.runtime` now exposes `launch_mode`, `snapshot_schema_version`, `audit_policy_persistence`, and a nested `continuity` record so clients can distinguish direct launches from service-managed fresh starts or restart-after-loss flows
-- current `continuity.mode` values are `process_local_only`, `fresh_start`, and `restart_state_lost`
+- detached service state now uses a versioned snapshot contract so TB2 can persist launch metadata and selected restart handoff inputs without implying full runtime restore
+- service-managed snapshots persist process-manager metadata, selected audit-policy inputs such as audit enablement, destination, retention, and text-redaction mode, plus prior workstream snapshots when a previous active service state exists
+- live terminal processes, room subscriptions, bridge processes, and pending interventions remain memory-only inside the running server
+- after `tb2 service stop` or `tb2 service restart`, operators should verify any restored workstream snapshots and manually rebuild lost live collaboration state
+- `status.runtime` now exposes `launch_mode`, `snapshot_schema_version`, `audit_policy_persistence`, `restart_behavior`, and a nested `continuity` record so clients can distinguish direct launches, service-managed fresh starts, restart-after-loss flows, and best-effort restored snapshots
+- current `continuity.mode` values are `process_local_only`, `fresh_start`, `restart_state_lost`, and `restart_restored`
 - audit history can survive restart when enabled, but it is a historical ledger, not a runtime restore path
 
 ## Transport Notes
