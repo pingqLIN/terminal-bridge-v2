@@ -4,12 +4,12 @@ This document records what TB2 behavior has been validated on real runtime, what
 
 ## Validation Snapshot
 
-Recorded on April 30, 2026 after the external-audit remediation loop.
+Recorded on May 2, 2026 from the WSL2 workspace after the external-audit remediation loop.
 
 | Area | Validation mode | Current note |
 | --- | --- | --- |
-| Linux runtime | executed locally | full pytest suite passed in the current workspace: `453 passed` |
-| `tmux` workflow | executed locally | end-to-end tests passed in the current Linux environment |
+| WSL2 Linux runtime | executed locally | `tools/release_check.py` passed in the current workspace, including full pytest: `453 passed` |
+| `tmux` workflow | executed locally | `tmux 3.4` and `doctor --json` reported the direct WSL path ready |
 | Windows backend and shell policy | simulated by targeted tests | shell argv, fallback backend policy, remote-control handoff rules covered |
 | macOS state-path and backend fallback policy | simulated by targeted tests | XDG precedence, legacy state preservation, POSIX shell behavior covered |
 

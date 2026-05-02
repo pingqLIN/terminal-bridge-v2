@@ -275,10 +275,11 @@ Adapter 行為：
 
 ### 本 repo 目前記錄的驗證狀態
 
-- Linux：本次 workspace 內實機驗證，完整 `pytest` suite 通過
+- WSL2 Linux：本次 workspace 內實機驗證，`tools/release_check.py` 通過且包含完整 `pytest` suite
+- Native Linux：由共用 POSIX 行為與 backend tests 覆蓋，但目前 snapshot 沒有在非 WSL Linux host 重跑
 - Windows：以自動化測試模擬 backend fallback、shell policy、remote-control 行為與 state 路徑
 - macOS：以自動化測試模擬 POSIX shell 與 service state 行為
-- WSL：以 backend 測試模擬 `wsl -d <distro> -- sh -lc` 的 `tmux` 執行路徑
+- Windows-to-WSL：以 backend 測試模擬 `wsl -d <distro> -- sh -lc` 的 `tmux` 執行路徑
 
 ### 目前預設 backend policy
 

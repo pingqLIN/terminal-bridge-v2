@@ -6,10 +6,10 @@
 
 本次重寫使用的驗證快照：
 
-- 日期：`2026-04-30`
-- 實機驗證環境：Linux、Python `3.12.3`
-- 驗證結果：外部審查修補後，目前工作區完整 `pytest` suite 通過（`453 passed`）
-- 自動化模擬覆蓋：Windows backend 選擇、Windows shell policy、macOS state-root 行為、WSL `tmux` 呼叫、PowerShell 與 `cmd.exe` shell 語義
+- 日期：`2026-05-02`
+- 實機驗證環境：Ubuntu on WSL2、Python `3.12.3`、`tmux 3.4`
+- 驗證結果：目前工作區完整 release check 通過（`tools/release_check.py`，包含 `453 passed`）
+- 自動化模擬覆蓋：native Windows backend 選擇、Windows shell policy、native macOS state-root 行為、Windows-to-WSL `tmux` 呼叫、PowerShell 與 `cmd.exe` shell 語義
 
 本文件使用以下驗證等級：
 
@@ -21,19 +21,19 @@
 
 | OS / 環境 | 預設 Backend Policy | 驗證等級 | 說明 |
 | --- | --- | --- | --- |
-| Native Linux | `tmux` 存在就用 `tmux`，否則退到 `process` | runtime-verified | 本次 workspace 完整測試皆通過。 |
+| Native Linux | `tmux` 存在就用 `tmux`，否則退到 `process` | simulated | POSIX 行為由 WSL2 runtime pass 與 backend tests 覆蓋；本次 snapshot 沒有在非 WSL Linux host 實跑。 |
 | Native macOS | `tmux` 存在就用 `tmux`，否則退到 `process` | simulated | 與 Linux 共用 POSIX shell 行為；service state-root 由測試覆蓋。 |
 | Native Windows | 有 `pywinpty` 就用 `process`，否則有 `wsl.exe` 就退到 `tmux`，再不行退 `pipe` | simulated | 預設 shell 會忽略 `SHELL`，依序優先 `pwsh`、`powershell.exe`、`COMSPEC`。 |
 | Native Windows -> WSL `tmux` | 透過 `wsl -d <distro> -- sh -lc` 跑 `tmux` | simulated | backend 測試有覆蓋 capture 與 command routing。 |
-| Inside WSL | `tmux` 存在就用 `tmux`，否則退到 `process` | simulated | 與 Linux 同樣是 POSIX shell 語義，但 `tmux` 指令直接在 WSL 內執行。 |
+| Inside WSL | `tmux` 存在就用 `tmux`，否則退到 `process` | runtime-verified | 目前 workspace 是 WSL2；`doctor --json` 回報 `tmux`、`process`、`pipe`、SSE、WebSocket、`room_poll` 都 ready。 |
 
 ## Backend 矩陣
 
 | Backend | 最適合的場景 | 平台說明 | 驗證等級 |
 | --- | --- | --- | --- |
-| `tmux` | Linux、macOS、WSL 上的互動式 host/guest session | pane id 形如 `session:0.0` / `session:0.1`；capture 透過 `sh -lc` 與 quote 後的 pane target | Linux 實機驗證，其餘 simulated |
-| `process` | 不靠 multiplexer 的互動式 session | pane id 形如 `session:a` / `session:b`；Windows 需 `pywinpty`；POSIX 用 PTY | Linux 實機驗證，Windows simulated |
-| `pipe` | 非互動式或 fallback 工作流 | 最適合能走純 stdin/stdout 的 client；不支援 TUI | Linux 實機驗證，Windows shell 變體 simulated |
+| `tmux` | Linux、macOS、WSL 上的互動式 host/guest session | pane id 形如 `session:0.0` / `session:0.1`；capture 透過 `sh -lc` 與 quote 後的 pane target | WSL 內實機驗證；native Linux / macOS / Windows-to-WSL 為 simulated |
+| `process` | 不靠 multiplexer 的互動式 session | pane id 形如 `session:a` / `session:b`；Windows 需 `pywinpty`；POSIX 用 PTY | WSL 內實機驗證，native Windows simulated |
+| `pipe` | 非互動式或 fallback 工作流 | 最適合能走純 stdin/stdout 的 client；不支援 TUI | WSL 內實機驗證，Windows shell 變體 simulated |
 
 ## Shell 矩陣
 
@@ -41,9 +41,9 @@
 | --- | --- | --- | --- | --- |
 | `pwsh` / `powershell.exe` | 自動補 `-NoLogo -NoProfile` | `\\r\\n` | `\\r\\n` | simulated |
 | `cmd.exe` | 無額外參數 | `\\r\\n` | `\\r\\n` | simulated |
-| `bash` | 無額外參數 | `\\n` | `\\r` | Linux 實機驗證 |
+| `bash` | 無額外參數 | `\\n` | `\\r` | WSL 內實機驗證 |
 | `zsh` | 無額外參數 | `\\n` | `\\r` | simulated |
-| `sh` | 無額外參數 | `\\n` | `\\r` | 透過 `tmux` helper path 實機驗證 |
+| `sh` | 無額外參數 | `\\n` | `\\r` | 透過 WSL `tmux` helper path 實機驗證 |
 
 ## 路徑與狀態差異
 

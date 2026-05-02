@@ -274,10 +274,11 @@ See [Sidepanel Compatibility](docs/sidepanel-compat.md).
 
 ### Validation status recorded in this repo
 
-- Linux: runtime-verified in the current workspace, full `pytest` suite passed
+- WSL2 Linux: runtime-verified in the current workspace, `tools/release_check.py` passed including the full `pytest` suite
+- Native Linux: covered by shared POSIX behavior and backend tests, but not re-run on a non-WSL Linux host in the current snapshot
 - Windows: simulated in automated tests for backend fallback, shell policy, remote-control behavior, and state paths
 - macOS: simulated in automated tests for POSIX shell semantics and service state handling
-- WSL: simulated in backend tests for `wsl -d <distro> -- sh -lc` `tmux` execution
+- Windows-to-WSL: simulated in backend tests for `wsl -d <distro> -- sh -lc` `tmux` execution
 
 ### Current default backend policy
 

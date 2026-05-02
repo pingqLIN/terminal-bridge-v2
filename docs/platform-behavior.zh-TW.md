@@ -4,12 +4,12 @@
 
 ## 驗證快照
 
-記錄時間：2026 年 4 月 30 日，外部審查修補 loop 完成後。
+記錄時間：2026 年 5 月 2 日，於 WSL2 workspace 中、外部審查修補 loop 完成後。
 
 | 範圍 | 驗證方式 | 目前說明 |
 | --- | --- | --- |
-| Linux runtime | 本機實際執行 | 目前工作區完整 pytest suite 通過：`453 passed` |
-| `tmux` workflow | 本機實際執行 | 目前 Linux 環境的 end-to-end tests 通過 |
+| WSL2 Linux runtime | 本機實際執行 | 目前工作區 `tools/release_check.py` 通過，包含完整 pytest：`453 passed` |
+| `tmux` workflow | 本機實際執行 | `tmux 3.4` 與 `doctor --json` 回報 direct WSL path ready |
 | Windows backend 與 shell policy | 針對性測試模擬 | 已涵蓋 shell argv、fallback backend policy、remote-control handoff 規則 |
 | macOS state path 與 backend fallback policy | 針對性測試模擬 | 已涵蓋 XDG precedence、legacy state 保留與 POSIX shell 行為 |
 

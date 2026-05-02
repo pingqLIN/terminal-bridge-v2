@@ -6,10 +6,10 @@ This document records what has been runtime-validated, what is covered by automa
 
 Current rewrite snapshot:
 
-- Date: `2026-04-30`
-- Runtime-validated environment: Linux, Python `3.12.3`
-- Validation result: full `pytest` suite passed in the current workspace after external-audit remediation (`453 passed`)
-- Simulated in automated tests: Windows backend selection, Windows shell policy, macOS state-root behavior, WSL `tmux` invocation, PowerShell and `cmd.exe` shell semantics
+- Date: `2026-05-02`
+- Runtime-validated environment: Ubuntu on WSL2, Python `3.12.3`, `tmux 3.4`
+- Validation result: full release check passed in the current workspace (`tools/release_check.py`, including `453 passed`)
+- Simulated in automated tests: native Windows backend selection, Windows shell policy, native macOS state-root behavior, Windows-to-WSL `tmux` invocation, PowerShell and `cmd.exe` shell semantics
 
 Validation levels used below:
 
@@ -21,19 +21,19 @@ Validation levels used below:
 
 | OS / Environment | Default Backend Policy | Validation Level | Notes |
 | --- | --- | --- | --- |
-| Native Linux | `tmux` if installed, else `process` | runtime-verified | Full suite passed in the current workspace. |
+| Native Linux | `tmux` if installed, else `process` | simulated | Shared POSIX behavior is covered by the WSL2 runtime pass and targeted backend tests, but this snapshot did not run on a non-WSL Linux host. |
 | Native macOS | `tmux` if installed, else `process` | simulated | POSIX shell behavior is shared with Linux; service state-root behavior is covered by tests. |
 | Native Windows | `process` if `pywinpty` exists, else `tmux` if `wsl.exe` exists, else `pipe` | simulated | Default shell ignores `SHELL` and prefers `pwsh`, `powershell.exe`, then `COMSPEC`. |
 | Native Windows -> WSL `tmux` | `tmux` through `wsl -d <distro> -- sh -lc` | simulated | Covered by backend tests for capture and command routing. |
-| Inside WSL | `tmux` if installed, else `process` | simulated | Same POSIX shell semantics as Linux, but `tmux` commands run directly inside WSL. |
+| Inside WSL | `tmux` if installed, else `process` | runtime-verified | Current workspace is WSL2; `doctor --json` reported `tmux`, `process`, `pipe`, SSE, WebSocket, and `room_poll` ready. |
 
 ## Backend Matrix
 
 | Backend | Best Fit | Platform Notes | Validation Level |
 | --- | --- | --- | --- |
-| `tmux` | interactive host/guest sessions on Linux, macOS, and WSL | Pane ids look like `session:0.0` / `session:0.1`; capture uses `sh -lc` and quoted pane targets | runtime-verified on Linux, simulated elsewhere |
-| `process` | interactive sessions without a multiplexer | Pane ids look like `session:a` / `session:b`; Windows requires `pywinpty`; POSIX uses a PTY | runtime-verified on Linux, simulated on Windows |
-| `pipe` | non-interactive or fallback workflows | Best when the client can operate over plain stdin/stdout; no TUI support | runtime-verified on Linux, simulated on Windows shell variants |
+| `tmux` | interactive host/guest sessions on Linux, macOS, and WSL | Pane ids look like `session:0.0` / `session:0.1`; capture uses `sh -lc` and quoted pane targets | runtime-verified inside WSL, simulated on native Linux/macOS/Windows-to-WSL |
+| `process` | interactive sessions without a multiplexer | Pane ids look like `session:a` / `session:b`; Windows requires `pywinpty`; POSIX uses a PTY | runtime-verified inside WSL, simulated on native Windows |
+| `pipe` | non-interactive or fallback workflows | Best when the client can operate over plain stdin/stdout; no TUI support | runtime-verified inside WSL, simulated on Windows shell variants |
 
 ## Shell Matrix
 
@@ -41,9 +41,9 @@ Validation levels used below:
 | --- | --- | --- | --- | --- |
 | `pwsh` / `powershell.exe` | `-NoLogo -NoProfile` added automatically | `\\r\\n` | `\\r\\n` | simulated |
 | `cmd.exe` | no extra args | `\\r\\n` | `\\r\\n` | simulated |
-| `bash` | no extra args | `\\n` | `\\r` | runtime-verified on Linux |
+| `bash` | no extra args | `\\n` | `\\r` | runtime-verified inside WSL |
 | `zsh` | no extra args | `\\n` | `\\r` | simulated |
-| `sh` | no extra args | `\\n` | `\\r` | runtime-verified through `tmux` helper path |
+| `sh` | no extra args | `\\n` | `\\r` | runtime-verified through WSL `tmux` helper path |
 
 ## Path And State Differences
 
