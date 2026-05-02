@@ -57,6 +57,15 @@ MCP 端點：
 
 - `http://127.0.0.1:3189/mcp`
 
+Capability preflight：
+
+```bash
+python -m tb2 doctor --json
+python -m tb2 profiles --verbose
+```
+
+在 MCP 內，請呼叫 `doctor` tool 取得同等的 machine-readable readiness 與 capability snapshot。
+
 ## 在各客戶端註冊 TB2
 
 ### Codex CLI
@@ -196,7 +205,7 @@ TB2 目前提供：
 
 - 優先使用 HTTP MCP transport
 - 除非你有明確信任邊界，否則請綁定 localhost
-- 出現問題時先跑 `doctor`，不要第一時間把錯誤歸咎於 MCP 協定
+- 出現問題時先呼叫 `doctor` tool，或在 MCP 外執行 `python -m tb2 doctor --json`，不要第一時間把錯誤歸咎於 MCP 協定
 - 不要硬編 intervention 參數；先看 `tools/list`，schema 已經會標出可用 `room_id` 當 bridge-scoped 工具的 fallback
 
 ## 移除註冊
@@ -212,3 +221,4 @@ gemini mcp remove --scope user tb2
 - [入門指南](getting-started.zh-TW.md)
 - [AI 協作指南](ai-orchestration.zh-TW.md)
 - [平台與終端行為](platform-behavior.zh-TW.md)
+- [Transport 範例](transport-examples.zh-TW.md)

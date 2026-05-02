@@ -23,7 +23,7 @@ Use this document when you already know `tb2` is the right tool and now need to 
 
 ### Standard Lifecycle
 
-1. Run `python -m tb2 doctor`.
+1. Run `python -m tb2 doctor`; use `python -m tb2 doctor --json` when another agent needs machine-readable capability data.
 2. Create panes with `terminal_init` or `tb2 init`.
 3. Start the bridge with `bridge_start`.
 4. Monitor the room feed before issuing new work.
@@ -161,6 +161,7 @@ Expose `tb2` as a stable local control plane to Codex CLI, Claude Code, Gemini C
 ### Integration Rules
 
 - Treat the server as local-only infrastructure.
+- Treat the `doctor` tool result as the MCP equivalent of `python -m tb2 doctor --json`.
 - Keep `backend_id` stable when multiple clients need to reuse the same backend instance.
 - Do not start multiple bridges over the same pane pair in different rooms.
 - Use room streaming for observability and `status` for topology.

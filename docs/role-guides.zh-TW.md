@@ -23,7 +23,7 @@
 
 ### 標準生命週期
 
-1. 先跑 `python -m tb2 doctor`。
+1. 先跑 `python -m tb2 doctor`；若其他 agent 需要 machine-readable capability data，請用 `python -m tb2 doctor --json`。
 2. 用 `terminal_init` 或 `tb2 init` 建立 panes。
 3. 用 `bridge_start` 啟動 bridge。
 4. 先看 room feed，再發下一輪任務。
@@ -159,6 +159,7 @@ MSG: ready for review on the backend fallback patch
 ### 整合規則
 
 - 把 server 視為本地專用基礎設施。
+- 把 `doctor` tool result 視為 MCP 版的 `python -m tb2 doctor --json`。
 - 多個 client 需要共用 backend instance 時，`backend_id` 要固定。
 - 不要在不同 room 上重複使用同一組 pane pair 啟動多個 bridge。
 - 可觀測性優先靠 room streaming，拓樸優先看 `status`。

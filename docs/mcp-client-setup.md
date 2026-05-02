@@ -57,6 +57,15 @@ MCP endpoint:
 
 - `http://127.0.0.1:3189/mcp`
 
+Capability preflight:
+
+```bash
+python -m tb2 doctor --json
+python -m tb2 profiles --verbose
+```
+
+Inside MCP, call the `doctor` tool for the same machine-readable readiness and capability snapshot.
+
 ## Register TB2 in Each Client
 
 ### Codex CLI
@@ -196,7 +205,7 @@ Current compatibility guidance:
 
 - use HTTP MCP transport
 - bind to localhost unless you have an explicit trust boundary
-- check `doctor` before blaming a client integration issue on MCP itself
+- check the `doctor` tool, or `python -m tb2 doctor --json` outside MCP, before blaming a client integration issue on MCP itself
 - read `tools/list` before hard-coding intervention arguments; the schema now advertises `room_id` fallback for bridge-scoped tools
 
 ## Remove Registration
@@ -212,3 +221,4 @@ gemini mcp remove --scope user tb2
 - [Getting Started](getting-started.md)
 - [AI Orchestration Guide](ai-orchestration.md)
 - [Platform and Terminal Behavior](platform-behavior.md)
+- [Transport Examples](transport-examples.md)
