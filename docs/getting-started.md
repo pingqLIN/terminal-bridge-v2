@@ -173,5 +173,6 @@ Rules:
 
 - [Role Guides](role-guides.md)
 - [Platform Compatibility Matrix](platforms/compatibility-matrix.md)
+- [Transport Examples](transport-examples.md)
 - [MCP Client Setup](mcp-client-setup.md)
 - [Security Posture](security-posture.md)

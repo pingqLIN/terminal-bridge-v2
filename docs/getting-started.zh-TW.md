@@ -173,5 +173,6 @@ MSG: ready for review on the shell fallback patch
 
 - [角色導向指南](role-guides.zh-TW.md)
 - [平台相容矩陣](platforms/compatibility-matrix.zh-TW.md)
+- [Transport 範例](transport-examples.zh-TW.md)
 - [MCP 用戶端設定](mcp-client-setup.zh-TW.md)
 - [安全姿態](security-posture.zh-TW.md)

@@ -9,6 +9,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ### Added
 - Traditional Chinese review artifacts covering release objections, devil's-advocate findings, remediation planning, and a P1 external review brief.
 - `tools/release_check.py` as a local release-readiness wrapper for diff hygiene, agent-readable diagnostics, support matrix output, and pytest.
+- Bilingual transport examples for `room_poll`, SSE, and WebSocket room workflows.
 - Regression coverage for dead-process pruning in `process` / `pipe` session views, duplicate `bridge_start` room reuse, forbidden-origin transport requests, and incomplete MCP POST bodies.
 - Machine-readable room event source fields so consumers can distinguish client, terminal, bridge automation, intervention, and control events without parsing `author`.
 - Opt-in append-only JSONL audit trail support for room messages, bridge lifecycle, intervention actions, and direct operator control actions.

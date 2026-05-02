@@ -311,6 +311,7 @@ This keeps the UI approachable for operators while preserving the full MCP and t
 - [Platform Behavior Notes](docs/platform-behavior.md)
 - [Platform Compatibility Matrix](docs/platforms/compatibility-matrix.md)
 - [Standard Operations](docs/platforms/standard-operations.md)
+- [Transport Examples](docs/transport-examples.md)
 - [Security Posture](docs/security-posture.md)
 
 ### Architecture and integration

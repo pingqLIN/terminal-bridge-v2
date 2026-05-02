@@ -313,6 +313,7 @@ Adapter 行為：
 - [平台行為說明](docs/platform-behavior.zh-TW.md)
 - [平台相容矩陣](docs/platforms/compatibility-matrix.zh-TW.md)
 - [標準操作手冊](docs/platforms/standard-operations.zh-TW.md)
+- [Transport 範例](docs/transport-examples.zh-TW.md)
 - [安全姿態](docs/security-posture.zh-TW.md)
 
 ### 架構與整合
