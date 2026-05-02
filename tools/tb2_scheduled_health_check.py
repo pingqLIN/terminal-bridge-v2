@@ -246,7 +246,7 @@ def update_alert(path: Path, report: dict[str, Any], *, threshold: int) -> dict[
         "last_report_timestamp": timestamp,
         "target": report.get("target", {}),
         "recommended_action": (
-            "Inspect tb2.service, /health, /healthz, and doctor output. Avoid automatic restart unless an operator accepts live state loss."
+            "Inspect tb2.service, /health, /healthz, and doctor --json output. Avoid automatic restart unless an operator accepts live state loss."
         ),
     }
     _ensure_private_parent(path)

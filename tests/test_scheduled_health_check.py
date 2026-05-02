@@ -188,6 +188,7 @@ def test_update_alert_becomes_active_after_threshold(tmp_path):
     assert second["active"] is True
     assert second["failure_count"] == 2
     assert second["first_failed_at"] == "2026-04-30T00:00:00+00:00"
+    assert "doctor --json output" in second["recommended_action"]
 
 
 def test_update_alert_marks_recovery(tmp_path):
