@@ -76,6 +76,16 @@ python -m tb2 service audit --lines 10
 
 Use `doctor --json` for agent-readable environment diagnostics. Use `profiles --verbose` for the human-readable support matrix and backend recommendation table.
 
+### Local release check
+
+Before cutting a release or opening a broad maintenance PR, run the repo-local wrapper:
+
+```bash
+python3 tools/release_check.py
+```
+
+It currently runs `git diff --check`, validates `doctor --json` output, renders `profiles --verbose`, and runs `python -m pytest tests -q`. Use `--skip-tests` only when another full test run has already been recorded in the same stage report.
+
 ### HTTP checks
 
 ```bash

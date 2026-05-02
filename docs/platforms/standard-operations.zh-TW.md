@@ -76,6 +76,16 @@ python -m tb2 service audit --lines 10
 
 `doctor --json` 適合給 agent 讀取 environment diagnostics；`profiles --verbose` 則提供人類可讀的 support matrix 與 backend recommendation table。
 
+### 本機 release check
+
+在切 release 或開較大的 maintenance PR 前，先跑 repo-local wrapper：
+
+```bash
+python3 tools/release_check.py
+```
+
+它目前會執行 `git diff --check`、驗證 `doctor --json` 輸出、顯示 `profiles --verbose`，並執行 `python -m pytest tests -q`。只有在同一份 stage report 已經記錄另一輪完整測試時，才使用 `--skip-tests`。
+
 ### HTTP 檢查
 
 ```bash
