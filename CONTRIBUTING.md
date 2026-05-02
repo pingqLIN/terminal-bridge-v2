@@ -30,8 +30,10 @@ pip install -e ".[windows]"
 Run the baseline test suite before opening a PR:
 
 ```bash
-pytest -q -m "not e2e"
+python3 tools/release_check.py
 ```
+
+For a narrow change, run the focused tests while developing, then finish with the release check before review.
 
 ## Branch and PR guidelines
 
@@ -44,8 +46,9 @@ pytest -q -m "not e2e"
 ## Good issue reports include
 
 - host OS and Python version
-- `tb2 doctor` output
+- `python -m tb2 doctor --json` output
 - backend used (`tmux`, `process`, or `pipe`)
+- transport path when relevant (`room_poll`, SSE, WebSocket, MCP, GUI, or CLI)
 - CLI client used (`codex`, `claude-code`, `gemini`, `aider`, or other)
 - exact commands and observed output
 

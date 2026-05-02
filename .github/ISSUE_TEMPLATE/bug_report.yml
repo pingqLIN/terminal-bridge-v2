@@ -20,18 +20,28 @@ body:
     id: environment
     attributes:
       label: Environment
-      description: OS, Python version, backend, CLI client, and install method
+      description: OS, Python version, backend, CLI client, transport path, and install method
       placeholder: |
-        Windows 11
-        Python 3.11
-        backend=process
+        Ubuntu on WSL2
+        Python 3.12
+        backend=tmux
+        transport=room_poll / SSE / WebSocket / MCP
         profile=codex
     validations:
       required: true
   - type: textarea
     id: doctor
     attributes:
-      label: tb2 doctor output
+      label: tb2 doctor --json output
+      description: Run `python -m tb2 doctor --json` and paste the full JSON output. Redact local paths only if needed.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: release_check
+    attributes:
+      label: Local release check output
+      description: If this is a repo checkout or regression report, run `python3 tools/release_check.py --skip-tests` or the full `python3 tools/release_check.py`.
       render: shell
   - type: textarea
     id: reproduce

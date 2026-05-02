@@ -11,10 +11,19 @@
 Please include:
 
 - OS and Python version
-- `tb2 doctor` output
+- `python -m tb2 doctor --json` output
+- transport path when relevant: `room_poll`, SSE, WebSocket, MCP, GUI, or CLI
 - backend and profile used
 - exact commands
 - expected behavior vs actual behavior
+
+For repo checkout regressions, also include:
+
+```bash
+python3 tools/release_check.py --skip-tests
+```
+
+Use the full `python3 tools/release_check.py` when the report concerns tests, packaging, release readiness, or broad maintenance behavior.
 
 ## Self-serve docs
 
@@ -22,6 +31,7 @@ Please include:
 - [docs/getting-started.md](docs/getting-started.md)
 - [docs/ai-orchestration.md](docs/ai-orchestration.md)
 - [docs/mcp-client-setup.md](docs/mcp-client-setup.md)
+- [docs/transport-examples.md](docs/transport-examples.md)
 
 ## Maintainer note
 

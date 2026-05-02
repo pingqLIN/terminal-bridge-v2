@@ -19,4 +19,4 @@ body:
     id: context
     attributes:
       label: Context
-      description: Backend, profile, OS, commands tried, and what happened
+      description: Backend, profile, OS, transport path, commands tried, and what happened. Include `python -m tb2 doctor --json` when the question depends on local capability.
