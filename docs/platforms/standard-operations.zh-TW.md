@@ -68,9 +68,13 @@ python -m tb2 service audit --lines 10
 
 ```bash
 python -m tb2 doctor
+python -m tb2 doctor --json
+python -m tb2 profiles --verbose
 python -m tb2 service status
 python -m tb2 service audit --lines 10
 ```
+
+`doctor --json` 適合給 agent 讀取 environment diagnostics；`profiles --verbose` 則提供人類可讀的 support matrix 與 backend recommendation table。
 
 ### HTTP 檢查
 

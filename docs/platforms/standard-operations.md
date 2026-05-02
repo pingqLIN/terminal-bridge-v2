@@ -68,9 +68,13 @@ Use `TB2_AUDIT_DIR` when you need an explicit destination, and verify retention 
 
 ```bash
 python -m tb2 doctor
+python -m tb2 doctor --json
+python -m tb2 profiles --verbose
 python -m tb2 service status
 python -m tb2 service audit --lines 10
 ```
+
+Use `doctor --json` for agent-readable environment diagnostics. Use `profiles --verbose` for the human-readable support matrix and backend recommendation table.
 
 ### HTTP checks
 

@@ -20,6 +20,8 @@ pip install -e ".[windows,dev]"
 
 ```bash
 python -m tb2 doctor
+python -m tb2 doctor --json
+python -m tb2 profiles --verbose
 ```
 
 請先看這幾個區塊：
@@ -29,6 +31,8 @@ python -m tb2 doctor
 - `Backends`：這台機器實際能跑哪些 backend
 - `Supported CLI tools`：哪些 first-class client 已存在於 `PATH`
 - `recommended_backend`：TB2 目前會自動選哪個預設 backend
+
+當其他 agent 或 script 需要穩定 machine-readable diagnostics 時，請用 `doctor --json`。需要人類可讀的 support matrix 與 backend recommendation table 時，請用 `profiles --verbose`。
 
 健康狀態下，輸出大致會像這樣：
 
@@ -114,7 +118,7 @@ python -m tb2 service audit --lines 10
 ```
 
 當你希望從第一輪就保留 durable operator 與 bridge events 時，請走這條路徑。
-這不會改變目前的 restart 契約：`service stop` 或 `service restart` 後，live room / bridge / pending intervention state 仍會遺失。
+這不代表完整 live session 都已 durable：service-managed restart 可把已持久化的 workstream snapshots 當成 handoff aid 延續，但 live terminal processes、room subscriptions、bridge processes 與 pending interventions 仍需要 operator recovery。
 
 如果 service host 不是 loopback，也請加上 `--allow-remote`，並把真正的 trust boundary 放在外部網路控管上。
 

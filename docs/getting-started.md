@@ -20,6 +20,8 @@ pip install -e ".[windows,dev]"
 
 ```bash
 python -m tb2 doctor
+python -m tb2 doctor --json
+python -m tb2 profiles --verbose
 ```
 
 Check these sections first:
@@ -29,6 +31,8 @@ Check these sections first:
 - `Backends`: which backend can actually run on this machine
 - `Supported CLI tools`: which first-class clients are available in `PATH`
 - `recommended_backend`: what TB2 will choose by default
+
+Use `doctor --json` when another agent or script needs stable machine-readable diagnostics. Use `profiles --verbose` when you need the support matrix and backend recommendation table in a human-readable form.
 
 Typical healthy output now looks like:
 
@@ -114,7 +118,7 @@ python -m tb2 service audit --lines 10
 ```
 
 Use this path when you want durable operator and bridge events from the first run.
-It does not change the current restart contract: live room / bridge / pending intervention state is still lost after `service stop` or `service restart`.
+It does not make the full live session durable: service-managed restart can carry forward persisted workstream snapshots as a handoff aid, but live terminal processes, room subscriptions, bridge processes, and pending interventions still require operator recovery.
 
 If the service host is not loopback, add `--allow-remote` and make sure external network controls carry the actual trust boundary.
 
