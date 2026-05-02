@@ -6,6 +6,7 @@ Treat the current release posture as:
 
 | Tier | Status | Intended use |
 | --- | --- | --- |
+| `operator-beta` | current release maturity | local-first operator workflows with active human ownership; suitable for controlled use, not unattended public infrastructure |
 | `local-first-supported` | supported | loopback-only CLI, GUI, and MCP workflows on one trusted operator machine |
 | `private-network-experimental` | experimental | operator-managed private-network access with explicit `--allow-remote` acknowledgment and external network controls |
 | `public-edge-unsupported` | unsupported | internet-facing exposure, zero-trust remote access, or any expectation that TB2 is a hard auth boundary |
@@ -37,8 +38,13 @@ Recommended additional controls:
 - prefer a specific private address over `0.0.0.0`
 - keep operator and browser access on trusted network paths
 
+## Security reporting
+
+Use GitHub private vulnerability reporting when it is enabled for the repository. If it is not available, use the repository owner's private contact channel from the project profile or package metadata, and keep exploit details out of public issues, discussions, and pull requests.
+
 ## Operator checklist
 
 - Run `python -m tb2 doctor` and confirm the reported support tier.
+- Treat the current release as `operator-beta`: keep a human operator in the loop and avoid public-edge deployment assumptions.
 - Keep `status.security.support_tier` at `local-first-supported` unless you explicitly need private-network access.
 - If you move to `private-network-experimental`, document the external controls that carry the real trust boundary.

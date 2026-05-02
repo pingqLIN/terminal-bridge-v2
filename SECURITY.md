@@ -16,7 +16,8 @@ Please do not open a public issue for a suspected security vulnerability.
 Recommended path:
 
 1. Use GitHub private vulnerability reporting if it is enabled on the repository.
-2. If that is not available, contact the maintainer privately and include:
+2. If that is not available, use the repository owner's private contact channel from the project profile or package metadata. Do not post exploit details in a public issue, discussion, or pull request.
+3. Include:
    - affected version or commit
    - impact summary
    - reproduction steps
@@ -42,4 +43,5 @@ Out of scope:
 
 - unsupported local development setups
 - self-hosted deployment misconfiguration without a product bug
+- direct internet exposure of TB2 without external authentication or network controls
 - feature requests framed as security issues without a concrete exploit path

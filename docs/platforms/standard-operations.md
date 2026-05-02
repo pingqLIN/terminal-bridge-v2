@@ -170,10 +170,10 @@ python -m tb2 service status
 
 Current contract:
 
-- restart preserves service-manager metadata, persisted audit policy overrides, and any existing audit files
-- restart does not preserve active rooms, bridges, or pending interventions
-- `status.runtime` distinguishes direct runs, service-managed fresh starts, and restart-after-loss flows through `launch_mode` and `continuity.mode`
-- operators should re-establish sessions and bridges after restart
+- restart preserves service-manager metadata, persisted audit policy overrides, existing audit files, and persisted workstream snapshots when a prior active service state exists
+- restart does not preserve live terminal processes, active room subscriptions, or pending interventions
+- `status.runtime` distinguishes direct runs, service-managed fresh starts, restart-after-loss flows, and best-effort restored workstream snapshots through `launch_mode`, `restart_behavior`, and `continuity.mode`
+- after restart, operators should verify restored workstreams and manually re-establish any lost sessions, bridges, or pending interventions
 
 ## 5. Standard Troubleshooting
 

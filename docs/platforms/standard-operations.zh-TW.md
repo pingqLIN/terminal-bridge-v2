@@ -171,10 +171,10 @@ python -m tb2 service status
 
 目前契約：
 
-- restart 會保留 service-manager metadata、已持久化的 audit policy overrides，以及既有 audit files
-- restart 不會保留 active rooms、bridges、pending interventions
-- `status.runtime` 會透過 `launch_mode` 與 `continuity.mode` 區分 direct run、service-managed fresh start、restart 後 state lost
-- restart 後 operator 應重新建立 session 與 bridge
+- restart 會保留 service-manager metadata、已持久化的 audit policy overrides、既有 audit files，以及前一個 active service state 內的已持久化 workstream snapshots
+- restart 不會保留 live terminal processes、active room subscriptions 或 pending interventions
+- `status.runtime` 會透過 `launch_mode`、`restart_behavior` 與 `continuity.mode` 區分 direct run、service-managed fresh start、restart 後 state lost，以及 best-effort restored workstream snapshots
+- restart 後 operator 應檢查 restored workstreams，並手動重建任何遺失的 sessions、bridges 或 pending interventions
 
 ## 5. 標準排錯流程
 

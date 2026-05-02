@@ -6,9 +6,9 @@ This document records what has been runtime-validated, what is covered by automa
 
 Current rewrite snapshot:
 
-- Date: `2026-03-28`
+- Date: `2026-04-30`
 - Runtime-validated environment: Linux, Python `3.12.3`
-- Validation result: full `pytest` suite passed in the current workspace (`310 passed`)
+- Validation result: full `pytest` suite passed in the current workspace after external-audit remediation (`453 passed`)
 - Simulated in automated tests: Windows backend selection, Windows shell policy, macOS state-root behavior, WSL `tmux` invocation, PowerShell and `cmd.exe` shell semantics
 
 Validation levels used below:
