@@ -24,6 +24,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - README and FAQ now describe TB2 as local-first, high-trust operator tooling and clarify that approval gates are workflow controls rather than a hard security boundary.
 - Local HTTP, SSE, and WebSocket control surfaces now enforce localhost-only `Origin` checks and safer request parsing.
 - `tb2 doctor` now surfaces readiness, validation coverage, and next-step guidance alongside backend and client probes.
+- Operator docs now point agents to `doctor --json` for machine-readable diagnostics and `profiles --verbose` for the support matrix.
 - Packaging metadata now declares the README, classifiers, project URLs, and adoption posture more clearly for external consumers.
 - Bridge status now reports auto-forward guard state, and runaway auto-forward flows now switch into intervention until pending review is resolved.
 - `status` now reports audit-trail enablement and destination details so operators can verify persistence state from the active control surface.

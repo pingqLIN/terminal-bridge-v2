@@ -13,17 +13,18 @@
 ## 目前焦點
 
 - 打磨 AI-first onboarding path
-- 讓 GitHub、release 與開發文件跟上目前定位
+- 持續讓 GitHub 與 release surface 對齊目前 operator-beta codebase
 - 持續收斂 Host / Guest / Human operator 的 live collaboration UX
 - 把跨 Windows / WSL 的操作建議寫成正式 platform guidance
+- 讓 service restart 與 diagnostics contract 更容易被 agent 與 operator 驗證
 
 ## 近期優先項
 
 - 在 GUI 中進一步抽象 backend 與 room 識別子
-- 補齊 release 與社群維運工具
-- 強化 support matrix 與環境診斷說明
+- 補齊 release 與社群維運工具，尤其是 issue templates 與 release-check commands
+- 補更多 `doctor --json`、`profiles --verbose`、scheduled health checks、runtime continuity handoff 的範例
 - 增加 transport 層面的回歸測試與文件範例
-- 補強 native Windows 與 WSL 分流策略的文件、驗證與推薦路徑
+- 重新整理 native Windows 與 WSL 的實機驗證，不只依賴 simulated policy coverage
 - 參考漏斗狀治理層疊架構，規劃 `base -> model -> environment -> instruction_profile` 的 policy resolver 與 provenance contract
 
 ## 後續機會
@@ -33,6 +34,7 @@
 - 更好的 packaging 與 distribution
 - 對 private-network operator deployment 提供更清楚且更安全的模式
 - 建立 simulation-first、report-first、no-mutation 的 governance resolution surface，再視需要接到 apply / rollback 流程
+- 等 operator-beta surface 穩定後，再設計可重用 installer 或 packaging path
 
 ## 暫時不做
 
