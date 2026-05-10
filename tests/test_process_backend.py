@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tb2.process_backend import PaneBuffer, ProcessBackend, SpawnSpec, ManagedProcess, _ANSI_RE
+from tb2.process_backend import (
+    ManagedProcess,
+    PaneBuffer,
+    ProcessBackend,
+    SpawnFailure,
+    SpawnSpec,
+    _ANSI_RE,
+)
 
 
 class TestPaneBuffer:
@@ -53,6 +60,52 @@ class TestSpawnSpec:
     def test_with_env(self):
         spec = SpawnSpec(argv=["python3"], env={"FOO": "bar"})
         assert spec.env == {"FOO": "bar"}
+
+
+class TestSpawnFailureDiagnostic:
+    def test_classifies_permission_denied_as_security_intervention(self):
+        diagnostic = ProcessBackend.classify_spawn_failure(PermissionError("Permission denied"))
+        assert diagnostic.to_dict() == {
+            "code": "SPAWN_BLOCKED",
+            "category": "security_intervention",
+            "retryable": False,
+            "recommended_action": (
+                "Check antivirus allowlist for node, tb2, target CLI, and runtime directory."
+            ),
+            "reason": "Permission denied",
+            "detail": "Permission denied",
+        }
+
+    def test_classifies_security_product_message_as_security_intervention(self):
+        diagnostic = ProcessBackend.classify_spawn_failure(
+            RuntimeError("Blocked by group policy")
+        )
+        assert diagnostic.code == "SPAWN_BLOCKED"
+        assert diagnostic.category == "security_intervention"
+        assert diagnostic.retryable is False
+
+    def test_classifies_windows_av_block_winerror_as_security_intervention(self):
+        error = PermissionError("Operation did not complete because the file contains a virus")
+        error.winerror = 225
+        diagnostic = ProcessBackend.classify_spawn_failure(error)
+        assert diagnostic.code == "SPAWN_BLOCKED"
+        assert diagnostic.category == "security_intervention"
+        assert diagnostic.retryable is False
+
+    def test_classifies_missing_executable_without_allowlist_guidance(self):
+        diagnostic = ProcessBackend.classify_spawn_failure(
+            FileNotFoundError("No such file or directory: missing-cli")
+        )
+        assert diagnostic.code == "SPAWN_FAILED"
+        assert diagnostic.category == "executable_not_found"
+        assert "allowlist" not in diagnostic.recommended_action.lower()
+
+    def test_classifies_generic_failure_without_security_assumption(self):
+        diagnostic = ProcessBackend.classify_spawn_failure(RuntimeError("bad argv"))
+        assert diagnostic.code == "SPAWN_FAILED"
+        assert diagnostic.category == "process_start_failure"
+        assert diagnostic.retryable is False
+        assert "allowlist" not in diagnostic.recommended_action.lower()
 
 
 class TestAnsiRegex:
@@ -258,3 +311,33 @@ class TestProcessBackend:
         fake_spawn.assert_called_once_with(list(spec.argv))
         assert managed.proc is fake_proc
         mock_thread.assert_called_once()
+
+    def test_spawn_winpty_wraps_blocked_spawn_with_diagnostic(self):
+        backend = ProcessBackend(shell="pwsh")
+        fake_spawn = MagicMock(side_effect=PermissionError("Access is denied"))
+
+        with patch.dict(
+            "sys.modules",
+            {"winpty": SimpleNamespace(PtyProcess=SimpleNamespace(spawn=fake_spawn))},
+        ):
+            with pytest.raises(SpawnFailure) as error:
+                backend._spawn_winpty("demo:a", PaneBuffer(), SpawnSpec(argv=["pwsh"]))
+
+        assert error.value.diagnostic.code == "SPAWN_BLOCKED"
+        assert error.value.diagnostic.category == "security_intervention"
+        assert error.value.diagnostic.retryable is False
+        assert isinstance(error.value.original, PermissionError)
+
+    @patch("tb2.process_backend.subprocess.Popen", side_effect=RuntimeError("bad argv"))
+    @patch("pty.openpty", return_value=(10, 11))
+    @patch("tb2.process_backend.os.close")
+    def test_spawn_pty_wraps_generic_spawn_failure(self, mock_close, mock_openpty, mock_popen):
+        backend = ProcessBackend(shell="/bin/bash")
+
+        with pytest.raises(SpawnFailure) as error:
+            backend._spawn_pty("demo:a", PaneBuffer(), SpawnSpec(argv=["/bin/bash"]))
+
+        assert error.value.diagnostic.code == "SPAWN_FAILED"
+        assert error.value.diagnostic.category == "process_start_failure"
+        assert error.value.diagnostic.retryable is False
+        assert mock_close.call_count == 2

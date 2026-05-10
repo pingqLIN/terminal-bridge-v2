@@ -1337,6 +1337,90 @@ def handle_terminal_init(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"session": session, "pane_a": a, "pane_b": b}
 
 
+def handle_workstream_create(args: Dict[str, Any]) -> Dict[str, Any]:
+    import uuid
+    from .process_backend import SpawnFailure
+
+    backend_args = dict(args)
+    backend_args["backend"] = str(args.get("backend") or "process")
+    requested_workstream_id = str(args.get("workstream_id", "") or "").strip()
+    try:
+        workstream_id = (
+            validate_workstream_id(requested_workstream_id)
+            if requested_workstream_id
+            else uuid.uuid4().hex[:12]
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    session = str(args.get("session", "") or f"ws-{workstream_id}")
+    try:
+        backend = _make_backend(backend_args)
+        pane_a, pane_b = backend.init_session(session)
+    except SpawnFailure as exc:
+        return {
+            "error": "workstream spawn failed",
+            "workstream_id": workstream_id,
+            "session": session,
+            "spawn_diagnostics": exc.diagnostic.to_dict(),
+        }
+    except Exception as exc:
+        return {
+            "error": f"workstream spawn failed: {exc}",
+            "workstream_id": workstream_id,
+            "session": session,
+            "spawn_diagnostics": {
+                "code": "SPAWN_FAILED",
+                "category": "process_start_failure",
+                "retryable": False,
+                "recommended_action": "Inspect the original spawn error, shell path, cwd, and runtime dependencies.",
+                "reason": str(exc),
+                "detail": str(exc),
+            },
+        }
+
+    bridge_args = dict(args)
+    bridge_args["backend"] = backend_args["backend"]
+    bridge_args["pane_a"] = pane_a
+    bridge_args["pane_b"] = pane_b
+    bridge_args["workstream_id"] = workstream_id
+    result = handle_bridge_start(bridge_args)
+    if "error" in result:
+        try:
+            backend.kill_session(session)
+        except Exception:
+            pass
+        result.update({
+            "session": session,
+            "pane_a": pane_a,
+            "pane_b": pane_b,
+            "backend": BackendSpec.from_args(backend_args).to_dict(),
+            "spawn_diagnostics": {
+                "code": "SPAWN_CLEANED_UP",
+                "category": "bridge_start_failed",
+                "retryable": False,
+                "recommended_action": "Fix the workstream_create arguments and retry.",
+                "reason": "process session was started but bridge_start rejected the workstream arguments",
+                "detail": "process session was cleaned up after bridge_start failed",
+            },
+        })
+        return result
+    result.update({
+        "session": session,
+        "pane_a": pane_a,
+        "pane_b": pane_b,
+        "backend": BackendSpec.from_args(backend_args).to_dict(),
+        "spawn_diagnostics": {
+            "code": "SPAWN_OK",
+            "category": "process_startup",
+            "retryable": False,
+            "recommended_action": "",
+            "reason": "process session started",
+            "detail": "process session started",
+        },
+    })
+    return result
+
+
 def handle_terminal_capture(args: Dict[str, Any]) -> Dict[str, Any]:
     backend = _make_backend(args)
     target = str(args["target"])
@@ -1447,6 +1531,126 @@ def handle_room_post(args: Dict[str, Any]) -> Dict[str, Any]:
     if deliver_error:
         result["deliver_error"] = deliver_error
     return result
+
+
+def handle_reviewer_send(args: Dict[str, Any]) -> Dict[str, Any]:
+    if "text" not in args:
+        return {"error": "text is required"}
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    assert bridge_id is not None and bridge is not None
+    deliver = str(args.get("deliver", args.get("target", "b")) or "b").lower()
+    if deliver not in {"a", "b", "both"}:
+        return {"error": "deliver must be one of: a, b, both"}
+    result = handle_room_post({
+        "room_id": bridge.room.room_id,
+        "bridge_id": bridge_id,
+        "author": str(args.get("author", "reviewer_request")),
+        "kind": "review_request",
+        "text": str(args["text"]),
+        "deliver": deliver,
+    })
+    result.update({
+        "workstream_id": bridge.workstream_id,
+        "bridge_id": bridge_id,
+        "room_id": bridge.room.room_id,
+        "deliver": deliver,
+    })
+    return result
+
+
+def handle_reviewer_wait(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    assert bridge_id is not None and bridge is not None
+    try:
+        after_id = _parse_int(args.get("after_id"), name="after_id", default=0, minimum=0)
+        limit = _parse_int(args.get("limit"), name="limit", default=20, minimum=1, maximum=_MAX_STREAM_LIMIT)
+        timeout_ms = _parse_int(args.get("timeout_ms"), name="timeout_ms", default=30000, minimum=0, maximum=300000)
+        poll_ms = _parse_int(args.get("poll_ms"), name="poll_ms", default=500, minimum=25, maximum=10000)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    deadline = time.time() + (timeout_ms / 1000.0)
+    while True:
+        messages = bridge.room.poll(after_id=after_id, limit=limit)
+        if messages:
+            return {
+                "workstream_id": bridge.workstream_id,
+                "bridge_id": bridge_id,
+                "room_id": bridge.room.room_id,
+                "messages": [_room_message_payload(bridge.room, msg) for msg in messages],
+                "count": len(messages),
+                "timed_out": False,
+            }
+        if time.time() >= deadline:
+            return {
+                "workstream_id": bridge.workstream_id,
+                "bridge_id": bridge_id,
+                "room_id": bridge.room.room_id,
+                "messages": [],
+                "count": 0,
+                "timed_out": True,
+            }
+        time.sleep(min(poll_ms / 1000.0, max(0.0, deadline - time.time())))
+
+
+def handle_reviewer_read(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    assert bridge_id is not None and bridge is not None
+    try:
+        after_id = _parse_int(args.get("after_id"), name="after_id", default=0, minimum=0)
+        limit = _parse_int(args.get("limit"), name="limit", default=50, minimum=1, maximum=_MAX_STREAM_LIMIT)
+        lines = _parse_int(args.get("lines"), name="lines", default=80, minimum=1, maximum=_MAX_CAPTURE_LINES)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    messages = bridge.room.poll(after_id=after_id, limit=limit)
+    pane_a, pane_b = bridge.backend.capture_both(bridge.pane_a, bridge.pane_b, lines)
+    return {
+        "workstream_id": bridge.workstream_id,
+        "bridge_id": bridge_id,
+        "room_id": bridge.room.room_id,
+        "messages": [_room_message_payload(bridge.room, msg) for msg in messages],
+        "count": len(messages),
+        "capture": {
+            "pane_a": {"target": bridge.pane_a, "lines": pane_a},
+            "pane_b": {"target": bridge.pane_b, "lines": pane_b},
+        },
+    }
+
+
+def handle_audit_export(args: Dict[str, Any]) -> Dict[str, Any]:
+    bridge_id, bridge, error = _resolve_bridge(args)
+    if error:
+        return error
+    assert bridge_id is not None and bridge is not None
+    try:
+        limit = _parse_int(args.get("limit"), name="limit", default=100, minimum=1, maximum=200)
+        after_id = _parse_int(args.get("after_id"), name="after_id", default=0, minimum=0)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    record = _get_workstream(bridge.workstream_id)
+    messages = bridge.room.poll(after_id=after_id, limit=limit)
+    events = _audit_trail.recent(
+        limit=limit,
+        room_id=bridge.room.room_id,
+        bridge_id=bridge_id,
+    )
+    return {
+        "export_type": "tb2_execution_evidence",
+        "normalized_audit_report": False,
+        "boundary": "TB2 exports execution evidence only; external-audit-orchestrator owns packet schemas and normalized reports.",
+        "workstream_id": bridge.workstream_id,
+        "bridge_id": bridge_id,
+        "room_id": bridge.room.room_id,
+        "workstream": _decorate_workstream_status_payload(record) if record else None,
+        "messages": [_room_message_payload(bridge.room, msg) for msg in messages],
+        "audit_events": events,
+        "audit": _audit_trail.describe(),
+    }
 
 
 def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
@@ -1639,7 +1843,21 @@ def handle_bridge_start(args: Dict[str, Any]) -> Dict[str, Any]:
         if isinstance(policy_state.get("baseline"), dict)
         else default_workstream_policy(poll_ms=poll_ms)
     )
-    initial_policy = reusable_record.policy if reusable_record else governance_baseline_policy
+    try:
+        requested_policy = args.get("policy")
+        if requested_policy is not None and not isinstance(requested_policy, dict):
+            return {"error": "policy must be an object"}
+        initial_policy = (
+            reusable_record.policy
+            if reusable_record
+            else normalize_workstream_policy(
+                requested_policy,
+                poll_ms=poll_ms,
+                base=governance_baseline_policy,
+            )
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     bridge = Bridge(
         bridge_id=bridge_id,
@@ -2565,6 +2783,7 @@ def handle_status(_args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 HANDLERS = {
+    "workstream_create": handle_workstream_create,
     "workstream_list": handle_workstream_list,
     "workstream_get": handle_workstream_get,
     "workstream_pause_review": handle_workstream_pause_review,
@@ -2580,6 +2799,10 @@ HANDLERS = {
     "room_create": handle_room_create,
     "room_poll": handle_room_poll,
     "room_post": handle_room_post,
+    "reviewer_send": handle_reviewer_send,
+    "reviewer_wait": handle_reviewer_wait,
+    "reviewer_read": handle_reviewer_read,
+    "audit_export": handle_audit_export,
     "bridge_start": handle_bridge_start,
     "bridge_stop": handle_bridge_stop,
     "intervention_list": handle_intervention_list,
@@ -2593,6 +2816,7 @@ HANDLERS = {
 }
 
 TOOL_DESCRIPTIONS = {
+    "workstream_create": "Create a process-backed workstream and bridge in one call with spawn diagnostics.",
     "workstream_list": "List workstreams with health, policy, and escalation state.",
     "workstream_get": "Return one workstream with health, policy, and escalation state.",
     "workstream_pause_review": "Pause auto-forward review state for a workstream.",
@@ -2608,6 +2832,10 @@ TOOL_DESCRIPTIONS = {
     "room_create": "Create a chat room buffer.",
     "room_poll": "Poll room messages after a cursor id.",
     "room_post": "Post a message to a room and optionally deliver to pane(s).",
+    "reviewer_send": "Send a reviewer request to an active workstream.",
+    "reviewer_wait": "Wait for bounded reviewer output in a workstream room.",
+    "reviewer_read": "Read reviewer room messages and recent pane captures.",
+    "audit_export": "Export TB2 execution evidence for external audit orchestration.",
     "bridge_start": "Start background bridge worker between two panes.",
     "bridge_stop": "Stop a running bridge worker.",
     "intervention_list": "List pending human-review messages.",
@@ -2646,6 +2874,31 @@ _BRIDGE_RESOLUTION_SCHEMA: Dict[str, Any] = {
 }
 
 _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "workstream_create": {
+        "type": "object",
+        "properties": {
+            "session": {"type": "string"},
+            "room_id": {"type": "string"},
+            "bridge_id": {"type": "string"},
+            "workstream_id": {"type": "string"},
+            "tier": {"type": "string", "enum": ["main", "sub"]},
+            "parent_workstream_id": {"type": "string"},
+            "backend": {"type": "string"},
+            "backend_id": {"type": "string"},
+            "shell": {"type": "string"},
+            "distro": {"type": "string"},
+            "profile": {"type": "string"},
+            "model": {"type": "string"},
+            "instruction_profile": {"type": "string"},
+            "governance_config_path": {"type": "string"},
+            "auto_forward": {"type": "boolean"},
+            "intervention": {"type": "boolean"},
+            "policy": {"type": "object"},
+            "poll_ms": {"type": "integer", "minimum": 10, "maximum": _MAX_POLL_MS},
+            "lines": {"type": "integer", "minimum": 1, "maximum": _MAX_CAPTURE_LINES},
+        },
+        "additionalProperties": False,
+    },
     "bridge_start": {
         "type": "object",
         "properties": {
@@ -2666,6 +2919,7 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "governance_config_path": {"type": "string"},
             "auto_forward": {"type": "boolean"},
             "intervention": {"type": "boolean"},
+            "policy": {"type": "object"},
             "poll_ms": {"type": "integer", "minimum": 10, "maximum": _MAX_POLL_MS},
             "lines": {"type": "integer", "minimum": 1, "maximum": _MAX_CAPTURE_LINES},
         },
@@ -2741,6 +2995,48 @@ _TOOL_SCHEMAS: Dict[str, Dict[str, Any]] = {
             "cleanup_room": {"type": "boolean"},
         },
         "required": ["bridge_id"],
+        "additionalProperties": False,
+    },
+    "reviewer_send": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "text": {"type": "string"},
+            "deliver": {"type": "string", "enum": ["a", "b", "both"]},
+            "target": {"type": "string", "enum": ["a", "b", "both"]},
+            "author": {"type": "string"},
+        },
+        "required": ["text"],
+        "additionalProperties": False,
+    },
+    "reviewer_wait": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "after_id": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_STREAM_LIMIT},
+            "timeout_ms": {"type": "integer", "minimum": 0, "maximum": 300000},
+            "poll_ms": {"type": "integer", "minimum": 25, "maximum": 10000},
+        },
+        "additionalProperties": False,
+    },
+    "reviewer_read": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "after_id": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": _MAX_STREAM_LIMIT},
+            "lines": {"type": "integer", "minimum": 1, "maximum": _MAX_CAPTURE_LINES},
+        },
+        "additionalProperties": False,
+    },
+    "audit_export": {
+        "type": "object",
+        "properties": {
+            **_BRIDGE_RESOLUTION_SCHEMA["properties"],
+            "after_id": {"type": "integer", "minimum": 0},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 200},
+        },
         "additionalProperties": False,
     },
     "fleet_reconcile": {

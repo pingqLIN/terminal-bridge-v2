@@ -19,6 +19,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from errno import EACCES, EAGAIN, ENOMEM, EPERM
 from typing import Deque, Dict, List, Optional, Tuple
 
 from .backend import TerminalBackend
@@ -82,6 +83,36 @@ class SpawnSpec:
     cwd: Optional[str] = None
     env: Optional[Dict[str, str]] = None
     profile: str = "generic"
+
+
+@dataclass(frozen=True)
+class SpawnFailureDiagnostic:
+    """Machine-readable diagnostic for process launch failures."""
+
+    code: str
+    category: str
+    retryable: bool
+    recommended_action: str
+    reason: str
+
+    def to_dict(self) -> Dict[str, object]:
+        return {
+            "code": self.code,
+            "category": self.category,
+            "retryable": self.retryable,
+            "recommended_action": self.recommended_action,
+            "reason": self.reason,
+            "detail": self.reason,
+        }
+
+
+class SpawnFailure(RuntimeError):
+    """RuntimeError carrying a structured spawn diagnostic."""
+
+    def __init__(self, diagnostic: SpawnFailureDiagnostic, original: BaseException):
+        super().__init__(diagnostic.reason)
+        self.diagnostic = diagnostic
+        self.original = original
 
 
 class ProcessBackend(TerminalBackend):
@@ -208,6 +239,72 @@ class ProcessBackend(TerminalBackend):
             merged[str(key)] = str(value)
         return merged
 
+    @staticmethod
+    def classify_spawn_failure(error: BaseException) -> SpawnFailureDiagnostic:
+        """Classify process spawn failures without guessing on generic errors."""
+        message = str(error).strip()
+        lowered = message.lower()
+        errno_value = getattr(error, "errno", None)
+        winerror_value = getattr(error, "winerror", None)
+        security_terms = (
+            "access is denied",
+            "antivirus",
+            "app control",
+            "applocker",
+            "blocked by group policy",
+            "controlled folder access",
+            "defender",
+            "edr",
+            "endpoint protection",
+            "operation not permitted",
+            "permission denied",
+            "policy restriction",
+            "security product",
+        )
+
+        if isinstance(error, FileNotFoundError):
+            return SpawnFailureDiagnostic(
+                code="SPAWN_FAILED",
+                category="executable_not_found",
+                retryable=False,
+                recommended_action="Check that the target executable exists and is available on PATH.",
+                reason=message or "target executable was not found",
+            )
+
+        if errno_value in (EACCES, EPERM) or winerror_value in (5, 225, 1260) or any(
+            term in lowered for term in security_terms
+        ):
+            return SpawnFailureDiagnostic(
+                code="SPAWN_BLOCKED",
+                category="security_intervention",
+                retryable=False,
+                recommended_action=(
+                    "Check antivirus allowlist for node, tb2, target CLI, and runtime directory."
+                ),
+                reason=message or "process spawn was blocked by permission or security policy",
+            )
+
+        if errno_value in (EAGAIN, ENOMEM):
+            return SpawnFailureDiagnostic(
+                code="SPAWN_FAILED",
+                category="temporary_resource_exhaustion",
+                retryable=True,
+                recommended_action="Retry after reducing concurrent process launches or freeing system resources.",
+                reason=message or "process spawn failed because resources were temporarily unavailable",
+            )
+
+        return SpawnFailureDiagnostic(
+            code="SPAWN_FAILED",
+            category="process_start_failure",
+            retryable=False,
+            recommended_action="Inspect the original spawn error, shell path, cwd, and runtime dependencies.",
+            reason=message or error.__class__.__name__,
+        )
+
+    @classmethod
+    def _spawn_failure(cls, error: BaseException) -> SpawnFailure:
+        return SpawnFailure(cls.classify_spawn_failure(error), error)
+
     def _spawn(self, target: str, spec: Optional[SpawnSpec] = None) -> ManagedProcess:
         spec = spec or self._default_spawn_spec()
         if not spec.argv:
@@ -229,16 +326,21 @@ class ProcessBackend(TerminalBackend):
 
         env = self._merge_env(spec)
         master_fd, slave_fd = pty.openpty()
-        proc = subprocess.Popen(
-            spec.argv,
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            preexec_fn=os.setsid,
-            close_fds=True,
-            cwd=spec.cwd,
-            env=env,
-        )
+        try:
+            proc = subprocess.Popen(
+                spec.argv,
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                preexec_fn=os.setsid,
+                close_fds=True,
+                cwd=spec.cwd,
+                env=env,
+            )
+        except Exception as error:
+            os.close(slave_fd)
+            os.close(master_fd)
+            raise self._spawn_failure(error) from error
         os.close(slave_fd)
 
         def write_fn(text: str) -> None:
@@ -284,8 +386,16 @@ class ProcessBackend(TerminalBackend):
             spawn_kwargs["env"] = env
         try:
             proc = PtyProcess.spawn(list(spec.argv), **spawn_kwargs)
-        except TypeError:
-            proc = PtyProcess.spawn(list(spec.argv))
+        except TypeError as error:
+            if spawn_kwargs:
+                try:
+                    proc = PtyProcess.spawn(list(spec.argv))
+                except Exception as fallback_error:
+                    raise self._spawn_failure(fallback_error) from fallback_error
+            else:
+                raise self._spawn_failure(error) from error
+        except Exception as error:
+            raise self._spawn_failure(error) from error
 
         def write_fn(text: str) -> None:
             proc.write(text)

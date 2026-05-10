@@ -285,6 +285,105 @@ class TestRoomHandlers:
         server_mod.handle_bridge_stop({"bridge_id": "br-invalid"})
 
 
+class TestExternalAuditWorkflowTools:
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_create_wraps_process_session_and_bridge(self, mock_factory):
+        backend = MagicMock()
+        backend.init_session.return_value = ("review:a", "review:b")
+        backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = backend
+
+        result = server_mod.handle_workstream_create({
+            "workstream_id": "review-main",
+            "room_id": "review-room",
+            "policy": {"silent_seconds": 90},
+        })
+
+        assert result["workstream_id"] == "review-main"
+        assert result["room_id"] == "review-room"
+        assert result["pane_a"] == "review:a"
+        assert result["pane_b"] == "review:b"
+        assert result["backend"]["kind"] == "process"
+        assert result["spawn_diagnostics"]["code"] == "SPAWN_OK"
+        backend.init_session.assert_called_once_with("ws-review-main")
+        assert server_mod.handle_workstream_get({
+            "workstream_id": "review-main",
+        })["workstream"]["policy"]["silent_seconds"] == 90.0
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_create_rejects_invalid_policy_object(self, mock_factory):
+        backend = MagicMock()
+        backend.init_session.return_value = ("review:a", "review:b")
+        backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = backend
+
+        result = server_mod.handle_workstream_create({
+            "workstream_id": "review-main",
+            "policy": "paused",
+        })
+
+        assert result["error"] == "policy must be an object"
+        assert result["spawn_diagnostics"]["code"] == "SPAWN_CLEANED_UP"
+        backend.kill_session.assert_called_once_with("ws-review-main")
+
+    @patch.object(server_mod, "_make_backend")
+    def test_workstream_create_cleans_up_spawned_session_when_bridge_rejects_args(self, mock_factory):
+        backend = MagicMock()
+        backend.init_session.return_value = ("review:a", "review:b")
+        backend.capture_both.return_value = ([], [])
+        mock_factory.return_value = backend
+
+        result = server_mod.handle_workstream_create({
+            "workstream_id": "review-main",
+            "room_id": "review-room",
+            "tier": "sub",
+        })
+
+        assert result["error"] == "sub workstream requires parent_workstream_id"
+        assert result["spawn_diagnostics"]["code"] == "SPAWN_CLEANED_UP"
+        backend.kill_session.assert_called_once_with("ws-review-main")
+
+    @patch.object(server_mod, "_make_backend")
+    def test_reviewer_send_wait_read_and_audit_export(self, mock_factory):
+        backend = MagicMock()
+        backend.capture_both.return_value = (["host ready"], ["reviewer ready"])
+        mock_factory.return_value = backend
+        start = server_mod.handle_bridge_start({
+            "pane_a": "review:a",
+            "pane_b": "review:b",
+            "room_id": "review-room",
+            "bridge_id": "review-bridge",
+            "workstream_id": "review-main",
+            "backend": "process",
+        })
+        assert start["workstream_id"] == "review-main"
+
+        sent = server_mod.handle_reviewer_send({
+            "workstream_id": "review-main",
+            "text": "Please review this patch.",
+        })
+        assert sent["workstream_id"] == "review-main"
+        assert sent["deliver"] == "b"
+        backend.send.assert_called_once_with("review:b", "Please review this patch.", enter=True)
+
+        waited = server_mod.handle_reviewer_wait({
+            "workstream_id": "review-main",
+            "after_id": 0,
+            "timeout_ms": 0,
+        })
+        assert waited["timed_out"] is False
+        assert waited["messages"][0]["kind"] == "review_request"
+
+        read = server_mod.handle_reviewer_read({"workstream_id": "review-main"})
+        assert read["capture"]["pane_a"]["lines"] == ["host ready"]
+        assert read["capture"]["pane_b"]["lines"] == ["reviewer ready"]
+
+        exported = server_mod.handle_audit_export({"workstream_id": "review-main"})
+        assert exported["export_type"] == "tb2_execution_evidence"
+        assert exported["normalized_audit_report"] is False
+        assert exported["workstream"]["workstream_id"] == "review-main"
+
+
 class DummyPipe:
     def __init__(self):
         self.buffer = ""
