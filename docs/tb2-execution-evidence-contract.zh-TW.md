@@ -323,6 +323,15 @@ Expected message semantics:
 - Consumers must preserve message ids when building higher-level audit reports.
 - Consumers should use `after_id` to avoid duplicate evidence collection.
 
+## Sample Fixture
+
+The repo includes a sample TB2 execution-evidence export:
+
+- `examples/tb2-execution-evidence.sample.json`
+
+The sample is intended for orchestrator adapter development and contract tests.
+It is not an audit packet, reviewer request bundle, expected-output schema, or normalized report.
+
 ## Error Contract
 
 Tool errors return an `error` string.

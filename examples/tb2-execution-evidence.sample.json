@@ -1,0 +1,144 @@
+{
+  "export_type": "tb2_execution_evidence",
+  "normalized_audit_report": false,
+  "boundary": "TB2 exports execution evidence only; external-audit-orchestrator owns packet schemas and normalized reports.",
+  "workstream_id": "review-main",
+  "bridge_id": "review-bridge",
+  "room_id": "review-room",
+  "workstream": {
+    "workstream_id": "review-main",
+    "bridge_id": "review-bridge",
+    "room_id": "review-room",
+    "pane_a": "review:a",
+    "pane_b": "review:b",
+    "profile": "generic",
+    "auto_forward": false,
+    "intervention": false,
+    "pending_count": 0,
+    "pending": [],
+    "auto_forward_guard": {},
+    "policy": {},
+    "review_mode": "auto",
+    "governance": {},
+    "tier": "main",
+    "parent_workstream_id": null,
+    "backend": {
+      "kind": "process"
+    },
+    "poll_ms": 400,
+    "lines": 200,
+    "state": "live",
+    "bridge_active": true,
+    "restore_error": null,
+    "recovery": {
+      "protocol": "workstream_recovery_v1",
+      "state": "live_runtime",
+      "attempted_from_snapshot": false,
+      "restored_from_snapshot": false,
+      "manual_takeover_required": false,
+      "restore_order": [
+        "snapshot",
+        "room",
+        "bridge_worker",
+        "policy",
+        "audit"
+      ],
+      "completed_steps": [],
+      "failure_step": null,
+      "stage": null,
+      "error": null
+    },
+    "last_activity_at": 1778423000.0,
+    "health": {
+      "state": "ok",
+      "summary": "healthy",
+      "alerts": [],
+      "alert_count": 0,
+      "escalation": "observe",
+      "last_activity_at": 1778423000.0,
+      "last_activity_age_seconds": 0.0,
+      "silent_threshold_seconds": 30.0
+    },
+    "updated_at": 1778423000.0,
+    "topology": {
+      "room_present": true,
+      "bridge_present": true,
+      "orphaned": false
+    },
+    "dependency": {
+      "tier": "main",
+      "parent_workstream_id": null,
+      "child_workstream_ids": [],
+      "child_count": 0,
+      "blocked": false,
+      "blocking_reasons": []
+    }
+  },
+  "messages": [
+    {
+      "event_id": "review-room:1",
+      "id": 1,
+      "room_id": "review-room",
+      "bridge_id": "review-bridge",
+      "author": "reviewer_request",
+      "source": {
+        "type": "client",
+        "role": "external",
+        "trusted": false
+      },
+      "source_type": "client",
+      "source_role": "external",
+      "trusted": false,
+      "text": "Please review this patch.",
+      "kind": "review_request",
+      "meta": {
+        "bridge_id": "review-bridge"
+      },
+      "created_at": 1778423000.0,
+      "ts": 1778423000.0
+    }
+  ],
+  "audit_events": [
+    {
+      "ts": 1778423000.0,
+      "event": "operator.room_post",
+      "room_id": "review-room",
+      "bridge_id": "review-bridge",
+      "message_id": 1,
+      "author": "reviewer_request",
+      "kind": "review_request",
+      "deliver": "b",
+      "deliver_error": null
+    }
+  ],
+  "audit": {
+    "enabled": true,
+    "root": "/sample/tb2/audit",
+    "file": "/sample/tb2/audit/events.jsonl",
+    "max_bytes": 1048576,
+    "max_files": 5,
+    "redaction": {
+      "mode": "mask",
+      "requested_mode": "mask",
+      "keys": [
+        "text",
+        "edited_text",
+        "guard_text"
+      ],
+      "fields": [
+        "text",
+        "edited_text",
+        "guard_text"
+      ],
+      "stores_raw_text": false,
+      "stores_masked_placeholders": true,
+      "stores_hash_fingerprint": true,
+      "stores_text_metadata": true,
+      "raw_text_opt_in_required": false,
+      "raw_text_opt_in_acknowledged": false,
+      "raw_text_opt_in_blocked": false,
+      "raw_text_opt_in_env": "TB2_AUDIT_ALLOW_FULL_TEXT"
+    },
+    "last_error": null
+  }
+}
