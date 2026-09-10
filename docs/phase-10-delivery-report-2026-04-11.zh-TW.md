@@ -36,7 +36,7 @@ description: 2026-04-11 terminal-bridge-v2 Phase 10 交付報告，涵蓋 recove
 
 ### 已完成
 
-- [workstream.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/workstream.py) 現在新增：
+- [workstream.py](../tb2/workstream.py) 現在新增：
   - `ordered_restore_v1` recovery protocol
   - formal restore order:
     - `workstream_metadata`
@@ -45,22 +45,22 @@ description: 2026-04-11 terminal-bridge-v2 Phase 10 交付報告，涵蓋 recove
     - `pending_interventions`
     - `health_state`
   - `status.workstreams[*].recovery`
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在新增：
+- [server.py](../tb2/server.py) 現在新增：
   - restore-time continuity counters
   - `status.recovery`
   - per-fleet `manual_takeover` count
   - degraded restore path 會被正式標記為 `manual_takeover`
-- [service.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/service.py) 現在會把以下欄位正式回傳到 `runtime.continuity`：
+- [service.py](../tb2/service.py) 現在會把以下欄位正式回傳到 `runtime.continuity`：
   - `recovery_protocol`
   - `restore_order`
   - `last_recovery_at`
   - `restored_workstream_count`
   - `manual_takeover_workstream_count`
   - `lost_workstream_count`
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 現在在 fleet sidebar meta 補上 restore / degraded summary
+- [gui.py](../tb2/gui.py) 現在在 fleet sidebar meta 補上 restore / degraded summary
 - 對外說明已同步到：
-  - [CHANGELOG.md](/home/miles/dev2/projects/terminal-bridge-v2/CHANGELOG.md)
-  - [project-status-report-2026-04-10.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/project-status-report-2026-04-10.zh-TW.md)
+  - [CHANGELOG.md](../CHANGELOG.md)
+  - [project-status-report-2026-04-10.zh-TW.md](project-status-report-2026-04-10.zh-TW.md)
 
 ### 驗證
 
@@ -76,7 +76,7 @@ description: 2026-04-11 terminal-bridge-v2 Phase 10 交付報告，涵蓋 recove
 
 - restore path 仍是 best-effort，不是 transaction-style recovery
 - malformed snapshot 若無法解出 `workstream_id`，目前仍無法列成明確 named lost-workstream
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 仍是大型單檔；這輪只補 summary，沒有完成模組化
+- [gui.py](../tb2/gui.py) 仍是大型單檔；這輪只補 summary，沒有完成模組化
 
 ## 5. Stage Completion Report
 

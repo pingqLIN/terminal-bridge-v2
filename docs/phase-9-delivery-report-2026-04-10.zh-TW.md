@@ -36,7 +36,7 @@ description: 2026-04-10 terminal-bridge-v2 Phase 9 交付報告，涵蓋 per-wor
 
 ### 已完成
 
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在新增或強化：
+- [server.py](../tb2/server.py) 現在新增或強化：
   - `workstream_update_dependency`
   - `bridge_start` `tier` / `parent_workstream_id`
   - enforced `pending_limit` quota guard
@@ -44,25 +44,25 @@ description: 2026-04-10 terminal-bridge-v2 Phase 9 交付報告，涵蓋 per-wor
   - sub workstream resume dependency checks
   - `status.workstreams[*].dependency`
   - reconciliation 對 `quota_blocked` / `dependency_blocked` / `parent_missing` 的 stale 視角
-- [workstream.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/workstream.py) 現在正式包含：
+- [workstream.py](../tb2/workstream.py) 現在正式包含：
   - `tier`
   - `parent_workstream_id`
   - `pending_limit`
   - `quota_blocked` health alert
-- [audit.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/audit.py) 現在新增：
+- [audit.py](../tb2/audit.py) 現在新增：
   - `workstream.quota_blocked`
   - `workstream.quota_rearmed`
   - `workstream.dependency_updated`
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 現在新增：
+- [gui.py](../tb2/gui.py) 現在新增：
   - pause / resume review controls
   - stop-workstream control
   - fleet-reconcile control
   - dependency / quota note 與 inspect summary surface
 - 對外說明已補到：
-  - [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)
-  - [README.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/README.zh-TW.md)
-  - [CHANGELOG.md](/home/miles/dev2/projects/terminal-bridge-v2/CHANGELOG.md)
-  - [project-status-report-2026-04-10.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/project-status-report-2026-04-10.zh-TW.md)
+  - [README.md](../README.md)
+  - [README.zh-TW.md](../README.zh-TW.md)
+  - [CHANGELOG.md](../CHANGELOG.md)
+  - [project-status-report-2026-04-10.zh-TW.md](project-status-report-2026-04-10.zh-TW.md)
 
 ### 驗證
 
@@ -78,7 +78,7 @@ description: 2026-04-10 terminal-bridge-v2 Phase 9 交付報告，涵蓋 per-wor
 
 - quota enforcement 目前是 queue-depth oriented，不是 multi-dimensional budget system
 - `main` / `sub` dependency 已 formalize，但 parent / child policy inheritance 尚未定義
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 仍是大型單檔，這輪只補必要 controls，沒有完成模組化
+- [gui.py](../tb2/gui.py) 仍是大型單檔，這輪只補必要 controls，沒有完成模組化
 
 ## 5. Stage Completion Report
 

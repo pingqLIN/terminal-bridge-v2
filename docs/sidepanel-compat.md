@@ -111,13 +111,13 @@ That means the runtime can fail even when an interactive shell sees codex, becau
 
 Observed failure pattern on this machine:
 
-- interactive WSL shell resolves codex at /home/miles/.local/bin/codex
+- interactive WSL shell resolves codex at /absolute/path/to/codex
 - /health returned backendReady=true and codexAvailable=false
 - ready=false followed from that mismatch
 
 Recommended recovery sequence:
 
-1. set TB2_SIDEPANEL_CODEX=/home/miles/.local/bin/codex in /etc/systemd/system/tb2.service, or extend the service PATH to include the same directory
+1. set TB2_SIDEPANEL_CODEX=/absolute/path/to/codex in /etc/systemd/system/tb2.service, or extend the service PATH to include the same directory
 2. restart the service: systemctl restart tb2.service
 3. verify curl http://127.0.0.1:3189/health returns codexAvailable=true and ready=true
 
@@ -153,3 +153,5 @@ If you need remote access, use the normal TB2 server binding model with explicit
 Current operator UI preview used by this release:
 
 <img src="images/control-center.png" alt="terminal-bridge-v2 control console preview" width="960">
+
+> /absolute/path/to/codex is a sanitized example; replace it with the actual executable path.

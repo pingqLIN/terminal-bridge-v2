@@ -1,178 +1,85 @@
 # 入門指南
 
-這份文件提供從乾淨 checkout 到可用 `tb2` session 的最短穩定路徑。
+[English](getting-started.md) · [文件入口](README.zh-TW.md)
 
 ## 1. 安裝
 
-### Linux / macOS
+需要 Python 3.9 以上。先取得專案 checkout，再於根目錄操作。
 
-```bash
-pip install -e ".[dev]"
+Windows PowerShell：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[windows]"
 ```
 
-### Windows
+如果環境政策不允許啟用腳本，直接用 `.\.venv\Scripts\python.exe` 取代後續命令中的 `python`，不必變更 execution policy。
+
+Linux、macOS 或 WSL：
 
 ```bash
-pip install -e ".[windows,dev]"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 ```
 
-## 2. 先跑 `tb2 doctor`
+開發測試另安裝 `python -m pip install -e ".[dev]"`。各 AI client 的安裝、登入、模型權限與費用由其本身管理。
+
+## 2. 檢查本機能力
 
 ```bash
-python -m tb2 doctor
 python -m tb2 doctor --json
 python -m tb2 profiles --verbose
 ```
 
-請先看這幾個區塊：
+Windows 有 pywinpty 時可使用互動式 process；POSIX 可使用 tmux 或 process。pipe 只適合非互動式 stdin/stdout，不提供 TUI。doctor 的 client discovery 不代表模型認證或完整協作已通過。
 
-- `Readiness`：backend、transport、first-class client 是否真的達到可用狀態
-- `Validation snapshot`：哪些能力是 runtime 實跑驗證、哪些只是測試模擬
-- `Backends`：這台機器實際能跑哪些 backend
-- `Supported CLI tools`：哪些 first-class client 已存在於 `PATH`
-- `recommended_backend`：TB2 目前會自動選哪個預設 backend
-
-當其他 agent 或 script 需要穩定 machine-readable diagnostics 時，請用 `doctor --json`。需要人類可讀的 support matrix 與 backend recommendation table 時，請用 `profiles --verbose`。
-
-健康狀態下，輸出大致會像這樣：
-
-```text
-Readiness:
-  - backend=ready  clients=ready  transport=ready
-Validation snapshot:
-  - linux_runtime: executed locally  full pytest suite passed in the current workspace
-Next steps:
-  - Use `tmux` as the default backend on this machine.
-  - Run `python -m tb2 init --session demo` before opening GUI, broker, or MCP flows.
-```
-
-## 3. 選對 backend 路徑
-
-### 標準預設 policy
-
-- Windows：有 `pywinpty` 就用 `process`，否則透過 WSL 走 `tmux`，再不行才退 `pipe`
-- Linux / macOS / WSL：有 `tmux` 就用 `tmux`，否則退 `process`
-
-### 實務規則
-
-- 想要最穩定的 POSIX operator 視角，就選 `tmux`
-- 不想依賴 multiplexer，但仍要互動式流程，就選 `process`
-- 只有非互動式工具才選 `pipe`
-
-## 4. 五分鐘啟動第一個 session
-
-### CLI 優先
-
-```bash
-python -m tb2 init --session demo
-python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
-```
-
-在 Windows 的 `process` 或 `pipe` 上，pane id 會長成 `demo:a` 與 `demo:b`。
-
-### 第一個 GUI session
+## 3. 開啟同一個控制面
 
 ```bash
 python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-打開 `http://127.0.0.1:3189/`，然後：
+控制台：http://127.0.0.1:3189/
+MCP：http://127.0.0.1:3189/mcp
 
-1. 從 `Quick Pairing` 開始。
-2. 點 `Init Session`。
-3. 點 `Start Collaboration`。
-4. 若需要人工審核，再切到 `Approval Gate`。
-5. 如果 status 卡片顯示 auto-forward guard 已阻擋，請先把待審佇列 review 完，讓 delivery re-arm。
+已有 server 時直接開啟其網址，不再啟動第二個同 port server。GUI 與 MCP 共用同一個 server；process／pipe pane 需要由持有它的 runtime 操作，不能假設一次獨立 CLI init 建立的記憶體狀態會供下一個 CLI process 使用。
 
-如果你是刻意要把 GUI 綁到 loopback 以外，請加上 `--allow-remote`，並把這種部署視為 `private-network-experimental`。
+## 4. 第一次協作
 
-### 第一個 MCP session
+1. 在控制台選擇 backend 與 Host／Guest profile，使用 Init Session 建立一組 pane。
+2. 在 Start Collaboration 前選擇 Approval Gate，保持 auto-forward 與 intervention 都啟用。TB2 的 auto_forward 開啟 MSG 解析，intervention 再將解析出的訊息送入人工審核。
+3. 在分配的 pane 啟動已設定好的 client。遇到登入、trust 或模型設定要求時，先由操作員確認影響。
+4. 發送一個範圍明確的非破壞性任務。
+5. Guest 以一行 MSG: 回覆；檢查 pending 的目的地與內容，再核准或拒絕。
+6. 從目標 pane 的 capture 確認實際交付，不能只看 queued 或成功通知。
+7. 完成後停止 workstream，確認 owned runtime 已清理。
+
+```text
+MSG: summarize the failing assertion in tests/test_server.py
+```
+
+一行只放一件事。一般 terminal output 不應自動當作交接。新 client 應保持 intervention 啟用，完成資格驗證後才考慮取消人工審核。
+
+## 5. MCP 與維運
+
+若只需 server：
 
 ```bash
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
-把 MCP endpoint 註冊進 client 後，建議照這個順序：
+client 連線後，可依序使用 doctor、terminal_init、bridge_start、room_poll、intervention_list，再核准／拒絕並擷取目標端。保持 backend instance 與 pane 所有權一致；完成後用 workstream_stop 清理整組 owned workstream，bridge_stop 僅停止 bridge 的範圍依回傳結果確認。
 
-1. `doctor`
-2. `terminal_init`
-3. `bridge_start`
-4. `room_poll` 或 room stream
-5. `room_post` / `terminal_send`
-6. `status`
-7. 需要 durable incident context 時，再用 `audit_recent`
-8. `bridge_stop`
+選擇保存稽核時，可於啟動前設定 TB2_AUDIT=1；持久化文字預設 mask。完整文字另需明確 opt-in。服務快照不保證恢復 live terminal、訂閱或 pending queue。詳見[控制台](control-console.zh-TW.md)與[安全定位](security-posture.zh-TW.md)。
 
-若要綁到非 loopback 位址，現在必須明確確認：
+## 排除常見問題
 
-```bash
-python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
-```
+- Windows process 不可用：確認安裝 windows extra 與目前使用的 Python 環境。
+- Room stream 停滯：先重連傳輸或使用 room_poll，再診斷 bridge。
+- 有 pending 卻未交付：確認 review 狀態及目標端 capture，不以重送取代診斷。
+- Shell 不符預期：檢查 TB2_SHELL；Windows 不依賴 SHELL。
+- Client 沒回覆：分開檢查 client 路徑、provider 可用性與 TB2 transport。
 
-### 第一個 audit-enabled service session
-
-```bash
-TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
-python -m tb2 service status
-python -m tb2 service audit --lines 10
-```
-
-當你希望從第一輪就保留 durable operator 與 bridge events 時，請走這條路徑。
-這不代表完整 live session 都已 durable：service-managed restart 可把已持久化的 workstream snapshots 當成 handoff aid 延續，但 live terminal processes、room subscriptions、bridge processes 與 pending interventions 仍需要 operator recovery。
-
-如果 service host 不是 loopback，也請加上 `--allow-remote`，並把真正的 trust boundary 放在外部網路控管上。
-
-## 5. 先理解 handoff 契約
-
-跨 agent handoff 請使用 `MSG:`。
-
-範例：
-
-```text
-MSG: summarize the failing assertion in tests/test_server.py
-MSG: ready for review on the shell fallback patch
-```
-
-規則：
-
-- 一行 `MSG:` 只放一個可執行請求
-- 不要塞多段長文
-- 當轉發不應該立刻送出時，請啟用 `intervention`
-- 要判斷事件來源時請優先看 machine-readable `source` metadata，不要只靠 `author` 文字推斷
-
-## 6. 常見首次啟動失敗
-
-### Windows 上 `process` 不可用
-
-- 安裝 `pywinpty`
-- 或改走 WSL `tmux`
-
-### Linux / macOS 上沒有 `tmux`
-
-- 安裝 `tmux`
-- 或改用 `process`
-
-### Room stream 看起來 stale
-
-- 先在 GUI 重連 transport
-- 或退回 `room_poll`
-- 只有排除 transport 後才重啟 bridge
-
-### Audit 看起來是空的
-
-- 先確認 service 是用 `TB2_AUDIT=1` 或 `TB2_AUDIT_DIR` 啟動
-- 再看 `python -m tb2 service status` 裡的 `audit.enabled` 與目前寫入路徑
-- 用 `python -m tb2 service audit --lines 20 --event bridge.started` 驗證事件是否真的有落盤
-
-### 啟動了錯的 shell
-
-- 明確設定 `TB2_SHELL`
-- 在 Windows 上不要依賴 `SHELL`
-
-## 下一步文件
-
-- [角色導向指南](role-guides.zh-TW.md)
-- [平台相容矩陣](platforms/compatibility-matrix.zh-TW.md)
-- [Transport 範例](transport-examples.zh-TW.md)
-- [MCP 用戶端設定](mcp-client-setup.zh-TW.md)
-- [安全姿態](security-posture.zh-TW.md)
+繼續閱讀：[角色指南](role-guides.zh-TW.md)、[MCP 設定](mcp-client-setup.zh-TW.md)、[驗證狀態](validation-status.zh-TW.md)。

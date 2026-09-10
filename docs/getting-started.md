@@ -1,178 +1,85 @@
 # Getting Started
 
-This is the shortest reliable path from a fresh checkout to a useful `tb2` session.
+[繁體中文](getting-started.zh-TW.md) · [Documentation](README.md)
 
 ## 1. Install
 
-### Linux / macOS
+Requires Python 3.9 or later. Run from the root of a project checkout.
 
-```bash
-pip install -e ".[dev]"
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[windows]"
 ```
 
-### Windows
+If policy prevents activation, use `.\.venv\Scripts\python.exe` instead of `python` below; no execution-policy change is necessary.
+
+Linux, macOS, or WSL:
 
 ```bash
-pip install -e ".[windows,dev]"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 ```
 
-## 2. Run `tb2 doctor`
+For development tests, also install `python -m pip install -e ".[dev]"`. Each AI client manages its own installation, authentication, model access, and usage charges.
+
+## 2. Inspect local capability
 
 ```bash
-python -m tb2 doctor
 python -m tb2 doctor --json
 python -m tb2 profiles --verbose
 ```
 
-Check these sections first:
+Windows can use interactive process with pywinpty. POSIX can use tmux or process. Pipe is for non-interactive stdin/stdout and does not provide a TUI. Client discovery is not proof of provider authentication or successful collaboration.
 
-- `Readiness`: whether backend, transport, and first-class client setup are actually ready
-- `Validation snapshot`: what TB2 behavior was runtime-validated vs simulated in tests
-- `Backends`: which backend can actually run on this machine
-- `Supported CLI tools`: which first-class clients are available in `PATH`
-- `recommended_backend`: what TB2 will choose by default
-
-Use `doctor --json` when another agent or script needs stable machine-readable diagnostics. Use `profiles --verbose` when you need the support matrix and backend recommendation table in a human-readable form.
-
-Typical healthy output now looks like:
-
-```text
-Readiness:
-  - backend=ready  clients=ready  transport=ready
-Validation snapshot:
-  - linux_runtime: executed locally  full pytest suite passed in the current workspace
-Next steps:
-  - Use `tmux` as the default backend on this machine.
-  - Run `python -m tb2 init --session demo` before opening GUI, broker, or MCP flows.
-```
-
-## 3. Pick the backend path
-
-### Standard default policy
-
-- Windows: `process` if `pywinpty` is available, else `tmux` through WSL, else `pipe`
-- Linux / macOS / WSL: `tmux` if installed, else `process`
-
-### Practical rule
-
-- choose `tmux` when you want the most stable operator view on POSIX
-- choose `process` when you need an interactive path without a multiplexer
-- choose `pipe` only for non-interactive tools
-
-## 4. Start your first session in 5 minutes
-
-### CLI-first session
-
-```bash
-python -m tb2 init --session demo
-python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
-```
-
-On Windows `process` or `pipe`, pane ids look like `demo:a` and `demo:b`.
-
-### First GUI session
+## 3. Open one control plane
 
 ```bash
 python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-Open `http://127.0.0.1:3189/`, then:
+Console: http://127.0.0.1:3189/
+MCP: http://127.0.0.1:3189/mcp
 
-1. Start with `Quick Pairing`.
-2. Click `Init Session`.
-3. Click `Start Collaboration`.
-4. Switch to `Approval Gate` if you want human review before delivery.
-5. If the status card shows the auto-forward guard as blocked, clear the pending queue through review to re-arm delivery.
+If a server already runs, open its URL instead of starting another server on that port. GUI and MCP share the server. Process/pipe panes must be operated through the runtime that owns them; a standalone CLI init does not make its in-memory state available to the next CLI process.
 
-If you intentionally bind the GUI beyond loopback, add `--allow-remote` and treat that deployment as `private-network-experimental`.
+## 4. First collaboration
 
-### First MCP session
+1. Select the backend and Host/Guest profiles; create a pane pair with Init Session.
+2. Before Start Collaboration, choose Approval Gate and keep both auto-forward and intervention enabled. In TB2, auto_forward enables MSG parsing; intervention routes parsed messages to review before delivery.
+3. Start configured clients in the assigned panes. Have the operator review login, trust, or model-setting requests.
+4. Send one bounded, non-destructive task.
+5. Have the Guest emit one MSG: line. Inspect its destination and content, then approve or reject.
+6. Capture the destination pane to verify actual delivery; queued or success notifications alone are insufficient.
+7. Stop the workstream and confirm its owned runtime is cleaned up.
+
+```text
+MSG: summarize the failing assertion in tests/test_server.py
+```
+
+Use one request per line. Ordinary terminal output is not a handoff. Keep intervention enabled for new clients; disable review only after qualification.
+
+## 5. MCP and operations
+
+For a server without browser opening:
 
 ```bash
 python -m tb2 server --host 127.0.0.1 --port 3189
 ```
 
-Register the MCP endpoint in your client, then use this sequence:
+After client registration, use doctor, terminal_init, bridge_start, room_poll, and intervention_list, then approve/reject and capture the destination. Keep backend-instance and pane ownership consistent. Use workstream_stop for owned-workstream cleanup; confirm the scope reported by bridge_stop when stopping only a bridge.
 
-1. `doctor`
-2. `terminal_init`
-3. `bridge_start`
-4. `room_poll` or room stream
-5. `room_post` / `terminal_send`
-6. `status`
-7. `audit_recent` when you need persisted incident context
-8. `bridge_stop`
+For persisted audit, set TB2_AUDIT=1 before launch. Durable text defaults to mask; full text requires explicit opt-in. Service snapshots do not guarantee restoration of live terminals, subscriptions, or pending queues. See [Control Console](control-console.md) and [Security Posture](security-posture.md).
 
-Non-loopback MCP binding now requires explicit acknowledgment:
+## Troubleshooting
 
-```bash
-python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
-```
+- Windows process unavailable: check the windows extra and active Python environment.
+- Stale room stream: reconnect transport or use room_poll before diagnosing the bridge.
+- Pending but no delivery: inspect review state and destination capture before resending.
+- Unexpected shell: inspect TB2_SHELL; Windows does not rely on SHELL.
+- No client response: separate client/provider readiness from TB2 transport.
 
-### First audit-enabled service session
-
-```bash
-TB2_AUDIT=1 python -m tb2 service start --host 127.0.0.1 --port 3189
-python -m tb2 service status
-python -m tb2 service audit --lines 10
-```
-
-Use this path when you want durable operator and bridge events from the first run.
-It does not make the full live session durable: service-managed restart can carry forward persisted workstream snapshots as a handoff aid, but live terminal processes, room subscriptions, bridge processes, and pending interventions still require operator recovery.
-
-If the service host is not loopback, add `--allow-remote` and make sure external network controls carry the actual trust boundary.
-
-## 5. Understand the handoff contract
-
-Cross-agent handoffs should use `MSG:`.
-
-Example:
-
-```text
-MSG: summarize the failing assertion in tests/test_server.py
-MSG: ready for review on the shell fallback patch
-```
-
-Rules:
-
-- one actionable request per `MSG:` line
-- no multi-paragraph payloads
-- use `intervention` when a forwarded line should not be delivered immediately
-- treat `source` metadata as the machine-readable signal for where an event came from; do not infer trust from `author` alone
-
-## 6. Common first-run failures
-
-### `process` unavailable on Windows
-
-- install `pywinpty`
-- or use the WSL `tmux` path
-
-### `tmux` missing on Linux / macOS
-
-- install `tmux`
-- or use the `process` backend instead
-
-### Room stream looks stale
-
-- reconnect transport in the GUI
-- or fall back to `room_poll`
-- only restart the bridge after transport has been ruled out
-
-### Audit looks empty
-
-- confirm the service was started with `TB2_AUDIT=1` or `TB2_AUDIT_DIR`
-- check `python -m tb2 service status` for `audit.enabled` and the active file path
-- use `python -m tb2 service audit --lines 20 --event bridge.started` to verify persisted writes
-
-### Wrong shell starts
-
-- set `TB2_SHELL`
-- do not rely on `SHELL` on Windows
-
-## Next docs
-
-- [Role Guides](role-guides.md)
-- [Platform Compatibility Matrix](platforms/compatibility-matrix.md)
-- [Transport Examples](transport-examples.md)
-- [MCP Client Setup](mcp-client-setup.md)
-- [Security Posture](security-posture.md)
+Next: [Role Guides](role-guides.md), [MCP setup](mcp-client-setup.md), [Validation Status](validation-status.md).

@@ -38,7 +38,7 @@ _IS_WINDOWS = platform.system() == "Windows"
 
 @dataclass
 class PaneBuffer:
-    """Ring buffer that accumulates output lines from a process."""
+    """Ring buffer for completed lines plus the current terminal rendering."""
 
     lines: Deque[str] = field(default_factory=lambda: deque(maxlen=5000))
     lock: threading.Lock = field(default_factory=threading.Lock)
@@ -60,6 +60,9 @@ class PaneBuffer:
     def get_recent(self, n: int = 200) -> List[str]:
         with self.lock:
             items = list(self.lines)
+            partial = _ANSI_RE.sub("", self._partial)
+            if partial:
+                items.append(partial)
             return items[-n:] if len(items) > n else items
 
 

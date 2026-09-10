@@ -8,7 +8,7 @@ description: 2026-04-26 terminal-bridge-v2 8-hour project-development-loop state
 
 ## 啟動 checkpoint
 
-- repo：`/home/miles/dev2/projects/terminal-bridge-v2`
+- repo：`terminal-bridge-v2 (repository root)`
 - branch：`main`
 - 啟動 checkpoint commit：`5b63a10`
 - 本輪時間邊界：`2026-04-27 05:43 CST (+08:00)`

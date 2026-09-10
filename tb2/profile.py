@@ -39,12 +39,12 @@ class ToolProfile:
     def parse_message(self, line: str) -> Optional[str]:
         """If *line* contains a forwarding message, return its content."""
         s = strip_ansi(line).strip()
-        idx = s.find(self.msg_prefix)
-        if idx < 0:
+        if s.startswith(self.msg_prefix):
+            msg = s[len(self.msg_prefix):].strip()
+            return msg or None
+        if not any(s.startswith(f"{marker} {self.msg_prefix}") for marker in ("•", "⏺")):
             return None
-        if idx > 0 and not s[idx - 1].isspace():
-            return None
-        msg = s[idx + len(self.msg_prefix):].strip()
+        msg = s[2 + len(self.msg_prefix):].strip()
         return msg or None
 
 

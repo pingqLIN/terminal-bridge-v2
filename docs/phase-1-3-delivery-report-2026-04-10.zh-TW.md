@@ -37,18 +37,18 @@ description: 2026-04-10 terminal-bridge-v2 Phase 1-3 交付報告，涵蓋 works
 
 ### 已完成
 
-- 新增 [workstream.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/workstream.py)，正式定義 `workstream_id`、`BackendSpec`、`WorkstreamRecord`
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在會：
+- 新增 [workstream.py](../tb2/workstream.py)，正式定義 `workstream_id`、`BackendSpec`、`WorkstreamRecord`
+- [server.py](../tb2/server.py) 現在會：
   - 在 `bridge_start` 建立正式 workstream record
   - 在 `status()` 回傳 `workstreams` 與 `fleet` summary
   - 支援 `workstream_id` 作為 fleet-safe targeting
   - 在 service-managed 啟動時，從 persisted snapshot restore workstreams
-- [service.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/service.py) 現在會：
+- [service.py](../tb2/service.py) 現在會：
   - 對 service mode 報告 `service_state_snapshot` / `best_effort_restore`
   - 持久化 workstream snapshot
   - 回傳 `workstream_count`
-- [intervention.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/intervention.py) 新增 pending snapshot / restore 能力
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 現在會：
+- [intervention.py](../tb2/intervention.py) 新增 pending snapshot / restore 能力
+- [gui.py](../tb2/gui.py) 現在會：
   - 用真實 `status.workstreams` 渲染 fleet sidebar
   - 維持 `selectedWorkstreamId`
   - 讓 selected workstream 驅動 pending/status/audit
@@ -69,7 +69,7 @@ description: 2026-04-10 terminal-bridge-v2 Phase 1-3 交付報告，涵蓋 works
 
 - restore 目前屬 `best_effort`，不是嚴格 transactional recovery
 - degraded workstream 目前能被觀察與選取，但還沒有專屬修復工具
-- GUI 雖已接上真實 fleet data，但 [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 仍是大型單檔，後續仍值得繼續拆分
+- GUI 雖已接上真實 fleet data，但 [gui.py](../tb2/gui.py) 仍是大型單檔，後續仍值得繼續拆分
 
 ## 5. Stage Completion Report
 
@@ -96,7 +96,7 @@ description: 2026-04-10 terminal-bridge-v2 Phase 1-3 交付報告，涵蓋 works
 
 - 先做 `Phase 4`
 - 再收斂 `Phase 5`
-- 若要繼續優化，優先拆 [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 的 template / state / relation-view 區塊
+- 若要繼續優化，優先拆 [gui.py](../tb2/gui.py) 的 template / state / relation-view 區塊
 
 ### Outside Review
 

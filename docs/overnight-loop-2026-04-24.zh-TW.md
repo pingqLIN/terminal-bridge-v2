@@ -8,7 +8,7 @@ description: 2026-04-24 project-development-loop overnight maintenance state and
 
 ## 目前 checkpoint
 
-- repo：`/home/miles/dev2/projects/terminal-bridge-v2`
+- repo：`terminal-bridge-v2 (repository root)`
 - branch：`main`
 - checkpoint commit：`e609875 Add governance projection status surfaces`
 - 狀態：`main` ahead of `origin/main` by 5 commits after checkpoint

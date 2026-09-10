@@ -16,11 +16,11 @@
 
 本 GUI 的設計與流程基線來自：
 
-- [.impeccable.md](/home/miles/dev2/projects/terminal-bridge-v2/.impeccable.md)
-- [gui-clarify-improvement-plan.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/gui-clarify-improvement-plan.zh-TW.md)
-- [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)
-- [docs/control-console.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/control-console.md)
-- [docs/use-cases.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/use-cases.md)
+- [.impeccable.md](../.impeccable.md)
+- [gui-clarify-improvement-plan.zh-TW.md](gui-clarify-improvement-plan.zh-TW.md)
+- [README.md](../README.md)
+- [docs/control-console.md](control-console.md)
+- [docs/use-cases.md](use-cases.md)
 
 核心原則：
 

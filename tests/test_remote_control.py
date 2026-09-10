@@ -200,10 +200,10 @@ class TestRemoteControlMcp:
     def _shell_handoff_command() -> str:
         shell_name = os.path.basename(default_shell()).lower()
         if shell_name in {"pwsh", "pwsh.exe", "powershell", "powershell.exe"}:
-            return "cmd /c echo agent^> MSG:echo REMOTE_OK"
+            return "cmd /c echo MSG:echo REMOTE_OK"
         if shell_name in {"cmd", "cmd.exe"}:
-            return "echo agent^> MSG:echo REMOTE_OK"
-        return "printf 'agent> MSG:echo REMOTE_OK\\n'"
+            return "echo MSG:echo REMOTE_OK"
+        return "printf 'MSG:echo REMOTE_OK\\n'"
 
     def test_status_reports_memory_only_restart_contract(self, mcp_server):
         base_url = mcp_server["base_url"]
@@ -356,26 +356,6 @@ class TestRemoteControlMcp:
             "enter": True,
         })
 
-        time.sleep(1.2)
-
-        room = _tool(base_url, "room_poll", {
-            "room_id": "mcp-forward-room",
-            "after_id": 0,
-            "limit": 50,
-        })
-        pane_b = _tool(base_url, "terminal_capture", {
-            "target": init["pane_b"],
-            "backend": "pipe",
-            "backend_id": "mcp-forward-check",
-            "lines": 50,
-        })
-
-        forwarded = [
-            msg for msg in room["messages"]
-            if msg["author"] == "bridge" and msg["text"] == "[forwarded A->mcp-forward-check:b] echo REMOTE_OK"
-        ]
-        outputs = [line for line in pane_b["lines"] if line == "REMOTE_OK"]
-
         assert start == {
             "workstream_id": "mcp-forward-bridge",
             "bridge_id": "mcp-forward-bridge",
@@ -384,6 +364,31 @@ class TestRemoteControlMcp:
             "parent_workstream_id": None,
         }
         assert sent == {"ok": True}
+
+        forwarded = []
+        outputs = []
+        deadline = time.time() + 5.0
+        while time.time() < deadline:
+            room = _tool(base_url, "room_poll", {
+                "room_id": "mcp-forward-room",
+                "after_id": 0,
+                "limit": 50,
+            })
+            pane_b = _tool(base_url, "terminal_capture", {
+                "target": init["pane_b"],
+                "backend": "pipe",
+                "backend_id": "mcp-forward-check",
+                "lines": 50,
+            })
+            forwarded = [
+                msg for msg in room["messages"]
+                if msg["author"] == "bridge" and msg["text"] == "[forwarded A->mcp-forward-check:b] echo REMOTE_OK"
+            ]
+            outputs = [line for line in pane_b["lines"] if line == "REMOTE_OK"]
+            if forwarded and outputs:
+                break
+            time.sleep(0.05)
+
         assert len(forwarded) == 1
         assert outputs == ["REMOTE_OK"]
 

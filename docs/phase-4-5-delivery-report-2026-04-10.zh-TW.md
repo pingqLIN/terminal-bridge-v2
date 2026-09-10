@@ -36,34 +36,34 @@ description: 2026-04-10 terminal-bridge-v2 Phase 4-5 交付報告，涵蓋 secur
 
 ### 已完成
 
-- 新增 [security.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/security.py)，正式定義 bind scope、support tier、remote acknowledgment 與 machine-readable security posture
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在會：
+- 新增 [security.py](../tb2/security.py)，正式定義 bind scope、support tier、remote acknowledgment 與 machine-readable security posture
+- [server.py](../tb2/server.py) 現在會：
   - 對 non-loopback bind 套用 `--allow-remote` / `TB2_ALLOW_REMOTE=1` guardrail
   - 在 `status`、`/healthz`、`/mcp` 暴露 machine-readable `security`
-- [service.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/service.py) 現在會：
+- [service.py](../tb2/service.py) 現在會：
   - 在 `start` / `restart` 流程保存 `allow_remote`
   - 在 `runtime_contract()` 回報 `security_posture`
-- [cli.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/cli.py) 現在支援：
+- [cli.py](../tb2/cli.py) 現在支援：
   - `server --allow-remote`
   - `gui --allow-remote`
   - `service start --allow-remote`
   - `service restart --allow-remote`
-- [support.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/support.py) 的 `doctor_report()` 現在會公開：
+- [support.py](../tb2/support.py) 的 `doctor_report()` 現在會公開：
   - `security_posture`
   - `adoption.support_tiers`
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 現在會在 status badge 顯示 security tier，並在 status note 優先顯示 posture warning
-- [pyproject.toml](/home/miles/dev2/projects/terminal-bridge-v2/pyproject.toml) 現在補上 README、classifiers、keywords、project URLs
+- [gui.py](../tb2/gui.py) 現在會在 status badge 顯示 security tier，並在 status note 優先顯示 posture warning
+- [pyproject.toml](../pyproject.toml) 現在補上 README、classifiers、keywords、project URLs
 - release-facing 文件已對齊：
-  - [security-posture.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/security-posture.zh-TW.md)
-  - [security-posture.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/security-posture.md)
-  - [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)
-  - [README.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/README.zh-TW.md)
-  - [getting-started.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/getting-started.md)
-  - [getting-started.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/getting-started.zh-TW.md)
-  - [faq.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/faq.md)
-  - [faq.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/faq.zh-TW.md)
-  - [SECURITY.md](/home/miles/dev2/projects/terminal-bridge-v2/SECURITY.md)
-  - [SUPPORT.md](/home/miles/dev2/projects/terminal-bridge-v2/SUPPORT.md)
+  - [security-posture.zh-TW.md](security-posture.zh-TW.md)
+  - [security-posture.md](security-posture.md)
+  - [README.md](../README.md)
+  - [README.zh-TW.md](../README.zh-TW.md)
+  - [getting-started.md](getting-started.md)
+  - [getting-started.zh-TW.md](getting-started.zh-TW.md)
+  - [faq.md](faq.md)
+  - [faq.zh-TW.md](faq.zh-TW.md)
+  - [SECURITY.md](../SECURITY.md)
+  - [SUPPORT.md](../SUPPORT.md)
 
 ### 驗證
 
@@ -104,7 +104,7 @@ description: 2026-04-10 terminal-bridge-v2 Phase 4-5 交付報告，涵蓋 secur
 
 - 若要繼續開發，優先切 guardrail / governance 深化
 - 若要繼續優化 adoption，優先補 release notes 與示範部署範本
-- 若要繼續整理程式，優先拆 [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py)
+- 若要繼續整理程式，優先拆 [gui.py](../tb2/gui.py)
 
 ### Outside Review
 

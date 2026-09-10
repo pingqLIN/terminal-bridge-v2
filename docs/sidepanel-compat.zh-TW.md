@@ -113,13 +113,13 @@ TB2 將 sidepanel 相容路徑與長生命週期 Host/Guest bridge 解耦。
 
 這台機器上已觀察到的失敗樣態：
 
-- 互動式 WSL shell 解析到 `/home/miles/.local/bin/codex`
+- 互動式 WSL shell 解析到 `/absolute/path/to/codex`
 - `/health` 回傳 `backendReady=true` 但 `codexAvailable=false`
 - 於是 `ready=false`
 
 建議恢復順序：
 
-1. 在 `/etc/systemd/system/tb2.service` 設定 `TB2_SIDEPANEL_CODEX=/home/miles/.local/bin/codex`，或把 service 的 `PATH` 擴充到同一個目錄
+1. 在 `/etc/systemd/system/tb2.service` 設定 `TB2_SIDEPANEL_CODEX=/absolute/path/to/codex`，或把 service 的 `PATH` 擴充到同一個目錄
 2. 重新啟動 service：`systemctl restart tb2.service`
 3. 驗證 `curl http://127.0.0.1:3189/health` 是否回傳 `codexAvailable=true` 與 `ready=true`
 
@@ -155,3 +155,5 @@ TB2 將 sidepanel 相容路徑與長生命週期 Host/Guest bridge 解耦。
 以下是目前主控台預覽（共用截圖資源）：
 
 <img src="images/control-center.png" alt="terminal-bridge-v2 control console preview" width="960">
+
+> /absolute/path/to/codex 是去識別化範例；請替換成實際 executable 的絕對路徑。

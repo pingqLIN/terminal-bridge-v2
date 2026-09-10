@@ -2,6 +2,8 @@
 
 Use this document when you already know `tb2` is the right tool and now need to know how each role should operate inside the same control plane.
 
+![Agents arrive at the TB2 classroom](images/kindergarten/01-welcome.png)
+
 ## Role Index
 
 | Role | Primary Goal | Recommended Surface | Read This Section |
@@ -94,6 +96,8 @@ MSG: ready for review on the backend fallback patch
 - Do not ask the host to infer intent from a long transcript when a short request would be clearer.
 
 ## Human Operator
+
+![The human operator reviews the next change to a shared build](images/kindergarten/03-review-class.png)
 
 ### Responsibilities
 

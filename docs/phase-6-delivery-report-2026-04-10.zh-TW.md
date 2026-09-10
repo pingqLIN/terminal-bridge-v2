@@ -37,24 +37,24 @@ description: 2026-04-10 terminal-bridge-v2 Phase 6 交付報告，涵蓋 per-wor
 
 ### 已完成
 
-- [workstream.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/workstream.py) 現在正式提供：
+- [workstream.py](../tb2/workstream.py) 現在正式提供：
   - `health.state`: `ok` / `warn` / `critical`
   - `health.alerts`
   - `health.escalation`: `observe` / `review` / `intervene`
   - `last_activity_at` 與 `silent_threshold_seconds`
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在會：
+- [server.py](../tb2/server.py) 現在會：
   - 在 room / approval / interrupt / terminal activity 時更新 workstream activity
   - 在 `status()` 回傳每條 workstream 的 health model
   - 在 `fleet` 回傳 `healthy` / `warn` / `critical` / `alerts` / `review` / `intervene` 聚合
   - 讓 `audit_recent` 支援 `workstream_id`
-- [gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py) 現在會：
+- [gui.py](../tb2/gui.py) 現在會：
   - 在 fleet sidebar 顯示 workstream health 與 escalation
   - 在 status badge 顯示 selected workstream 的 health / escalation
   - 在 status note 優先顯示 selected workstream 的 alert summary
 - 對外說明已補到：
-  - [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)
-  - [README.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/README.zh-TW.md)
-  - [CHANGELOG.md](/home/miles/dev2/projects/terminal-bridge-v2/CHANGELOG.md)
+  - [README.md](../README.md)
+  - [README.zh-TW.md](../README.zh-TW.md)
+  - [CHANGELOG.md](../CHANGELOG.md)
 
 ### 驗證
 

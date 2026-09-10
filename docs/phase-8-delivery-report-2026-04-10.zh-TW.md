@@ -38,7 +38,7 @@ description: 2026-04-10 terminal-bridge-v2 Phase 8 交付報告，涵蓋 workstr
 
 ### 已完成
 
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在新增：
+- [server.py](../tb2/server.py) 現在新增：
   - `workstream_stop`
   - `fleet_reconcile`
   - `status.reconciliation`
@@ -50,14 +50,14 @@ description: 2026-04-10 terminal-bridge-v2 Phase 8 交付報告，涵蓋 workstr
   - workstream `topology.orphaned`
 - workstream health 現在會在 runtime topology 失聯時補上：
   - `orphaned_workstream`
-- [audit.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/audit.py) 現在新增：
+- [audit.py](../tb2/audit.py) 現在新增：
   - `workstream.stopped`
   - `fleet.reconciled`
 - 對外說明已補到：
-  - [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)
-  - [README.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/README.zh-TW.md)
-  - [CHANGELOG.md](/home/miles/dev2/projects/terminal-bridge-v2/CHANGELOG.md)
-  - [project-status-report-2026-04-10.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/project-status-report-2026-04-10.zh-TW.md)
+  - [README.md](../README.md)
+  - [README.zh-TW.md](../README.zh-TW.md)
+  - [CHANGELOG.md](../CHANGELOG.md)
+  - [project-status-report-2026-04-10.zh-TW.md](project-status-report-2026-04-10.zh-TW.md)
 
 ### 驗證
 

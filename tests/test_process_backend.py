@@ -1,5 +1,6 @@
 """Tests for tb2.process_backend — ProcessBackend, PaneBuffer, SpawnSpec."""
 
+import os
 from collections import deque
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -43,6 +44,14 @@ class TestPaneBuffer:
         buf = PaneBuffer()
         buf.feed("a\nb\n")
         assert buf.get_recent(100) == ["a", "b"]
+
+    def test_get_recent_includes_current_tui_render_without_newline(self):
+        buf = PaneBuffer()
+        buf.feed("completed\ncurrent TUI render")
+        assert buf.get_recent(10) == ["completed", "current TUI render"]
+
+        buf.feed("\n")
+        assert buf.get_recent(10) == ["completed", "current TUI render"]
 
     def test_ring_buffer_bounded(self):
         buf = PaneBuffer(lines=deque(maxlen=3))
@@ -328,6 +337,7 @@ class TestProcessBackend:
         assert error.value.diagnostic.retryable is False
         assert isinstance(error.value.original, PermissionError)
 
+    @pytest.mark.skipif(os.name == "nt", reason="pty is unavailable on Windows")
     @patch("tb2.process_backend.subprocess.Popen", side_effect=RuntimeError("bad argv"))
     @patch("pty.openpty", return_value=(10, 11))
     @patch("tb2.process_backend.os.close")

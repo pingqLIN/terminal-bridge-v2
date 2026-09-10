@@ -1,357 +1,100 @@
-<h1 align="center">terminal-bridge-v2</h1>
-
 <p align="center">
-  <strong>給 Host AI、Guest AI 與 Human Operator 在真實 terminal 協作時共用的一套本地控制面。</strong>
+  <img src="docs/images/kindergarten/05-readme-banner.png" alt="TB2：AI 角色在小橋上交接訊息，由人類操作員監看" width="100%">
 </p>
 
-<p align="center">
-  <a href="https://github.com/pingqLIN/terminal-bridge-v2/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/pingqLIN/terminal-bridge-v2/ci.yml?branch=main&label=ci" alt="CI"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-%3E%3D3.9-blue.svg" alt="Python >= 3.9"></a>
-  <img src="https://img.shields.io/badge/MCP-JSON--RPC-orange.svg" alt="MCP JSON-RPC">
-  <img src="https://img.shields.io/badge/tested-linux%20runtime-green.svg" alt="Tested on Linux runtime">
-</p>
+# terminal-bridge-v2
 
-<p align="center">
-  <a href="README.md">English</a> •
-  <a href="#為什麼是-tb2">為什麼是 TB2</a> •
-  <a href="#主要工作流">主要工作流</a> •
-  <a href="#依角色選入口">依角色選入口</a> •
-  <a href="#平台快照">平台快照</a> •
-  <a href="#文件地圖">文件地圖</a>
-</p>
+**讓 AI 在真實終端協作，讓交接看得見、讓人能參與審核的本地控制面。**
 
-<p align="center">
-  <img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="860">
-</p>
+[English](README.md) · [快速開始](docs/getting-started.zh-TW.md) · [文件入口](docs/README.zh-TW.md) · [驗證狀態](docs/validation-status.zh-TW.md)
 
-## 方向更新
+TB2 把 Host AI、Guest AI 與人類操作員放在同一個工作流程：用 bridge 連接終端 pane，在 room 觀察訊息，並在轉送前審核交接內容。CLI、瀏覽器控制台與本地 MCP endpoint 都能操作同一套控制面。
 
-截至 `2026-04-22`，TB2 的主線方向已正式收斂為：local-first、operator-grade、面向 terminal-native multi-agent workflow 的治理層。
+## 可以做什麼
 
-這代表：
-
-- TB2 繼續聚焦 Host / Guest / Human 的 orchestration、review、audit 與 workstream governance
-- TB2 不再追逐或複製 Codex 原生 remote-control / computer-use 產品面
-- Windows 與 WSL 被視為正式雙軌 operator 模型：
-  - native Windows 負責日常低摩擦使用
-  - WSL `tmux` 負責最穩定的互動協作 loop
-- 另有一條獨立的外部 runtime / workflow 實驗線，專門探索這個雙軌模型
-- `codex_bridge_service` 視為已關閉的 Codex 原生遙控附屬原型，不再屬於 TB2 主線
-
-## 為什麼是 TB2
-
-`tb2` 是一個本地 orchestration layer，給想要保留真實 terminal 工作流、又不想失去人工控制的團隊使用。
-
-當你要把 Host AI、Guest AI 與 Human Operator 放進同一套可觀測的 room / bridge 模型，同時還要保有 room-level visibility、approval gate 與 cross-platform control 時，TB2 就是那個控制面。
-
-同一套控制面可以從這些入口操作：
-
-- CLI
-- 瀏覽器控制台
-- 支援 MCP 的 client，例如 Codex CLI、Claude Code、Gemini CLI
-
-TB2 特別適合這類情境：
-
-- 穩定的 handoff 契約
-- 人工審核路徑
-- room 與 bridge 的觀測能力
-- 能適配 Windows、macOS、Linux、WSL 的 backend 策略
-
-## 定位
-
-目前比較適合把 TB2 視為：
-
-- local-first、high-trust 的 operator tooling
-- 給已熟悉 terminal-native AI workflow 團隊使用的實驗性 operator control surface
-- 面向 terminal-native workstream 的治理層，而不是通用 remote-control 替代品
-
-目前不適合把 TB2 視為：
-
-- 可對外公開暴露的 remote control plane
-- 具備強制 approval / authorization 邊界的系統
-
-## 支援分級
-
-| Tier | 狀態 | 適用情境 |
-| --- | --- | --- |
-| `local-first-supported` | supported | 同一台受信任主機上的 loopback operator workflow |
-| `private-network-experimental` | experimental | 有明確 `--allow-remote` 確認，且外部另有控制的私網存取 |
-| `public-edge-unsupported` | unsupported | 直接對外網暴露，或期待 TB2 自己就是硬 auth 邊界 |
-
-## 治理方向
-
-TB2 的治理方向正往「分層 policy 模型」收斂，避免把平台差異、model 差異與任務模式差異散落在文件與 operator 習慣裡。
-
-目前預期的層級順序是：
-
-1. `base`
-2. `model`
-3. `environment`
-4. `instruction_profile`
-
-近期目標不是直接自動改寫 runtime，而是先做成 simulation-first、report-first、no-mutation 的治理解析面，能明確說明：
-
-- 哪些 layer 有命中
-- 目前推導出的 effective config 是什麼
-- 每個生效 key 最後來自哪一層
-
-這裡的 no-mutation 是指未來分層治理 resolver 的 rollout 姿態，並不取代現有可變動的 per-workstream controls，例如 review pause / resume、dependency update 與 `workstream_update_policy`。
-也就是先把高層治理說清楚、可追溯，再決定哪些 key 之後能安全接進 runtime。
-
-詳情請見 [治理分層](docs/governance-layering.zh-TW.md)。
-
-目前已提供的 read-only 治理入口：
-
-- CLI：`python -m tb2 governance resolve ...`
-- CLI schema：`python -m tb2 governance schema`
-- CLI sample：`python -m tb2 governance sample`
-- MCP：`governance_resolve`
-
-repo 內也已提供正式治理契約檔：
-
-- schema：[schemas/governance.layers.schema.json](schemas/governance.layers.schema.json)
-- sample overlay：[examples/governance.layers.sample.json](examples/governance.layers.sample.json)
-
-## 為什麼團隊會選 TB2
-
-| 決策問題 | TB2 的回答 |
+| 功能 | 用途 |
 | --- | --- |
-| 你要的是真實 terminal，不是 toy chat sandbox | bridge 直接對應實際 pane、shell 與 operator workflow |
-| 你要把 Host AI、Guest AI、Human review 放進同一個 loop | rooms、interventions、approval gates 都是 first-class 能力 |
-| 你的 agents 來自不同 client | CLI、browser GUI、MCP 可以共用同一個本地 control plane |
-| 你的環境跨 Windows / macOS / Linux / WSL | backend fallback 與 shell policy 已寫進文件；Linux 為 runtime 驗證，其餘平台目前以 simulated coverage 為主 |
-| 你要 UI 好上手，但不能犧牲完整功能 | task preset 先精簡主畫面，進階控制仍完整保留 |
+| 終端擷取、傳送與中斷 | 透過 `tmux`、`process` 或非互動式 `pipe` fallback 操作既有 CLI agent |
+| `MSG:` 結構化交接 | 將可執行請求與一般終端輸出分開 |
+| 人工審核佇列 | 檢視、編輯、核准或拒絕待交接訊息 |
+| Room 與 workstream | 觀察協作、審核政策、相依關係與生命週期 |
+| 瀏覽器控制台 | 提供 Quick Pairing、Approval Gate、Mission Control 等七種情境 |
+| MCP 與訊息串流 | 從 client 呼叫工具，透過 polling、SSE 或 WebSocket 觀察訊息 |
+| 稽核與治理 | 選擇保存遮罩後的稽核事件，查閱生效政策及其來源 |
 
-## 入口怎麼選
+## 快速開始
 
-| 入口 | 最適合的情境 | 取捨 |
-| --- | --- | --- |
-| CLI | 操作者已經知道 panes、shell 與 bridge ids | 速度最快，但預設使用者已理解 TB2 內部結構 |
-| Browser GUI | human operator 需要任務 preset、review queue 與 room 可視化 | 最容易上手，但仍以本地主機操作為中心 |
-| MCP endpoint | 另一個 AI client 應該把 TB2 當 tool surface 來驅動 | 自動化最好，但前提是 client 自己已有操作介面 |
-| 混合模式：MCP + GUI | AI client 負責流程，human 負責監看與放行 | 監管能力最強，但需要同時維持兩個入口 |
+需要 Python 3.9 以上。在專案 checkout 中建立虛擬環境後安裝。
 
-## 主要工作流
+**Windows / PowerShell**
 
-| 工作流 | 最適合的場景 | 預設入口 |
-| --- | --- | --- |
-| Host + Guest coding loop | 委派式開發、review、debug | CLI 或 MCP + GUI oversight |
-| Approval-gated review | 需要 human-in-the-loop 的轉發 | GUI `Approval Gate` preset |
-| MCP control plane | Codex / Claude / Gemini orchestration | `http://127.0.0.1:3189/mcp` |
-
-瀏覽器控制台現在是任務導向 preset：
-
-- `Quick Pairing`：啟動新的 host + guest session，並直接進入 live room
-- `Approval Gate`：審核、編輯、核准待轉發 handoff
-- `MCP Operator`：監看由外部 MCP client 驅動的 workflow
-- `Diagnostics`：capture panes、interrupt agents、檢查 status
-- `Handoff Radar`：把 live room 與審核佇列並排，適合密集交接與 review
-- `Quiet Loop`：把 UI 收斂成啟動與即時協作主線，降低操作噪音
-- `Mission Control`：把拓樸、診斷與協調同時打開，適合 Host 主導的總控視角
-
-最近新增的 operator guardrail 也已經露到使用面：
-
-- room event 除了 `author` 之外，還會帶 machine-readable `source` metadata
-- bridge status 會公開 `auto_forward_guard`，讓 GUI 能明確顯示阻擋中的 delivery 狀態
-- runaway auto-forward 保護一旦觸發，TB2 會改把 delivery 切進 review，而不是繼續默默送出
-- 若要保留持久化紀錄，現在可用 `TB2_AUDIT=1` 或 `TB2_AUDIT_DIR` 啟用 JSONL audit trail，寫入 room、bridge、intervention 與 operator actions
-- 持久化 audit 檔案現在預設會在 5 MiB 時 rotation，最多保留 5 個檔案；可用 `TB2_AUDIT_MAX_BYTES` 與 `TB2_AUDIT_MAX_FILES` 覆寫
-- operator 可透過 `tb2 service audit` 或 MCP `audit_recent` 直接查看已落盤的事件
-- GUI 的 Diagnostics 卡現在也會顯示 audit 是否啟用，以及目前 room / bridge 的最近持久化事件
-- GUI audit 視窗現在也支援 event filter 與最近筆數限制，方便 incident triage
-- 持久化 audit entry 現在預設採 `mask` mode 來遮罩文字欄位；可用 `TB2_AUDIT_TEXT_MODE=full|mask|drop` 指定想要的策略，但在 service / config-driven flow 裡若要讓 `full` 真正生效，還必須先設 `TB2_AUDIT_ALLOW_FULL_TEXT=1`
-- audit client 應把 `status.audit.redaction.requested_mode`、實際生效的 `mode`、`raw_text_opt_in_acknowledged` 與 `raw_text_opt_in_blocked` 視為持久化文字策略的 machine-readable policy boundary
-- direct local run 目前仍是 `memory_only` / `state_lost`；service-managed run 則會保留 workstream snapshot 並採 `best_effort_restore` 契約，但 active room、bridge 與 pending intervention 仍不應視為完整 durable state
-- `status.runtime` 現在也會透過 `launch_mode`、`snapshot_schema_version`、`continuity` metadata 區分 direct local run、service-managed fresh start、restart 後 state lost，或 best-effort restored 的情境
-- `status.workstreams[*].health` 現在會公開每條 workstream 的 severity、alert summary、escalation 與 silent-stream 偵測
-- `status.fleet` 現在會聚合 `healthy`、`warn`、`critical` 與 escalation 數量，方便快速隔離出有風險的工作線
-- `status.governance_compliance` 現在會提供 read-only fleet governance compliance state、issue counts 與 per-workstream issue list；GUI status badge 會標出非 compliant 狀態
-- `audit_recent` 現在也可直接接受 `workstream_id`，讓治理與回溯不必再先轉成 bridge / room
-- `status.workstreams[*]` 現在也會公開 `policy` 與 `review_mode`，讓 operator 能直接分辨 `auto`、`guarded`、`paused`、`manual` 等審核狀態
-- MCP operator 現在可直接使用 `workstream_list`、`workstream_get`、`workstream_pause_review`、`workstream_resume_review`、`workstream_update_policy`，用 workstream 主語暫停審核或調整 guardrail policy，而不必回退到臨時的 bridge-only targeting
-- `status.reconciliation` 與 `status.fleet` 現在也會公開 `orphaned_rooms`、`orphaned_workstreams`、`stale_workstreams`，讓 fleet drift 不必再靠人工讀原始 room 狀態
-- MCP operator 現在也可直接使用 `workstream_stop` 與 `fleet_reconcile`，以明確 remediation flow 停止失效 workstream 或清理 orphaned runtime artifact
-- `status.workstreams[*]` 現在也會公開 `dependency` metadata，直接描述 `main` / `sub` 拓樸、child linkage 與 blocked-parent 原因
-- per-workstream `pending_limit` 現在已成為真正會強制生效的 quota guard，operator 也可透過 `workstream_update_dependency` 更新 `tier` / `parent_workstream_id`
-- GUI 的 Diagnostics 卡現在也提供 pause / resume review、stop-workstream、fleet-reconcile 等 selected-workstream remediation controls
-
-## 快速安裝
-
-### Linux / macOS
-
-```bash
-pip install -e ".[dev]"
-python -m tb2 doctor
-```
-
-### Windows
-
-```bash
-pip install -e ".[windows,dev]"
-python -m tb2 doctor
-```
-
-如果 `doctor` 顯示 Windows 的 `process` backend 不可用，請安裝 `pywinpty`，或改走 WSL `tmux` 路徑。
-
-建議的 operator 分工：
-
-- 若重點是日常低摩擦啟動與一般本機操作，優先用 native Windows
-- 若重點是最穩定的 terminal-native 協作 loop，優先用 WSL `tmux`
-
-## 五分鐘跑起第一個 Session
-
-### CLI 優先
-
-```bash
-python -m tb2 init --session demo
-python -m tb2 broker --a demo:0.0 --b demo:0.1 --profile codex --auto
-```
-
-在 Windows 上若使用 `process` backend，pane id 會是 `demo:a` 與 `demo:b`。
-
-### GUI 優先
-
-```bash
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[windows]"
+python -m tb2 doctor --json
 python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-打開 `http://127.0.0.1:3189/`。
-
-如果你是刻意要綁到 loopback 以外，請加上 `--allow-remote`，並把它視為 `private-network-experimental`。
-
-### MCP 優先
+**Linux / macOS / WSL**
 
 ```bash
-python -m tb2 server --host 127.0.0.1 --port 3189
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+python -m tb2 doctor --json
+python -m tb2 gui --host 127.0.0.1 --port 3189
 ```
 
-接著註冊：
+控制台位於 **http://127.0.0.1:3189/**。依[入門指南](docs/getting-started.zh-TW.md)選擇 backend，先啟用審核再傳送任務。AI client 需要各自安裝、登入與取得 provider 存取權；模型使用可能產生費用。
 
-- Codex CLI：`codex mcp add tb2 --url http://127.0.0.1:3189/mcp`
-- Claude Code：`claude mcp add --transport http -s user tb2 http://127.0.0.1:3189/mcp`
-- Gemini CLI：`gemini mcp add tb2 http://127.0.0.1:3189/mcp --transport http --scope user`
+若 TB2 server 已在執行，直接開啟其控制台。MCP client 使用 `http://127.0.0.1:3189/mcp`。
 
-若要綁到非 loopback 位址，現在必須明確確認：
+## 如何協作
 
-```bash
-python -m tb2 server --host 10.0.0.5 --port 3189 --allow-remote
+![AI 角色透過小橋交接一張 MSG 卡片](docs/images/kindergarten/02-msg-class.png)
+
+1. Host 準備範圍明確的任務，選擇 Guest profile。
+2. Guest 在指定 pane 工作，需要交接時輸出一行簡短的 `MSG:`。
+3. 操作員確認目的地與內容，再核准、編輯或拒絕交付。
+4. 觀察目標端實際輸出，完成後停止 workstream。
+
+```text
+MSG: summarize the failing assertion in tests/test_server.py
 ```
 
-## 相容 Adapter：Chrome Sidepanel
+配圖把 TB2 比喻成練習協作規則的幼兒園。Host 是合適 client 都可擔任的角色，人類老師代表操作員；這是工作流程的比喻，不表示 TB2 會訓練模型。詳見[圖解角色指南](docs/role-guides.zh-TW.md)。
 
-TB2 保留一條給既有 `chrome-sidepanel-ai-terminal` client 使用的窄化 localhost adapter。
-這是相容路徑，不是產品主線，也不替代完整 MCP API。
+## 目前成熟度
 
-- `GET /health`
-- `POST /v1/tb2/rooms`
-- `GET /v1/tb2/poll?roomId=<id>&afterId=<n>`
-- `POST /v1/tb2/message`
+**v0.2.0 · operator beta。** 控制功能已實作，完整跨 client 協作仍待驗收。
 
-Adapter 行為：
+- 2026 年 9 月 10 日本地非 E2E 測試：**470 passed、1 skipped、4 deselected**。
+- Native Windows ConPTY 行輸入與按鍵已有直接驗證；partial TUI capture 與訊息解析修復已有回歸測試。
+- 最新 Codex Host／Claude Code Guest 驗收尚未完成 Guest→Host 核准交付及可重複性。
+- Agy CLI 選用 Claude 模型的單次回覆與 parser 相容性檢查已通過；經 TB2 執行與完整雙向交付仍未驗證。
+- Linux／WSL 歷史實機結果、平台模擬測試與目前 Windows 證據分開記錄。
 
-- 建立 room 時會啟動一個實際 TB2 的 room 與 session
-- prompt 會透過一次性 `codex exec` 發送，並把最近的 room 對話紀錄包進 request
-- poll 會先以 `streamKey` / `replace` / `final` metadata 形式輸出串流預覽，再回傳最終 assistant 訊息
-- 瀏覽器來源仍以 loopback 為主，但在 loopback 下會同時接受 localhost 頁面與 `chrome-extension://...` 來源
+詳見[驗證狀態](docs/validation-status.zh-TW.md)與保留日期的[平台相容矩陣](docs/platforms/compatibility-matrix.zh-TW.md)。
 
-詳情請見 [Sidepanel 相容性](docs/sidepanel-compat.zh-TW.md)。
+## 使用邊界
 
-### Sidepanel 預覽截圖
+- 支援同一台可信任電腦上的本地操作，維持預設 loopback 綁定。
+- 私有網路使用屬實驗性；不支援直接暴露到網際網路。
+- 人工審核協助操作決策，但不是安全沙箱或正式認證／授權邊界。
+- 稽核保存可選擇啟用，持久化文字預設遮罩；完整文字需要明確 opt-in，且可能保存敏感內容。
+- 服務快照協助恢復，但不保證還原存活終端行程、room 訂閱或待審訊息。
+- 已提供手動服務生命週期命令；目前驗收證據尚未建立無人值守自動啟動與自動恢復能力。
 
-<img src="docs/images/control-center.png" alt="terminal-bridge-v2 control console preview" width="960">
+調整網路暴露或稽核設定前，請閱讀[安全定位](docs/security-posture.zh-TW.md)。
 
-## 依角色選入口
+## 延伸閱讀
 
-| 如果你是... | 從這裡開始 |
-| --- | --- |
-| 還在評估 TB2 是否適合團隊 | [入門指南](docs/getting-started.zh-TW.md) |
-| 要跑 host agent 或 orchestration loop | [角色導向指南](docs/role-guides.zh-TW.md#host-ai) |
-| 要設計 guest prompt 或輸出契約 | [角色導向指南](docs/role-guides.zh-TW.md#guest-ai) |
-| 要當 human reviewer 或支援操作者 | [角色導向指南](docs/role-guides.zh-TW.md#human-operator) |
-| 要接 MCP client 或 automation | [MCP 用戶端設定](docs/mcp-client-setup.zh-TW.md) |
+- [角色指南](docs/role-guides.zh-TW.md)：Host、Guest、操作員與 MCP 整合者。
+- [控制台](docs/control-console.zh-TW.md)：情境 preset 與操作功能。
+- [MCP 設定](docs/mcp-client-setup.zh-TW.md)與[傳輸範例](docs/transport-examples.zh-TW.md)。
+- [治理分層](docs/governance-layering.zh-TW.md)：生效設定及來源。
+- [專案結構](docs/repository-structure.zh-TW.md)與[貢獻指南](CONTRIBUTING.md)。
+- [支援](SUPPORT.md)、[安全通報](SECURITY.md)、[變更紀錄](CHANGELOG.md)。
 
-## 平台快照
-
-### 本 repo 目前記錄的驗證狀態
-
-- WSL2 Linux：本次 workspace 內實機驗證，`tools/release_check.py` 通過且包含完整 `pytest` suite
-- Native Linux：由共用 POSIX 行為與 backend tests 覆蓋，但目前 snapshot 沒有在非 WSL Linux host 重跑
-- Windows：以自動化測試模擬 backend fallback、shell policy、remote-control 行為與 state 路徑
-- macOS：以自動化測試模擬 POSIX shell 與 service state 行為
-- Windows-to-WSL：以 backend 測試模擬 `wsl -d <distro> -- sh -lc` 的 `tmux` 執行路徑
-
-### 目前預設 backend policy
-
-| 環境 | 預設值 |
-| --- | --- |
-| Windows | 有 `pywinpty` 就用 `process`，否則有 WSL 就退到 `tmux`，再不行退到 `pipe` |
-| Linux / macOS / WSL | 有 `tmux` 就用 `tmux`，否則退到 `process` |
-
-完整 shell、路徑、Enter 行為差異請看 [平台相容矩陣](docs/platforms/compatibility-matrix.zh-TW.md)。
-
-## 控制台
-
-瀏覽器控制台現在的原則是不再一次把所有按鈕攤平，而是依任務 preset 先過濾出主要動作。
-
-- 主要工作流按鈕固定可見
-- approval controls 只在 approval-centric 場景浮到前面
-- raw ids 與 backend mapping 仍保留在進階區塊
-- diagnostics 與 direct terminal operations 完整保留，但不再主導預設視覺層級
-- 內建語言切換支援 English 與繁體中文
-- 內建版面切換可在標準、加寬、堆疊三種排列間切換
-
-這樣對 operator 來說更易進入，同時不犧牲完整功能面。
-
-## 文件地圖
-
-### 從這裡開始
-
-- [入門指南](docs/getting-started.zh-TW.md)
-- [角色導向指南](docs/role-guides.zh-TW.md)
-- [Chrome Sidepanel 相容性](docs/sidepanel-compat.zh-TW.md)
-- [控制台指南](docs/control-console.zh-TW.md)
-- [平台行為說明](docs/platform-behavior.zh-TW.md)
-- [平台相容矩陣](docs/platforms/compatibility-matrix.zh-TW.md)
-- [標準操作手冊](docs/platforms/standard-operations.zh-TW.md)
-- [Transport 範例](docs/transport-examples.zh-TW.md)
-- [安全姿態](docs/security-posture.zh-TW.md)
-
-### 架構與整合
-
-- [AI 協作說明](docs/ai-orchestration.zh-TW.md)
-- [治理分層](docs/governance-layering.zh-TW.md)
-- [MCP 用戶端設定](docs/mcp-client-setup.zh-TW.md)
-- [Sidepanel 相容性](docs/sidepanel-compat.zh-TW.md)
-- [使用場景與工作流索引](docs/use-cases.zh-TW.md)
-- [開發執行書](docs/development-execution-plan.zh-TW.md)
-
-### 英文版
-
-- [README.md](README.md)
-- [docs/getting-started.md](docs/getting-started.md)
-- [docs/role-guides.md](docs/role-guides.md)
-- [docs/control-console.md](docs/control-console.md)
-- [docs/platform-behavior.md](docs/platform-behavior.md)
-- [docs/governance-layering.md](docs/governance-layering.md)
-- [docs/platforms/compatibility-matrix.md](docs/platforms/compatibility-matrix.md)
-- [docs/platforms/standard-operations.md](docs/platforms/standard-operations.md)
-
-## 安全提醒
-
-- 把 TB2 視為 local-first、high-trust、operator-grade 工具，不是可公開暴露的控制服務。
-- server binding 預設維持在 `127.0.0.1`。
-- 如果要綁到 non-loopback 位址，現在必須明確加上 `--allow-remote`。
-- Browser `Origin` 驗證只接受 localhost 類型來源，因此 GUI 與 MCP 存取應維持在 loopback。
-- MCP endpoint 與 browser console 都應視為敏感的本地控制面。
-- approval gate 與 `intervention` 比較像受監督 workflow 控制，不應視為安全邊界。
-- 驗證新 profile、新 client、新流程時，優先開 `intervention` mode。
-- 同一組 pane pair 只保留一個 active bridge。
-
-## 專案支援
-
-- [CONTRIBUTING.md](CONTRIBUTING.md)
-- [SUPPORT.md](SUPPORT.md)
-- [SECURITY.md](SECURITY.md)
-- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- [CHANGELOG.md](CHANGELOG.md)
+專案採用 [MIT](LICENSE)。AI 服務商名稱與風格化標誌用於辨識插圖角色，不代表背書；詳見[圖片說明](docs/images/kindergarten/README.zh-TW.md)。

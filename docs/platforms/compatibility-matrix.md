@@ -1,5 +1,7 @@
 # Platform Compatibility Matrix
 
+> Historical snapshot: the sections below retain the 2026-05-02 validation scope. References to the current environment mean that historical run. See [Validation Status](../validation-status.md) for the 2026-09-10 Windows and client acceptance summary.
+
 This document records what has been runtime-validated, what is covered by automated simulation, and what still needs native-machine confirmation.
 
 ## Validation Snapshot

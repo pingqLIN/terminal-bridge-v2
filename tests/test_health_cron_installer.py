@@ -41,17 +41,17 @@ def test_build_entry_quotes_shell_paths_and_can_skip_systemd(tmp_path):
     entry = cron.build_entry(
         _args(
             tmp_path,
-            repo=str(tmp_path / "repo with spaces"),
+            repo="/repo with spaces",
             python="/opt/tb2 python/bin/python3",
             unit="tb2 unit;bad.service",
-            log=str(tmp_path / "health logs" / "health;check.jsonl"),
-            cron_log=str(tmp_path / "cron logs" / "cron & check.log"),
-            alert=str(tmp_path / "alerts" / "alert$(bad).json"),
+            log="/var/log/tb2/health logs/health;check.jsonl",
+            cron_log="/var/log/tb2/cron logs/cron & check.log",
+            alert="/var/lib/tb2/alerts/alert$(bad).json",
             skip_systemd=True,
         )
     )
 
-    assert "/repo with spaces'" in entry
+    assert "repo with spaces'" in entry
     assert "'/opt/tb2 python/bin/python3'" in entry
     assert "'tb2 unit;bad.service'" in entry
     assert "/health;check.jsonl'" in entry

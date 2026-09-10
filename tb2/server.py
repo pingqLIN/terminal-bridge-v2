@@ -547,6 +547,15 @@ def _make_backend(args: Dict[str, Any]) -> TerminalBackend:
         return b
 
 
+def _backend_for_terminal_target(args: Dict[str, Any], target: str) -> TerminalBackend:
+    """Resolve a live pane to the backend instance that owns its process."""
+    with _bridges_lock:
+        for bridge in _bridges.values():
+            if target in (bridge.pane_a, bridge.pane_b):
+                return bridge.backend
+    return _make_backend(args)
+
+
 def _get_bridge(bridge_id: str) -> Optional[Bridge]:
     with _bridges_lock:
         return _bridges.get(bridge_id)
@@ -1422,8 +1431,8 @@ def handle_workstream_create(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_terminal_capture(args: Dict[str, Any]) -> Dict[str, Any]:
-    backend = _make_backend(args)
     target = str(args["target"])
+    backend = _backend_for_terminal_target(args, target)
     try:
         lines = _parse_int(args.get("lines"), name="lines", default=200, minimum=1, maximum=_MAX_CAPTURE_LINES)
     except ValueError as exc:
@@ -1433,8 +1442,8 @@ def handle_terminal_capture(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_terminal_send(args: Dict[str, Any]) -> Dict[str, Any]:
-    backend = _make_backend(args)
     target = str(args["target"])
+    backend = _backend_for_terminal_target(args, target)
     text = str(args["text"])
     enter = bool(args.get("enter", False))
     backend.send(target, text, enter=enter)

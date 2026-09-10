@@ -63,9 +63,14 @@ class TestToolProfile:
         p = ToolProfile(name="test", msg_prefix="MSG:")
         assert p.parse_message("MSG:hello") == "hello"
 
-    def test_parse_message_mid_line_after_prompt(self):
+    def test_parse_message_rejects_mid_line_prompt_echo(self):
         p = ToolProfile(name="test", msg_prefix="MSG:")
-        assert p.parse_message("agent> MSG: hello") == "hello"
+        assert p.parse_message("agent> MSG: hello") is None
+
+    def test_parse_message_accepts_known_agent_output_marker(self):
+        p = ToolProfile(name="test", msg_prefix="MSG:")
+        assert p.parse_message("• MSG: hello") == "hello"
+        assert p.parse_message("⏺ MSG: hello") == "hello"
 
     def test_parse_message_strips_ansi_prefix(self):
         p = ToolProfile(name="test", msg_prefix="MSG:")

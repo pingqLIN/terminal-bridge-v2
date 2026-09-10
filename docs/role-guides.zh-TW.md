@@ -2,6 +2,8 @@
 
 這份文件用來回答一個問題：同一套 `tb2` 控制面中，不同角色各自該怎麼操作。
 
+![AI 角色到 TB2 教室報到](images/kindergarten/01-welcome.png)
+
 ## 角色索引
 
 | 角色 | 主要目標 | 建議入口 | 請讀這節 |
@@ -92,6 +94,8 @@ MSG: ready for review on the backend fallback patch
 - 不要丟長篇 transcript 讓 host 自己猜意圖。
 
 ## Human Operator
+
+![修改共享作品前，由人類操作員審核](images/kindergarten/03-review-class.png)
 
 ### 職責
 

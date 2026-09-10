@@ -688,6 +688,31 @@ class TestTerminalHandlers:
         assert result["ok"] is True
         mock_backend.send.assert_called_once_with("test:0.0", "echo hello", enter=True)
 
+    def test_terminal_handlers_reuse_live_bridge_backend(self):
+        bridge_backend = MagicMock()
+        bridge_backend.capture_both.return_value = ([], [])
+        bridge_backend.capture.return_value = ["ready"]
+        with patch.object(server_mod, "_make_backend", return_value=bridge_backend) as mock_factory:
+            started = server_mod.handle_bridge_start({
+                "pane_a": "live:a",
+                "pane_b": "live:b",
+                "bridge_id": "live-bridge",
+                "workstream_id": "live-workstream",
+            })
+            capture = server_mod.handle_terminal_capture({"target": "live:a"})
+            sent = server_mod.handle_terminal_send({
+                "target": "live:b",
+                "text": "fixed canary",
+                "enter": True,
+            })
+
+        assert started["bridge_id"] == "live-bridge"
+        assert capture == {"lines": ["ready"], "count": 1}
+        assert sent == {"ok": True}
+        bridge_backend.send.assert_called_once_with("live:b", "fixed canary", enter=True)
+        mock_factory.assert_called_once()
+        server_mod.handle_bridge_stop({"bridge_id": "live-bridge"})
+
 
 class TestProfileHandlers:
     def test_list_profiles(self):
@@ -2524,6 +2549,34 @@ class TestBridgeHandlers:
         )
 
         backend.send.assert_called_once_with("test:b", "echo HELLO", enter=True)
+
+    def test_bridge_process_new_lines_rejects_shell_echo_with_handoff_prefix(self):
+        backend = MagicMock()
+        room = create_room("bridge-shell-echo")
+        bridge = server_mod.Bridge(
+            bridge_id="br-shell-echo",
+            backend=backend,
+            room=room,
+            pane_a="test:a",
+            pane_b="test:b",
+            auto_forward=True,
+            intervention=True,
+        )
+
+        profile = server_mod.get_profile("generic")
+        bridge._process_new_lines(
+            "B",
+            "test:b",
+            "test:a",
+            ["PS> claude canary MSG: GATEB_APPROVE"],
+            profile,
+        )
+        bridge._process_new_lines("B", "test:b", "test:a", ["MSG: GATEB_APPROVE"], profile)
+
+        pending = bridge.intervention_layer.list_pending()
+        assert len(pending) == 1
+        assert pending[0].text == "GATEB_APPROVE"
+        assert pending[0].from_pane == "test:b"
 
     def test_bridge_process_new_lines_adds_machine_readable_sources(self):
         backend = MagicMock()

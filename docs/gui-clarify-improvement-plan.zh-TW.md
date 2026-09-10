@@ -7,11 +7,11 @@
 - `polish`
 - `harden`
 
-本文件先完成評估，再整理出後續開發計畫。設計 context 已先寫入 [.impeccable.md](/home/miles/dev2/projects/terminal-bridge-v2/.impeccable.md)，作為後續 GUI 改版的基線。
+本文件先完成評估，再整理出後續開發計畫。設計 context 已先寫入 [.impeccable.md](../.impeccable.md)，作為後續 GUI 改版的基線。
 
 ## 評估前提
 
-根據 [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)、[docs/control-console.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/control-console.md)、[docs/use-cases.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/use-cases.md)、[docs/role-guides.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/role-guides.md) 可明確推得：
+根據 [README.md](../README.md)、[docs/control-console.md](control-console.md)、[docs/use-cases.md](use-cases.md)、[docs/role-guides.md](role-guides.md) 可明確推得：
 
 - 主要使用者是技術型 Human Operator、Host AI 監督者、MCP Integrator。
 - 主要場景是本機 terminal-native AI 協作、人工審核、診斷與 incident recovery。
@@ -243,8 +243,8 @@
 - `polish`
 
 主要檔案：
-- [tb2/gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py)
-- [docs/control-console.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/control-console.md)
+- [tb2/gui.py](../tb2/gui.py)
+- [docs/control-console.md](control-console.md)
 
 ### Phase 2：Workflow 導引與分頁狀態導航
 
@@ -263,7 +263,7 @@
 - `onboard`
 
 主要檔案：
-- [tb2/gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py)
+- [tb2/gui.py](../tb2/gui.py)
 
 ### Phase 3：Review 與 Inspect 的 operator decision support
 
@@ -282,7 +282,7 @@
 - `arrange`
 
 主要檔案：
-- [tb2/gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py)
+- [tb2/gui.py](../tb2/gui.py)
 - 相關測試檔案
 
 ### Phase 4：Topology 視覺與程序整合深化
@@ -302,7 +302,7 @@
 - `clarify`
 
 主要檔案：
-- [tb2/gui.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/gui.py)
+- [tb2/gui.py](../tb2/gui.py)
 
 ## 建議的實作順序
 

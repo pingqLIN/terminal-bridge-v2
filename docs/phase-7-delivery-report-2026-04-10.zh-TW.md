@@ -38,13 +38,13 @@ description: 2026-04-10 terminal-bridge-v2 Phase 7 交付報告，涵蓋 workstr
 
 ### 已完成
 
-- [workstream.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/workstream.py) 現在正式提供：
+- [workstream.py](../tb2/workstream.py) 現在正式提供：
   - `default_workstream_policy()`
   - `normalize_workstream_policy()`
   - `policy`
   - `review_mode`
   - policy-driven `pending_warn` / `pending_critical` / `silent_seconds`
-- [server.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/server.py) 現在會：
+- [server.py](../tb2/server.py) 現在會：
   - 在 `Bridge` 上維持 per-workstream `policy`
   - 用 `review_mode` 明確區分 `auto` / `guarded` / `paused` / `manual`
   - 提供 `workstream_list`
@@ -53,15 +53,15 @@ description: 2026-04-10 terminal-bridge-v2 Phase 7 交付報告，涵蓋 workstr
   - 提供 `workstream_resume_review`
   - 提供 `workstream_update_policy`
   - 在 restore 流程保留 policy snapshot 與 guard/review state
-- [audit.py](/home/miles/dev2/projects/terminal-bridge-v2/tb2/audit.py) 現在新增：
+- [audit.py](../tb2/audit.py) 現在新增：
   - `workstream.review_paused`
   - `workstream.review_resumed`
   - `workstream.policy_updated`
 - 對外說明已補到：
-  - [README.md](/home/miles/dev2/projects/terminal-bridge-v2/README.md)
-  - [README.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/README.zh-TW.md)
-  - [CHANGELOG.md](/home/miles/dev2/projects/terminal-bridge-v2/CHANGELOG.md)
-  - [project-status-report-2026-04-10.zh-TW.md](/home/miles/dev2/projects/terminal-bridge-v2/docs/project-status-report-2026-04-10.zh-TW.md)
+  - [README.md](../README.md)
+  - [README.zh-TW.md](../README.zh-TW.md)
+  - [CHANGELOG.md](../CHANGELOG.md)
+  - [project-status-report-2026-04-10.zh-TW.md](project-status-report-2026-04-10.zh-TW.md)
 
 ### 驗證
 
