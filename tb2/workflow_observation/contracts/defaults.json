@@ -1,0 +1,1 @@
+{"schemaVersion":"0.1.0","mode":"observe","locale":"zh-TW","rawTerminalCollection":false,"autoDispatch":false,"unknownTags":"quarantine","eventMaxBytes":16384,"reorderWindowEvents":64,"snapshotEveryEvents":100,"maxRetainedTasks":500,"uiRefreshMs":2000,"showSettingsAtLevel":3}

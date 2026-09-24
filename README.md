@@ -67,6 +67,18 @@ The illustrations imagine TB2 as a kindergarten for collaboration rules. Host is
 
 ## Current readiness
 
+The second-phase [workflow observation module](docs/workflow-observation.md) adds
+a deterministic five-layer read model, replayable journal and optional canonical
+source inspection. Try it without starting a service:
+
+```bash
+python -m pip install -e ".[observation]"
+python -m tb2 observe demo
+```
+
+The demo is synthetic. TaskContracts inspection is read-only and does not yet map
+its native states into fully bound five-layer task events.
+
 **v0.2.0 · operator beta.** The control surface is implemented, but full cross-client collaboration is not yet accepted.
 
 - The September 10, 2026 local non-E2E suite passed: **470 passed, 1 skipped, 4 deselected**.

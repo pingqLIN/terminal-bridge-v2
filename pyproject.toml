@@ -35,7 +35,14 @@ Issues = "https://github.com/pingqLIN/terminal-bridge-v2/issues"
 
 [project.optional-dependencies]
 windows = ["pywinpty>=0.5.4"]
-dev = ["pytest>=7.0", "pytest-cov>=4.0", "playwright>=1.52.0"]
+observation = ["jsonschema>=4.18,<5", "rfc3339-validator>=0.1.4"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "playwright>=1.52.0", "jsonschema>=4.18,<5", "rfc3339-validator>=0.1.4"]
+
+[tool.setuptools.packages.find]
+include = ["tb2*"]
+
+[tool.setuptools.package-data]
+"tb2.workflow_observation" = ["contracts/*.json"]
 
 [project.scripts]
 tb2 = "tb2.cli:main"

@@ -2,6 +2,11 @@
 
 ## Current focus
 
+The second-phase [observation core](workflow-observation.md) is implemented as an
+opt-in library and offline CLI. Its next integration gate is a verified source
+mapping with explicit attempt and execution/acceptance identities. UI wiring and
+automatic execution are not part of this increment.
+
 - polish the AI-first onboarding path
 - keep GitHub and release surfaces aligned with the operator-beta codebase
 - tighten live collaboration UX around Host, Guest, and Human operator workflows

@@ -376,6 +376,20 @@ def cmd_room_reject(_backend: TmuxBackend, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_observe(_backend: object, args: argparse.Namespace) -> int:
+    """Observation does not create a terminal backend or contact the server."""
+    if args.observe_cmd == "demo":
+        from .workflow_observation.demo import demonstrate
+        print(json.dumps(demonstrate(), ensure_ascii=False, indent=2))
+        return 0
+    from pathlib import Path
+    from .workflow_observation.taskcontracts import observe_task
+    result = observe_task(Path(args.task_dir), Path(args.project), Path(args.verifier),
+                          args.project_id, args.goal_id, args.as_of)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result.get("status") == "VERIFIED_SOURCE_SNAPSHOT" else 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     _default_backend = default_backend_name()
 
@@ -386,6 +400,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--use-wsl", action="store_true", default=None, help="force WSL mode (tmux backend only)")
 
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    observer = sub.add_parser("observe", help="read-only workflow observations (no server or task execution)")
+    observation = observer.add_subparsers(dest="observe_cmd", required=True)
+    demo = observation.add_parser("demo", help="run the bundled synthetic five-layer example")
+    demo.set_defaults(fn=cmd_observe)
+    task = observation.add_parser("task", help="inspect a canonical task with an explicitly trusted local verifier")
+    task.add_argument("--task-dir", required=True)
+    task.add_argument("--project", required=True)
+    task.add_argument("--verifier", required=True, help="trusted local TaskContracts scripts/task_contract.py; executed as code")
+    task.add_argument("--project-id", required=True)
+    task.add_argument("--goal-id", required=True)
+    task.add_argument("--as-of", required=True, help="explicit receiver UTC time, YYYY-MM-DDTHH:MM:SS.sssZ")
+    task.set_defaults(fn=cmd_observe)
 
     # init
     s = sub.add_parser("init", help="create a two-pane session")

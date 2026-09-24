@@ -7,6 +7,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 ## [Unreleased]
 
 ### Added
+- Optional five-layer workflow observation core, local schemas, deterministic replay, scoped graph projection, single-writer journal, and `tb2 observe demo` / `tb2 observe task` commands. Source inspection remains distinct from accepted task-state ingestion; no server route or scheduler was added.
 - Traditional Chinese review artifacts covering release objections, devil's-advocate findings, remediation planning, and a P1 external review brief.
 - `tools/release_check.py` as a local release-readiness wrapper for diff hygiene, agent-readable diagnostics, support matrix output, and pytest.
 - Bilingual transport examples for `room_poll`, SSE, and WebSocket room workflows.

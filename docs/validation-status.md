@@ -1,5 +1,14 @@
 # Validation Status
 
+## Second-phase observation increment — 2026-09-24
+
+The optional [workflow observation core](workflow-observation.md) passes its 48
+structural and 32 deterministic semantic scenarios. CLI demo execution and four
+actual-verifier tests using temporary canonical tasks passed. The source adapter
+is inspection-only (`event: null`); full authoritative ingestion and deployed UI
+integration are not accepted. No provider calls or service restarts were made.
+The historical collaboration evidence below remains separately scoped.
+
 Updated: 2026-09-10. Version: 0.2.0, operator beta.
 
 ## Evidence summary

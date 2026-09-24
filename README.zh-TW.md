@@ -67,6 +67,16 @@ MSG: summarize the failing assertion in tests/test_server.py
 
 ## 目前成熟度
 
+第二階段新增[工作流程觀測模組](docs/workflow-observation.zh-TW.md)，提供決定性的五層讀模型、
+可重播 journal 與可選用的權威來源檢查。無須啟動服務即可試用：
+
+```bash
+python -m pip install -e ".[observation]"
+python -m tb2 observe demo
+```
+
+範例使用合成資料；TaskContracts 檢查為唯讀，目前尚未將原生狀態映射成完整綁定的五層任務事件。
+
 **v0.2.0 · operator beta。** 控制功能已實作，完整跨 client 協作仍待驗收。
 
 - 2026 年 9 月 10 日本地非 E2E 測試：**470 passed、1 skipped、4 deselected**。
