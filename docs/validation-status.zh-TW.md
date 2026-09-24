@@ -1,5 +1,11 @@
 # 驗證狀態
 
+## 暫時驗收政策 — 2026-09-24
+
+已依授權停用 hosted CI／CodeQL，解除 `main` 對三項 checks 的必要條件，
+改採[本地驗收政策](local-validation-mode.zh-TW.md)。PR 審核與其他分支保護保留。
+這項調整解除開發對 hosted CI 的依賴；billing 尚未修復，未執行的 hosted checks 不視為通過。
+
 ## 第二階段觀測增量 — 2026-09-24
 
 [工作流程觀測核心](workflow-observation.zh-TW.md)通過 48 組結構案例與 32 組決定性語意情境。
