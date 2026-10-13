@@ -1,5 +1,12 @@
 # Validation Status
 
+## Temporary acceptance policy — 2026-09-24
+
+Hosted CI and CodeQL are disabled and their three required checks have been removed
+from `main` under the approved [local validation policy](local-validation-mode.md).
+PR review and other branch protections remain. This avoids the hosted CI dependency;
+GitHub billing is unresolved, and skipped hosted checks are not passing checks.
+
 ## Second-phase observation increment — 2026-09-24
 
 The optional [workflow observation core](workflow-observation.md) passes its 48
